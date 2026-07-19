@@ -6,7 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class MdnsTest {
-
     /** Build a minimal DNS response: 1 answer PTR + 1 answer TXT on the service name. */
     private fun buildResponse(): ByteArray {
         val out = ByteArrayOutputStream()

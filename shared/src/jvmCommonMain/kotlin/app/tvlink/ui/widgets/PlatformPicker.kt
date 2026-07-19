@@ -8,4 +8,7 @@ import androidx.compose.runtime.Composable
  * platform picker immediately (or shows a dialog) and calls back with a filesystem path.
  */
 @Composable
-expect fun pickMediaFile(type: String, onResult: (String?) -> Unit)
+expect fun pickMediaFile(
+    type: String,
+    onResult: (String?) -> Unit,
+)

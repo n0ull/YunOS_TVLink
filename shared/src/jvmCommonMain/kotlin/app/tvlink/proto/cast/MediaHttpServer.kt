@@ -15,29 +15,44 @@ import java.util.concurrent.Executors
  * See docs/re/04.
  */
 class MediaHttpServer {
-
-    data class Entry(val file: File, val mime: String)
+    data class Entry(
+        val file: File,
+        val mime: String,
+    )
 
     private val registry = ConcurrentHashMap<String, Entry>()
-    @Volatile var port = 0; private set
-    @Volatile var baseUrl: String = ""; private set
+
+    @Volatile var port = 0
+        private set
+
+    @Volatile var baseUrl: String = ""
+        private set
 
     private var serverSocket: ServerSocket? = null
     private var pool: ExecutorService? = null
+
     @Volatile private var running = false
 
     /** Register [file] under [id] (e.g. "video-item-12"); returns the URL path segment. */
-    fun register(id: String, file: File, mime: String = mimeOf(file.name)): String {
+    fun register(
+        id: String,
+        file: File,
+        mime: String = mimeOf(file.name),
+    ): String {
         registry[id] = Entry(file, mime)
         return id
     }
 
     fun unregister(id: String) = registry.remove(id)
+
     fun clear() = registry.clear()
 
     fun urlFor(id: String) = "$baseUrl/$id"
 
-    fun start(localIp: String, startPort: Int = 8192): Boolean {
+    fun start(
+        localIp: String,
+        startPort: Int = 8192,
+    ): Boolean {
         stop()
         var p = startPort
         var ss: ServerSocket? = null
@@ -56,13 +71,19 @@ class MediaHttpServer {
         running = true
         // ponytail: TV is the only client and uses Connection: close; 4 threads ample
         pool = Executors.newFixedThreadPool(4) { r -> Thread(r, "media-http-io").apply { isDaemon = true } }
-        Thread({ acceptLoop() }, "media-http").apply { isDaemon = true; start() }
+        Thread({ acceptLoop() }, "media-http").apply {
+            isDaemon = true
+            start()
+        }
         return true
     }
 
     fun stop() {
         running = false
-        try { serverSocket?.close() } catch (_: Exception) {}
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {
+        }
         serverSocket = null
         pool?.shutdownNow()
         pool = null
@@ -124,12 +145,29 @@ class MediaHttpServer {
             val partial = hasRange
             val out: OutputStream = client.getOutputStream()
             val status = if (partial) "206 Partial Content" else "200 OK"
-            val headers = StringBuilder()
-                .append("HTTP/1.1 ").append(status).append("\r\n")
-                .append("Content-Type: ").append(entry.mime).append("\r\n")
-                .append("Accept-Ranges: bytes\r\n")
-                .append("Content-Length: ").append(to - from + 1).append("\r\n")
-            if (partial) headers.append("Content-Range: bytes ").append(from).append('-').append(to).append('/').append(total).append("\r\n")
+            val headers =
+                StringBuilder()
+                    .append("HTTP/1.1 ")
+                    .append(status)
+                    .append("\r\n")
+                    .append("Content-Type: ")
+                    .append(entry.mime)
+                    .append("\r\n")
+                    .append("Accept-Ranges: bytes\r\n")
+                    .append("Content-Length: ")
+                    .append(to - from + 1)
+                    .append("\r\n")
+            if (partial) {
+                headers
+                    .append(
+                        "Content-Range: bytes ",
+                    ).append(from)
+                    .append('-')
+                    .append(to)
+                    .append('/')
+                    .append(total)
+                    .append("\r\n")
+            }
             headers.append("Connection: close\r\n\r\n")
             out.write(headers.toString().toByteArray(Charsets.ISO_8859_1))
             FileInputStream(entry.file).use { fis ->
@@ -151,25 +189,29 @@ class MediaHttpServer {
     }
 
     private fun close(c: Socket) {
-        try { c.close() } catch (_: Exception) {}
+        try {
+            c.close()
+        } catch (_: Exception) {
+        }
     }
 
     companion object {
-        fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
-            "jpg", "jpeg" -> "image/jpeg"
-            "png" -> "image/png"
-            "gif" -> "image/gif"
-            "webp" -> "image/webp"
-            "mp4" -> "video/mp4"
-            "mkv" -> "video/x-matroska"
-            "avi" -> "video/x-msvideo"
-            "mov" -> "video/quicktime"
-            "mp3" -> "audio/mpeg"
-            "flac" -> "audio/flac"
-            "wav" -> "audio/wav"
-            "m4a" -> "audio/mp4"
-            "aac" -> "audio/aac"
-            else -> "application/octet-stream"
-        }
+        fun mimeOf(name: String): String =
+            when (name.substringAfterLast('.', "").lowercase()) {
+                "jpg", "jpeg" -> "image/jpeg"
+                "png" -> "image/png"
+                "gif" -> "image/gif"
+                "webp" -> "image/webp"
+                "mp4" -> "video/mp4"
+                "mkv" -> "video/x-matroska"
+                "avi" -> "video/x-msvideo"
+                "mov" -> "video/quicktime"
+                "mp3" -> "audio/mpeg"
+                "flac" -> "audio/flac"
+                "wav" -> "audio/wav"
+                "m4a" -> "audio/mp4"
+                "aac" -> "audio/aac"
+                else -> "application/octet-stream"
+            }
     }
 }

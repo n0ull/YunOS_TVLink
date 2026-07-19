@@ -7,7 +7,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class IdcProtocolTest {
-
     @Test
     fun loginReqWireFormat() {
         val p = LoginReq(name = "app.tvlink", appVerCode = 1, devName = "Test", loginType = IdcLoginType.NORMAL)
@@ -36,9 +35,9 @@ class IdcProtocolTest {
         val json = """{"dev_name":"LivingRoom","dev_model":"Box1","dev_uuid":"u-1","dev_os":"YunOS","dev_os_ver":"3.0","dev_ddhparamkeys":["mediaprojection"]}"""
         val ddh = """{"projectionport":13599}""".toByteArray()
         val body = ByteBuffer.allocate(12 + lpStringSize(json) + lpBytesSize(ddh))
-        body.putInt(2)          // ver
-        body.putInt(777)        // connKey
-        body.putInt(5354)       // udpPort
+        body.putInt(2) // ver
+        body.putInt(777) // connKey
+        body.putInt(5354) // udpPort
         body.putLPString(json)
         body.putLPBytes(ddh)
         val resp = LoginResp()
@@ -77,7 +76,10 @@ class IdcProtocolTest {
     @Test
     fun opCmdKeyFormat() {
         val frame = OpCmdKey(keyCode = 23, keyOp = 0).encode()
-        frame.int; frame.int; frame.int; frame.int // header
+        frame.int
+        frame.int
+        frame.int
+        frame.int // header
         assertEquals(23, frame.int)
         assertEquals(0, frame.int)
     }

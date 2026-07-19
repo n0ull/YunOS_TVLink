@@ -40,15 +40,21 @@ class IdcConnection(
         val ddhParams: MutableMap<String, ByteArray> = mutableMapOf(),
     )
 
-    @Volatile var state = State.DISCONNECTED; private set
-    @Volatile var deviceInfo: DeviceInfo? = null; private set
-    @Volatile var sessionKey: ByteArray? = null; private set
+    @Volatile var state = State.DISCONNECTED
+        private set
+
+    @Volatile var deviceInfo: DeviceInfo? = null
+        private set
+
+    @Volatile var sessionKey: ByteArray? = null
+        private set
 
     /** module id -> info, as reported by the TV. Concurrent because reader thread writes and UI threads read. */
     val modules = java.util.concurrent.ConcurrentHashMap<Int, ModuleInfo>()
 
     var onStateChanged: ((State) -> Unit)? = null
     var onModulesChanged: (() -> Unit)? = null
+
     /** unmatched packets: IME events, screenshot resp, dev-name updates */
     var onPacket: ((IdcPacket) -> Unit)? = null
     var onVConnData: ((moduleId: Int, payload: ByteArray) -> Unit)? = null
@@ -56,15 +62,20 @@ class IdcConnection(
     private var socket: Socket? = null
     private var out: OutputStream? = null
     private var dataIn: DataInputStream? = null
+
     @Volatile private var connKey = IdcConst.UNASSIGNED_KEY
     private val sendLock = Any()
     private var scheduler: ScheduledExecutorService? = null
     private var hbFuture: ScheduledFuture<*>? = null
     private val hbSeq = AtomicInteger(1)
+
     @Volatile private var lastHbAck = 0
 
     /** Connect and perform the login handshake. Returns true on ESTABLISHED. */
-    fun connect(login: LoginReq, timeoutMs: Int = 8000): Boolean {
+    fun connect(
+        login: LoginReq,
+        timeoutMs: Int = 8000,
+    ): Boolean {
         if (state != State.DISCONNECTED) close()
         setState(State.CONNECTING)
         return try {
@@ -88,11 +99,17 @@ class IdcConnection(
                     is LoginResp -> {
                         connKey = p.connKey
                         sessionKey = null // ver=0: plain session
-                        deviceInfo = DeviceInfo(
-                            ip = host, name = p.devName, model = p.devModel,
-                            uuid = p.devUuid, os = p.devOs, osVer = p.devOsVer, udpPort = p.udpPort,
-                            ddhParams = p.ddhParams,
-                        )
+                        deviceInfo =
+                            DeviceInfo(
+                                ip = host,
+                                name = p.devName,
+                                model = p.devModel,
+                                uuid = p.devUuid,
+                                os = p.devOs,
+                                osVer = p.devOsVer,
+                                udpPort = p.udpPort,
+                                ddhParams = p.ddhParams,
+                            )
                         established = true
                         break
                     }
@@ -121,7 +138,9 @@ class IdcConnection(
             val info = deviceInfo
             close()
             info
-        } else null
+        } else {
+            null
+        }
     }
 
     fun send(packet: IdcPacket) {
@@ -142,42 +161,48 @@ class IdcConnection(
     }
 
     fun openVConn(moduleId: Int) = send(VConnSyn(moduleId))
-    fun sendVConnData(moduleId: Int, payload: ByteArray) = send(VConnData(moduleId, payload))
+
+    fun sendVConnData(
+        moduleId: Int,
+        payload: ByteArray,
+    ) = send(VConnData(moduleId, payload))
+
     fun closeVConn(moduleId: Int) = send(VConnFin(moduleId))
 
-    fun moduleIdByName(name: String): Int? =
-        modules.values.firstOrNull { it.name == name && it.online }?.id
+    fun moduleIdByName(name: String): Int? = modules.values.firstOrNull { it.name == name && it.online }?.id
 
     private fun startHeartbeat() {
         val sched = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "idc-hb").apply { isDaemon = true } }
         scheduler = sched
-        hbFuture = sched.scheduleWithFixedDelay({
-            try {
-                val seq = hbSeq.get()
-                send(HeartBeat(seq))
-                // TV echoes the same seq; if it lags 2 beats behind, consider the link dead
-                if (seq - lastHbAck > 2) close()
-                hbSeq.incrementAndGet()
-            } catch (e: Exception) {
-                close()
-            }
-        }, 20, 20, TimeUnit.SECONDS)
+        hbFuture =
+            sched.scheduleWithFixedDelay({
+                try {
+                    val seq = hbSeq.get()
+                    send(HeartBeat(seq))
+                    // TV echoes the same seq; if it lags 2 beats behind, consider the link dead
+                    if (seq - lastHbAck > 2) close()
+                    hbSeq.incrementAndGet()
+                } catch (e: Exception) {
+                    close()
+                }
+            }, 20, 20, TimeUnit.SECONDS)
     }
 
     @Volatile private var readerThread: Thread? = null
 
     private fun startReader() {
-        val t = Thread({
-            try {
-                while (state == State.ESTABLISHED) {
-                    val p = readPacket() ?: break
-                    dispatch(p)
+        val t =
+            Thread({
+                try {
+                    while (state == State.ESTABLISHED) {
+                        val p = readPacket() ?: break
+                        dispatch(p)
+                    }
+                } catch (e: Exception) {
+                    // socket closed or IO error -> fall through to close
                 }
-            } catch (e: Exception) {
-                // socket closed or IO error -> fall through to close
-            }
-            if (state != State.DISCONNECTED) close()
-        }, "idc-reader")
+                if (state != State.DISCONNECTED) close()
+            }, "idc-reader")
         t.isDaemon = true
         readerThread = t
         t.start()
@@ -187,8 +212,12 @@ class IdcConnection(
         when (p) {
             is HeartBeat -> lastHbAck = p.seq
             is ModuleAvailability -> {
-                if (p.online) modules[p.moduleId] = ModuleInfo(p.moduleId, p.moduleName, p.moduleVer, p.moduleExtProp, true)
-                else modules.remove(p.moduleId)
+                if (p.online) {
+                    modules[p.moduleId] =
+                        ModuleInfo(p.moduleId, p.moduleName, p.moduleVer, p.moduleExtProp, true)
+                } else {
+                    modules.remove(p.moduleId)
+                }
                 onModulesChanged?.invoke()
             }
             is VConnSyn -> { /* TV-initiated vconn: accept implicitly */ }
@@ -234,9 +263,15 @@ class IdcConnection(
         hbFuture = null
         scheduler?.shutdownNow()
         scheduler = null
-        try { dataIn?.close() } catch (_: Exception) {}
+        try {
+            dataIn?.close()
+        } catch (_: Exception) {
+        }
         dataIn = null
-        try { socket?.close() } catch (_: Exception) {}
+        try {
+            socket?.close()
+        } catch (_: Exception) {
+        }
         socket = null
         out = null
         modules.clear()

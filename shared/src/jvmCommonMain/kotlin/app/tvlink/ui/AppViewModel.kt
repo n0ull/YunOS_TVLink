@@ -16,31 +16,37 @@ import app.tvlink.proto.cast.CastController
 import app.tvlink.proto.cast.MediaHttpServer
 import app.tvlink.proto.ib.RcKey
 import app.tvlink.proto.idc.IdcPacket
+import app.tvlink.proto.idc.ImeAction
 import app.tvlink.proto.idc.ImeFinishInput
 import app.tvlink.proto.idc.ImeStartInput
 import app.tvlink.proto.idc.ImeTextChange
-import app.tvlink.proto.idc.ImeAction
 import app.tvlink.proto.mdns.Mdns
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.File
 
 /** Central app state shared by both platforms. */
 class AppViewModel : ViewModel() {
-
     companion object {
         private const val DEFAULT_CAST_PORT = 13520
     }
 
-    /* ---- navigation ---- */
+    // ---- navigation ----
     sealed interface Screen {
         data object DevicePicker : Screen
+
         data object Home : Screen
+
         data object Remote : Screen
+
         data object Cast : Screen
+
         data object Screenshot : Screen
+
         data object Apps : Screen
+
         data object Settings : Screen
+
         data object Dongle : Screen
     }
 
@@ -55,7 +61,7 @@ class AppViewModel : ViewModel() {
         screen = if (deviceManager.connected.value != null) Screen.Home else Screen.DevicePicker
     }
 
-    /* ---- services ---- */
+    // ---- services ----
     val deviceManager = DeviceManager()
     val rc = RcController(deviceManager)
     val rpm = RpmService(deviceManager)
@@ -70,26 +76,26 @@ class AppViewModel : ViewModel() {
     var connectedIp by mutableStateOf("")
     val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
 
-    /* ---- IME (remote text input) ---- */
+    // ---- IME (remote text input) ----
     var imeActive by mutableStateOf(false)
     var imeText by mutableStateOf("")
 
-    /* ---- screenshot ---- */
+    // ---- screenshot ----
     var lastShot by mutableStateOf<ByteArray?>(null)
     var shotBusy by mutableStateOf(false)
 
-    /* ---- TV apps ---- */
+    // ---- TV apps ----
     val tvApps = mutableStateListOf<RpmService.TvApp>()
     var tvSystemInfo by mutableStateOf<Map<String, String>>(emptyMap())
 
-    /* ---- casting ---- */
+    // ---- casting ----
     var castState by mutableStateOf(CastController.PlayState.UNKNOWN)
     var castDuration by mutableStateOf(0L)
     var castPosition by mutableStateOf(0L)
     var castTitle by mutableStateOf("")
     var mediaServerUrl by mutableStateOf("")
 
-    /* ---- toast-ish ---- */
+    // ---- toast-ish ----
     var notice by mutableStateOf("")
 
     init {
@@ -119,7 +125,8 @@ class AppViewModel : ViewModel() {
         deviceManager.onPacket = { p -> handlePacket(p) }
         rpm.onAppList = { apps ->
             viewModelScope.launch(Dispatchers.Default) {
-                tvApps.clear(); tvApps.addAll(apps)
+                tvApps.clear()
+                tvApps.addAll(apps)
             }
         }
         rpm.onSystemInfo = { info ->
@@ -170,15 +177,16 @@ class AppViewModel : ViewModel() {
     private fun handlePacket(p: IdcPacket) {
         screenshot.handlePacket(p)
         when (p) {
-            is ImeStartInput -> viewModelScope.launch(Dispatchers.Default) {
-                imeText = p.initText
-                imeActive = true
-            }
+            is ImeStartInput ->
+                viewModelScope.launch(Dispatchers.Default) {
+                    imeText = p.initText
+                    imeActive = true
+                }
             is ImeFinishInput -> viewModelScope.launch(Dispatchers.Default) { imeActive = false }
         }
     }
 
-    /* ---- actions ---- */
+    // ---- actions ----
 
     fun startDiscovery() = deviceManager.startDiscovery()
 
@@ -216,17 +224,22 @@ class AppViewModel : ViewModel() {
 
     fun refreshApps() = rpm.getAppList()
 
-    fun castFile(path: String, title: String, type: String) {
+    fun castFile(
+        path: String,
+        title: String,
+        type: String,
+    ) {
         val file = File(path)
         if (!file.exists() || mediaServerUrl.isEmpty()) {
             notice = "媒体服务未就绪"
             return
         }
-        val id = when (type) {
-            "video" -> "video-item-${System.currentTimeMillis()}"
-            "audio" -> "audio-item-${System.currentTimeMillis()}"
-            else -> "image-item-${System.currentTimeMillis()}"
-        }
+        val id =
+            when (type) {
+                "video" -> "video-item-${System.currentTimeMillis()}"
+                "audio" -> "audio-item-${System.currentTimeMillis()}"
+                else -> "image-item-${System.currentTimeMillis()}"
+            }
         mediaServer.register(id, file)
         val url = mediaServer.urlFor(id)
         viewModelScope.launch(Dispatchers.IO) {

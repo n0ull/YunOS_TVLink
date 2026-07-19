@@ -14,7 +14,9 @@ import kotlinx.coroutines.launch
  * Routes remote-control events to the IB fast channel when available,
  * falling back to IDC OpCmd_Key — same policy as the original IbRc.
  */
-class RcController(private val deviceManager: DeviceManager) {
+class RcController(
+    private val deviceManager: DeviceManager,
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var ib: IbChannel? = null
 
@@ -77,7 +79,10 @@ class RcController(private val deviceManager: DeviceManager) {
         }
     }
 
-    fun mouseMove(dx: Int, dy: Int) {
+    fun mouseMove(
+        dx: Int,
+        dy: Int,
+    ) {
         ib?.takeIf { it.state == IbChannel.State.READY }?.mouseMove(dx, dy)
     }
 
@@ -89,11 +94,19 @@ class RcController(private val deviceManager: DeviceManager) {
         ib?.takeIf { it.state == IbChannel.State.READY }?.joystick(axes)
     }
 
-    fun accel(x: Int, y: Int, z: Int) {
+    fun accel(
+        x: Int,
+        y: Int,
+        z: Int,
+    ) {
         ib?.takeIf { it.state == IbChannel.State.READY }?.accel(x, y, z)
     }
 
-    fun gyro(x: Int, y: Int, z: Int) {
+    fun gyro(
+        x: Int,
+        y: Int,
+        z: Int,
+    ) {
         ib?.takeIf { it.state == IbChannel.State.READY }?.gyro(x, y, z)
     }
 

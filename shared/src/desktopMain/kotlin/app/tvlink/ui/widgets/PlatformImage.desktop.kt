@@ -6,16 +6,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
+import org.jetbrains.skia.Image as SkiaImage
 
 @Composable
-actual fun ByteArrayImage(bytes: ByteArray, contentDescription: String?, modifier: Modifier) {
-    val bitmap = remember(bytes) {
-        try { SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap() } catch (e: Exception) { null }
-    }
+actual fun ByteArrayImage(
+    bytes: ByteArray,
+    contentDescription: String?,
+    modifier: Modifier,
+) {
+    val bitmap =
+        remember(bytes) {
+            try {
+                SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
+            } catch (e: Exception) {
+                null
+            }
+        }
     if (bitmap != null) {
-        Image(bitmap = bitmap, contentDescription = contentDescription, modifier = modifier, contentScale = ContentScale.Fit)
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = ContentScale.Fit,
+        )
     }
 }
 

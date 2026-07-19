@@ -25,24 +25,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 import app.tvlink.ui.widgets.platformName
 
-private data class Feature(val title: String, val desc: String, val emoji: String, val screen: AppViewModel.Screen)
+private data class Feature(
+    val title: String,
+    val desc: String,
+    val emoji: String,
+    val screen: AppViewModel.Screen,
+)
 
-private fun features(): List<Feature> = buildList {
-    add(Feature("遥控", "按键 / 触屏 / 手柄 / 体感", "🎮", AppViewModel.Screen.Remote))
-    add(Feature("本地投屏", "照片·视频·音乐上电视", "📺", AppViewModel.Screen.Cast))
-    add(Feature("电视截屏", "截取电视当前画面", "📸", AppViewModel.Screen.Screenshot))
-    add(Feature("应用管理", "查看/打开/卸载电视应用", "📦", AppViewModel.Screen.Apps))
-    if (platformName == "android") {
-        add(Feature("魔投配网", "MagicCast 蓝牙配网", "📡", AppViewModel.Screen.Dongle))
+private fun features(): List<Feature> =
+    buildList {
+        add(Feature("遥控", "按键 / 触屏 / 手柄 / 体感", "🎮", AppViewModel.Screen.Remote))
+        add(Feature("本地投屏", "照片·视频·音乐上电视", "📺", AppViewModel.Screen.Cast))
+        add(Feature("电视截屏", "截取电视当前画面", "📸", AppViewModel.Screen.Screenshot))
+        add(Feature("应用管理", "查看/打开/卸载电视应用", "📦", AppViewModel.Screen.Apps))
+        if (platformName == "android") {
+            add(Feature("魔投配网", "MagicCast 蓝牙配网", "📡", AppViewModel.Screen.Dongle))
+        }
+        add(Feature("设置", "连接信息与关于", "⚙️", AppViewModel.Screen.Settings))
     }
-    add(Feature("设置", "连接信息与关于", "⚙️", AppViewModel.Screen.Settings))
-}
 
 @Composable
 fun HomeScreen(vm: AppViewModel) {
@@ -91,9 +96,17 @@ fun HomeScreen(vm: AppViewModel) {
         // now bar: remote entry
         Card(
             shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { vm.nav(AppViewModel.Screen.Remote) },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        vertical = 8.dp,
+                    ).clickable { vm.nav(AppViewModel.Screen.Remote) },
         ) {
-            Row(Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text("🕹️", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.width(12.dp))
                 Text("打开遥控面板", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

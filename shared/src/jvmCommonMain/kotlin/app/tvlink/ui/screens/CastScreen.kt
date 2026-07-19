@@ -71,7 +71,14 @@ fun CastScreen(vm: AppViewModel) {
                     color = TvColors.TextSecondary,
                 )
                 Spacer(Modifier.padding(6.dp))
-                val progress = if (vm.castDuration > 0) (vm.castPosition.toFloat() / vm.castDuration).coerceIn(0f, 1f) else 0f
+                val progress =
+                    if (vm.castDuration >
+                        0
+                    ) {
+                        (vm.castPosition.toFloat() / vm.castDuration).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                 Text(
                     "${fmtMs(vm.castPosition)} / ${fmtMs(vm.castDuration)}",

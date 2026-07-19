@@ -27,28 +27,33 @@ object TvColors {
     val accentBrush = Brush.horizontalGradient(listOf(AccentStart, AccentEnd))
 }
 
-private val LightScheme = lightColorScheme(
-    primary = Color(0xFF0E7490),
-    onPrimary = Color.White,
-    background = TvColors.BgLight,
-    surface = TvColors.Card,
-    onBackground = TvColors.TextPrimary,
-    onSurface = TvColors.TextPrimary,
-    secondary = TvColors.TextSecondary,
-)
+private val LightScheme =
+    lightColorScheme(
+        primary = Color(0xFF0E7490),
+        onPrimary = Color.White,
+        background = TvColors.BgLight,
+        surface = TvColors.Card,
+        onBackground = TvColors.TextPrimary,
+        onSurface = TvColors.TextPrimary,
+        secondary = TvColors.TextSecondary,
+    )
 
-private val DarkScheme = darkColorScheme(
-    primary = TvColors.AccentStart,
-    onPrimary = Color(0xFF06232B),
-    background = TvColors.RcDark,
-    surface = TvColors.RcDarkBar,
-    onBackground = TvColors.TextOnDark,
-    onSurface = TvColors.TextOnDark,
-    secondary = TvColors.TextOnDarkSecondary,
-)
+private val DarkScheme =
+    darkColorScheme(
+        primary = TvColors.AccentStart,
+        onPrimary = Color(0xFF06232B),
+        background = TvColors.RcDark,
+        surface = TvColors.RcDarkBar,
+        onBackground = TvColors.TextOnDark,
+        onSurface = TvColors.TextOnDark,
+        secondary = TvColors.TextOnDarkSecondary,
+    )
 
 @Composable
-fun TvTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun TvTheme(
+    dark: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
     MaterialTheme(
         colorScheme = if (dark) DarkScheme else LightScheme,
         content = content,

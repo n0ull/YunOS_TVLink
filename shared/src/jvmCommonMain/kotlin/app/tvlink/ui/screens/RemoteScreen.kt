@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -44,7 +43,10 @@ import app.tvlink.ui.theme.TvColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private enum class RcMode(val label: String, val ibMode: Int) {
+private enum class RcMode(
+    val label: String,
+    val ibMode: Int,
+) {
     KEYPAD("按键", IbConst.CHANGETYPE_DEFAULT),
     TOUCHPAD("触屏", IbConst.CHANGETYPE_DEFAULT),
     JOYSTICK("手柄", IbConst.CHANGETYPE_JOYSTICK),
@@ -53,10 +55,19 @@ private enum class RcMode(val label: String, val ibMode: Int) {
 }
 
 /** Rate-limits drag-driven TCP sends (~25/s); bypass for final/recenter events. */
-private class SendThrottle(private val intervalMs: Long = 40) {
+private class SendThrottle(
+    private val intervalMs: Long = 40,
+) {
     private var last = 0L
-    fun trySend(now: Long = System.currentTimeMillis(), block: () -> Unit) {
-        if (now - last >= intervalMs) { last = now; block() }
+
+    fun trySend(
+        now: Long = System.currentTimeMillis(),
+        block: () -> Unit,
+    ) {
+        if (now - last >= intervalMs) {
+            last = now
+            block()
+        }
     }
 }
 
@@ -81,16 +92,15 @@ fun RemoteScreen(vm: AppViewModel) {
                     m.label,
                     color = if (sel) TvColors.AccentStart else TvColors.TextOnDarkSecondary,
                     style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier
-                        .background(
-                            if (sel) Color(0x3337E8FF) else Color.Transparent,
-                            RoundedCornerShape(16.dp),
-                        )
-                        .clickable {
-                            mode = m
-                            vm.rc.setMode(m.ibMode)
-                        }
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier =
+                        Modifier
+                            .background(
+                                if (sel) Color(0x3337E8FF) else Color.Transparent,
+                                RoundedCornerShape(16.dp),
+                            ).clickable {
+                                mode = m
+                                vm.rc.setMode(m.ibMode)
+                            }.padding(horizontal = 14.dp, vertical = 6.dp),
                 )
             }
         }
@@ -98,9 +108,10 @@ fun RemoteScreen(vm: AppViewModel) {
         Spacer(Modifier.height(12.dp))
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (mode) {
-                RcMode.KEYPAD -> KeypadPanel(
-                    onKey = { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) },
-                )
+                RcMode.KEYPAD ->
+                    KeypadPanel(
+                        onKey = { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) },
+                    )
                 RcMode.TOUCHPAD -> TouchpadPanel(vm) { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) }
                 RcMode.JOYSTICK -> JoystickPanel(vm)
                 RcMode.WHEEL -> WheelPanel(vm)
@@ -110,7 +121,8 @@ fun RemoteScreen(vm: AppViewModel) {
 
         // bottom voice bar
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            app.tvlink.ui.widgets.VoiceButton(onText = { vm.voiceText(it) })
+            app.tvlink.ui.widgets
+                .VoiceButton(onText = { vm.voiceText(it) })
         }
     }
 
@@ -120,7 +132,10 @@ fun RemoteScreen(vm: AppViewModel) {
             title = { Text("待机") },
             text = { Text("确定要让电视待机吗？") },
             confirmButton = {
-                TextButton(onClick = { vm.keyClick(RcKey.POWER); powerConfirm = false }) { Text("确定") }
+                TextButton(onClick = {
+                    vm.keyClick(RcKey.POWER)
+                    powerConfirm = false
+                }) { Text("确定") }
             },
             dismissButton = { TextButton(onClick = { powerConfirm = false }) { Text("取消") } },
         )
@@ -142,7 +157,7 @@ fun RemoteScreen(vm: AppViewModel) {
     }
 }
 
-/* ---------- keypad ---------- */
+// ---------- keypad ----------
 
 @Composable
 private fun RcButton(
@@ -161,7 +176,11 @@ private fun RcButton(
 
 @Composable
 private fun KeypadPanel(onKey: (RcKey) -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
+    Column(
+        Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceEvenly,
+    ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             RcButton("电源", size = 56) { onKey(RcKey.POWER) }
             RcButton("魔键", size = 56) { onKey(RcKey.MAGIC) }
@@ -190,16 +209,21 @@ private fun KeypadPanel(onKey: (RcKey) -> Unit) {
     }
 }
 
-/* ---------- touchpad ---------- */
+// ---------- touchpad ----------
 
 @Composable
-private fun TouchpadPanel(vm: AppViewModel, onKey: (RcKey) -> Unit) {
+private fun TouchpadPanel(
+    vm: AppViewModel,
+    onKey: (RcKey) -> Unit,
+) {
     val density = LocalDensity.current
     var cursor by remember { mutableStateOf(Offset(200f, 200f)) }
     val throttle = remember { SendThrottle() }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
-            Modifier.weight(1f).fillMaxWidth()
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
                 .background(Color(0xFF2E2E34), RoundedCornerShape(16.dp))
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
@@ -207,13 +231,13 @@ private fun TouchpadPanel(vm: AppViewModel, onKey: (RcKey) -> Unit) {
                         cursor += drag
                         throttle.trySend { vm.rc.mouseMove(drag.x.roundToInt(), drag.y.roundToInt()) }
                     }
-                }
-                .pointerInput(Unit) {
+                }.pointerInput(Unit) {
                     detectTapGestures(onTap = { vm.rc.mouseClick() })
                 },
         ) {
             Box(
-                Modifier.size(18.dp)
+                Modifier
+                    .size(18.dp)
                     .offset { IntOffset(cursor.x.roundToInt() - 9, cursor.y.roundToInt() - 9) }
                     .background(TvColors.AccentStart, CircleShape),
             )
@@ -227,13 +251,19 @@ private fun TouchpadPanel(vm: AppViewModel, onKey: (RcKey) -> Unit) {
     }
 }
 
-/* ---------- joystick ---------- */
+// ---------- joystick ----------
 
 @Composable
-private fun Stick(modifier: Modifier = Modifier, onRelease: (() -> Unit)? = null, onAxis: (x: Int, y: Int) -> Unit) {
+private fun Stick(
+    modifier: Modifier = Modifier,
+    onRelease: (() -> Unit)? = null,
+    onAxis: (x: Int, y: Int) -> Unit,
+) {
     var knob by remember { mutableStateOf(Offset.Zero) }
     Box(
-        modifier.size(140.dp).background(Color(0xFF2E2E34), CircleShape)
+        modifier
+            .size(140.dp)
+            .background(Color(0xFF2E2E34), CircleShape)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
@@ -250,6 +280,7 @@ private fun Stick(modifier: Modifier = Modifier, onRelease: (() -> Unit)? = null
                     val nx = (knob.x + drag.x).coerceIn(-max, max)
                     val ny = (knob.y + drag.y).coerceIn(-max, max)
                     knob = Offset(nx, ny)
+
                     // map [-50,50]dp -> [0,255], center 128, deadzone -> 128
                     fun map(v: Float): Int {
                         val norm = v / max * 100 // [-100,100]
@@ -261,7 +292,8 @@ private fun Stick(modifier: Modifier = Modifier, onRelease: (() -> Unit)? = null
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(52.dp)
+            Modifier
+                .size(52.dp)
                 .offset { IntOffset(knob.x.roundToInt(), knob.y.roundToInt()) }
                 .background(TvColors.accentBrush, CircleShape),
         )
@@ -273,6 +305,7 @@ private fun JoystickPanel(vm: AppViewModel) {
     var left by remember { mutableStateOf(128 to 128) }
     var right by remember { mutableStateOf(128 to 128) }
     val throttle = remember { SendThrottle() }
+
     fun send() = vm.rc.joystick(listOf(0 to left.first, 1 to left.second, 2 to right.first, 5 to right.second))
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
@@ -280,9 +313,22 @@ private fun JoystickPanel(vm: AppViewModel) {
             RcButton("LB", size = 52) { vm.keyClick(RcKey.PAD_LB) }
             RcButton("RB", size = 52) { vm.keyClick(RcKey.PAD_RB) }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            Stick(onRelease = { left = 128 to 128; send() }) { x, y -> left = x to y; throttle.trySend { send() } }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Stick(onRelease = {
+                left = 128 to 128
+                send()
+            }) { x, y ->
+                left = x to y
+                throttle.trySend { send() }
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 RcButton("Y", size = 48) { vm.keyClick(RcKey.PAD_Y) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     RcButton("X", size = 48) { vm.keyClick(RcKey.PAD_X) }
@@ -290,7 +336,13 @@ private fun JoystickPanel(vm: AppViewModel) {
                 }
                 RcButton("A", size = 48) { vm.keyClick(RcKey.PAD_A) }
             }
-            Stick(onRelease = { right = 128 to 128; send() }) { x, y -> right = x to y; throttle.trySend { send() } }
+            Stick(onRelease = {
+                right = 128 to 128
+                send()
+            }) { x, y ->
+                right = x to y
+                throttle.trySend { send() }
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             RcButton("SELECT", size = 52) { vm.keyClick(RcKey.PAD_SELECT) }
@@ -299,22 +351,27 @@ private fun JoystickPanel(vm: AppViewModel) {
     }
 }
 
-/* ---------- steering wheel (real mouse mode) ---------- */
+// ---------- steering wheel (real mouse mode) ----------
 
 @Composable
 private fun WheelPanel(vm: AppViewModel) {
     val throttle = remember { SendThrottle() }
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
+    Column(
+        Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceEvenly,
+    ) {
         Text("拖动方向盘区域控制光标，单击为确认", color = TvColors.TextOnDarkSecondary)
         Box(
-            Modifier.size(220.dp).background(Color(0xFF2E2E34), CircleShape)
+            Modifier
+                .size(220.dp)
+                .background(Color(0xFF2E2E34), CircleShape)
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
                         throttle.trySend { vm.rc.mouseMove(-drag.x.roundToInt(), -drag.y.roundToInt()) }
                     }
-                }
-                .pointerInput(Unit) {
+                }.pointerInput(Unit) {
                     detectTapGestures(onTap = { vm.rc.mouseClick() })
                 },
             contentAlignment = Alignment.Center,
@@ -328,11 +385,15 @@ private fun WheelPanel(vm: AppViewModel) {
     }
 }
 
-/* ---------- motion (placeholder unless platform feeds sensors) ---------- */
+// ---------- motion (placeholder unless platform feeds sensors) ----------
 
 @Composable
 private fun MotionPanel(vm: AppViewModel) {
-    val sensor = remember { app.tvlink.ui.widgets.MotionSensor() }
+    val sensor =
+        remember {
+            app.tvlink.ui.widgets
+                .MotionSensor()
+        }
     androidx.compose.runtime.DisposableEffect(Unit) {
         sensor.start(
             onAccel = { x, y, z -> vm.rc.accel(x, y, z) },
@@ -340,13 +401,20 @@ private fun MotionPanel(vm: AppViewModel) {
         )
         onDispose { sensor.stop() }
     }
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+    Column(
+        Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
         Text("🎯", style = MaterialTheme.typography.displayMedium)
         Spacer(Modifier.height(12.dp))
         Text("体感遥控", style = MaterialTheme.typography.titleLarge, color = TvColors.TextOnDark)
         Text(
-            if (app.tvlink.ui.widgets.platformName == "android") "传感器数据正实时发送到电视"
-            else "桌面端无传感器，体感模式仅 Android 可用",
+            if (app.tvlink.ui.widgets.platformName == "android") {
+                "传感器数据正实时发送到电视"
+            } else {
+                "桌面端无传感器，体感模式仅 Android 可用"
+            },
             color = TvColors.TextOnDarkSecondary,
         )
         Spacer(Modifier.height(16.dp))

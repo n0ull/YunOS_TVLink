@@ -30,9 +30,12 @@ import app.tvlink.ui.widgets.DongleScreen
 
 @Composable
 fun App() {
-    val fallbackOwner = remember { object : ViewModelStoreOwner {
-        override val viewModelStore: ViewModelStore = ViewModelStore()
-    } }
+    val fallbackOwner =
+        remember {
+            object : ViewModelStoreOwner {
+                override val viewModelStore: ViewModelStore = ViewModelStore()
+            }
+        }
     val owner = LocalViewModelStoreOwner.current ?: fallbackOwner
     DisposableEffect(owner) {
         onDispose { if (owner === fallbackOwner) owner.viewModelStore.clear() }
@@ -51,7 +54,8 @@ fun App() {
                 snackbarHost = { SnackbarHost(snackbar) },
             ) { padding ->
                 Box(
-                    Modifier.fillMaxSize()
+                    Modifier
+                        .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                         .padding(padding),
                 ) {

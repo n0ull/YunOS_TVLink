@@ -15,10 +15,11 @@ class MainActivity : ComponentActivity() {
         AndroidPlatform.init(this)
         // mDNS discovery requires the multicast lock
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        multicastLock = wifi.createMulticastLock("tvlink-mdns").apply {
-            setReferenceCounted(true)
-            acquire()
-        }
+        multicastLock =
+            wifi.createMulticastLock("tvlink-mdns").apply {
+                setReferenceCounted(true)
+                acquire()
+            }
         setContent { App() }
     }
 

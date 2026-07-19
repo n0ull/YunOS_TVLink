@@ -55,7 +55,10 @@ fun ScreenshotScreen(vm: AppViewModel) {
                 Text(if (vm.shotBusy) "截取中…" else "截屏")
             }
             if (vm.lastShot != null) {
-                Button(onClick = { vm.notice = app.tvlink.ui.widgets.saveShot(vm.lastShot!!) ?: "已保存" }) {
+                Button(onClick = {
+                    vm.notice = app.tvlink.ui.widgets
+                        .saveShot(vm.lastShot!!) ?: "已保存"
+                }) {
                     Text("保存")
                 }
             }

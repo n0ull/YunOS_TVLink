@@ -9,7 +9,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class MediaHttpServerTest {
-
     private val server = MediaHttpServer()
 
     @AfterTest

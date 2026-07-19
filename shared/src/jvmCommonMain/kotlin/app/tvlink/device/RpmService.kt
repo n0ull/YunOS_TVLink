@@ -9,8 +9,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * RPM — remote package management over IDC VConn (module "com.yunos.tv.appstore").
  * Frame: int32 packetId + int32 requestId + JSON body. See docs/re/05 §3.
  */
-class RpmService(private val deviceManager: DeviceManager) {
-
+class RpmService(
+    private val deviceManager: DeviceManager,
+) {
     data class TvApp(
         val packageName: String = "",
         val appName: String = "",
@@ -20,7 +21,11 @@ class RpmService(private val deviceManager: DeviceManager) {
         val status: String = "",
     )
 
-    data class InstallProgress(val packageName: String, val progress: Int, val status: String)
+    data class InstallProgress(
+        val packageName: String,
+        val progress: Int,
+        val status: String,
+    )
 
     var onAppList: ((List<TvApp>) -> Unit)? = null
     var onSystemInfo: ((Map<String, String>) -> Unit)? = null
@@ -65,15 +70,41 @@ class RpmService(private val deviceManager: DeviceManager) {
     }
 
     fun getAppList(pageSize: Int = 100) = send(ID_GETLIST_REQ, """{"pageSize":$pageSize}""")
+
     fun getSystemInfo() = send(ID_GET_SYSTEMINFO, "{}")
+
     fun getAppInfo(packageName: String) = send(ID_GETAPPINFO_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
+
     fun openApp(packageName: String) = send(ID_OPENAPP_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
+
     fun uninstall(packageName: String) = send(ID_UNINSTALL_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
-    fun installByUrl(packageName: String, apkUrl: String, appName: String = "", iconUrl: String = "", apkSize: String = "", versionNeeded: Int = 0) =
-        send(ID_INSTALL_REQ, """{"packageName":"${jsonEscape(packageName)}","apkUrl":"${jsonEscape(apkUrl)}","iconUrl":"${jsonEscape(iconUrl)}","appName":"${jsonEscape(appName)}","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""")
+
+    fun installByUrl(
+        packageName: String,
+        apkUrl: String,
+        appName: String = "",
+        iconUrl: String = "",
+        apkSize: String = "",
+        versionNeeded: Int = 0,
+    ) = send(
+        ID_INSTALL_REQ,
+        """{"packageName":"${jsonEscape(
+            packageName,
+        )}","apkUrl":"${jsonEscape(
+            apkUrl,
+        )}","iconUrl":"${jsonEscape(
+            iconUrl,
+        )}","appName":"${jsonEscape(
+            appName,
+        )}","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""",
+    )
+
     fun cancelInstall(packageName: String) = send(ID_INSTALL_CANCEL, """{"packageName":"${jsonEscape(packageName)}"}""")
 
-    private fun send(packetId: Int, json: String) {
+    private fun send(
+        packetId: Int,
+        json: String,
+    ) {
         val mid = deviceManager.moduleId(MODULE_NAME) ?: return
         val body = json.toByteArray(Charsets.UTF_8)
         val buf = ByteBuffer.allocate(8 + body.size)
@@ -96,9 +127,10 @@ class RpmService(private val deviceManager: DeviceManager) {
                 onAppList?.invoke(apps)
             }
             ID_SYSTEMINFO -> onSystemInfo?.invoke(j.toMap())
-            ID_INSTALL_STATUS -> onInstallProgress?.invoke(
-                InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus"))
-            )
+            ID_INSTALL_STATUS ->
+                onInstallProgress?.invoke(
+                    InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus")),
+                )
             ID_INSTALL_RESP -> onOpResult?.invoke("install", j.str("packageName"), j.int("errorCode"))
             ID_UNINSTALL_RESP -> onOpResult?.invoke("uninstall", j.str("packageName"), j.int("errorCode"))
             ID_OPENAPP_RESP -> onOpResult?.invoke("open", j.str("packageName"), j.int("errorCode"))
@@ -113,19 +145,24 @@ class RpmService(private val deviceManager: DeviceManager) {
         var start = -1
         for (i in body.indices) {
             when (body[i]) {
-                '{' -> { if (depth == 0) start = i; depth++ }
+                '{' -> {
+                    if (depth == 0) start = i
+                    depth++
+                }
                 '}' -> {
                     depth--
                     if (depth == 0 && start >= 0) {
                         val o = parseJsonObject(body.substring(start, i + 1))
-                        out.add(TvApp(
-                            packageName = o.str("packageName"),
-                            appName = o.str("appName"),
-                            versionName = o.str("versionName"),
-                            versionCode = o.str("versionCode").toLongOrNull() ?: 0,
-                            iconUrl = o.str("iconUrl"),
-                            status = o.str("appStatus"),
-                        ))
+                        out.add(
+                            TvApp(
+                                packageName = o.str("packageName"),
+                                appName = o.str("appName"),
+                                versionName = o.str("versionName"),
+                                versionCode = o.str("versionCode").toLongOrNull() ?: 0,
+                                iconUrl = o.str("iconUrl"),
+                                status = o.str("appStatus"),
+                            ),
+                        )
                     }
                 }
             }

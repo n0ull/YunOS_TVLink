@@ -36,22 +36,34 @@ actual fun VoiceButton(onText: (String) -> Unit) {
     var showTextDialog by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
-    val recognizer = remember {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null
-    }
+    val recognizer =
+        remember {
+            if (SpeechRecognizer.isRecognitionAvailable(
+                    context,
+                )
+            ) {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            } else {
+                null
+            }
+        }
     DisposableEffect(recognizer) {
         onDispose { recognizer?.destroy() }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted && recognizer != null) startListening(recognizer, { partial = it }, { t ->
-            listening = false
-            if (t != null) onText(t)
-        }, { listening = false })
-        else showTextDialog = true
-    }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted && recognizer != null) {
+                startListening(recognizer, { partial = it }, { t ->
+                    listening = false
+                    if (t != null) onText(t)
+                }, { listening = false })
+            } else {
+                showTextDialog = true
+            }
+        }
 
     Column {
         Button(onClick = {
@@ -59,7 +71,9 @@ actual fun VoiceButton(onText: (String) -> Unit) {
                 showTextDialog = true
                 return@Button
             }
-            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            val granted =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
             if (!granted) {
                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             } else if (!listening) {
@@ -107,26 +121,40 @@ private fun startListening(
     onFinal: (String?) -> Unit,
     onError: () -> Unit,
 ) {
-    sr.setRecognitionListener(object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
-        override fun onError(error: Int) = onError()
-        override fun onResults(results: Bundle) {
-            val texts = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            onFinal(texts?.firstOrNull())
-        }
-        override fun onPartialResults(partialResults: Bundle) {
-            val texts = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            texts?.firstOrNull()?.let(onPartial)
-        }
-        override fun onEvent(eventType: Int, params: Bundle?) {}
-    })
-    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-        .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+    sr.setRecognitionListener(
+        object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+
+            override fun onBeginningOfSpeech() {}
+
+            override fun onRmsChanged(rmsdB: Float) {}
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {}
+
+            override fun onError(error: Int) = onError()
+
+            override fun onResults(results: Bundle) {
+                val texts = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                onFinal(texts?.firstOrNull())
+            }
+
+            override fun onPartialResults(partialResults: Bundle) {
+                val texts = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                texts?.firstOrNull()?.let(onPartial)
+            }
+
+            override fun onEvent(
+                eventType: Int,
+                params: Bundle?,
+            ) {}
+        },
+    )
+    val intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
     sr.startListening(intent)
 }

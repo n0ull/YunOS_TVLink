@@ -51,21 +51,26 @@ actual fun DongleScreen(vm: AppViewModel) {
     var password by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<BluetoothDevice?>(null) }
 
-    val permissions = remember {
-        if (Build.VERSION.SDK_INT >= 31) {
-            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    val permissions =
+        remember {
+            if (Build.VERSION.SDK_INT >= 31) {
+                arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            } else {
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
         }
-    }
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { grants ->
-        if (grants.values.all { it }) pairer.startScan()
-    }
+    val permLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { grants ->
+            if (grants.values.all { it }) pairer.startScan()
+        }
 
     DisposableEffect(Unit) {
-        pairer.onPhase = { p, m -> phase = p; phaseMsg = m }
+        pairer.onPhase = { p, m ->
+            phase = p
+            phaseMsg = m
+        }
         pairer.onFound = { d ->
             if (devices.none { it.address == d.address }) devices.add(d)
         }
@@ -85,11 +90,15 @@ actual fun DongleScreen(vm: AppViewModel) {
             }) { Text("扫描") }
         }
 
-        Text(phaseMsg, color = when (phase) {
-            DongleBlePairer.Phase.FAILED -> TvColors.Red
-            DongleBlePairer.Phase.SUCCESS -> TvColors.Green
-            else -> TvColors.TextSecondary
-        })
+        Text(
+            phaseMsg,
+            color =
+                when (phase) {
+                    DongleBlePairer.Phase.FAILED -> TvColors.Red
+                    DongleBlePairer.Phase.SUCCESS -> TvColors.Green
+                    else -> TvColors.TextSecondary
+                },
+        )
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {

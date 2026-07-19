@@ -12,7 +12,6 @@ import java.util.concurrent.Executors
  *  B) /24 subnet sweep probing TCP 13511 with a DETECT handshake
  */
 class Discovery {
-
     data class FoundDevice(
         val ip: String,
         val name: String = "",
@@ -27,7 +26,9 @@ class Discovery {
     var onFinished: (() -> Unit)? = null
 
     @Volatile private var running = false
-    private val epoch = java.util.concurrent.atomic.AtomicInteger(0)
+    private val epoch =
+        java.util.concurrent.atomic
+            .AtomicInteger(0)
     private val found = ConcurrentHashMap<String, FoundDevice>()
     private var threads = mutableListOf<Thread>()
 
@@ -38,20 +39,35 @@ class Discovery {
         running = true
         found.clear()
         val myEpoch = epoch.incrementAndGet()
-        val tMdns = Thread({ runMdns(myEpoch) }, "disc-mdns").apply { isDaemon = true; start() }
+        val tMdns =
+            Thread({ runMdns(myEpoch) }, "disc-mdns").apply {
+                isDaemon = true
+                start()
+            }
         threads.add(tMdns)
         if (scanSubnet) {
-            val tScan = Thread({ runSubnetScan(myEpoch) }, "disc-scan").apply { isDaemon = true; start() }
+            val tScan =
+                Thread({ runSubnetScan(myEpoch) }, "disc-scan").apply {
+                    isDaemon = true
+                    start()
+                }
             threads.add(tScan)
             Thread({
-                tMdns.join(); tScan.join()
+                tMdns.join()
+                tScan.join()
                 onFinished?.invoke()
-            }, "disc-join").apply { isDaemon = true; start() }
+            }, "disc-join").apply {
+                isDaemon = true
+                start()
+            }
         } else {
             Thread({
                 tMdns.join()
                 onFinished?.invoke()
-            }, "disc-join").apply { isDaemon = true; start() }
+            }, "disc-join").apply {
+                isDaemon = true
+                start()
+            }
         }
     }
 
@@ -62,16 +78,20 @@ class Discovery {
     }
 
     private fun report(d: FoundDevice) {
-        val merged = found.compute(d.ip) { _, existing ->
-            if (existing == null) d
-            else existing.copy(
-                name = d.name.ifEmpty { existing.name },
-                mac = d.mac.ifEmpty { existing.mac },
-                model = d.model.ifEmpty { existing.model },
-                uuid = d.uuid.ifEmpty { existing.uuid },
-                projectionPort = if (d.projectionPort != 0) d.projectionPort else existing.projectionPort,
-            )
-        }!!
+        val merged =
+            found.compute(d.ip) { _, existing ->
+                if (existing == null) {
+                    d
+                } else {
+                    existing.copy(
+                        name = d.name.ifEmpty { existing.name },
+                        mac = d.mac.ifEmpty { existing.mac },
+                        model = d.model.ifEmpty { existing.model },
+                        uuid = d.uuid.ifEmpty { existing.uuid },
+                        projectionPort = if (d.projectionPort != 0) d.projectionPort else existing.projectionPort,
+                    )
+                }
+            }!!
         onDeviceFound?.invoke(merged)
     }
 
@@ -80,7 +100,15 @@ class Discovery {
         try {
             Mdns.discoverOnce(listenMs = 5000, bindAddr = Mdns.localLanAddress()) { md ->
                 if (!active(myEpoch)) return@discoverOnce
-                report(FoundDevice(ip = md.ip, name = md.name, mac = md.mac, projectionPort = md.projectionPort, source = "mdns"))
+                report(
+                    FoundDevice(
+                        ip = md.ip,
+                        name = md.name,
+                        mac = md.mac,
+                        projectionPort = md.projectionPort,
+                        source = "mdns",
+                    ),
+                )
             }
         } catch (e: Exception) {
             // no multicast on this network — subnet scan still runs
@@ -105,7 +133,15 @@ class Discovery {
                     try {
                         val info = conn.detect(timeoutMs = 1200)
                         if (info != null && active(myEpoch)) {
-                            report(FoundDevice(ip = ip, name = info.name, model = info.model, uuid = info.uuid, source = "scan"))
+                            report(
+                                FoundDevice(
+                                    ip = ip,
+                                    name = info.name,
+                                    model = info.model,
+                                    uuid = info.uuid,
+                                    source = "scan",
+                                ),
+                            )
                         }
                     } finally {
                         conn.shutdown()
@@ -114,8 +150,10 @@ class Discovery {
             }
         } finally {
             pool.shutdown()
-            try { pool.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS) } catch (_: InterruptedException) {}
+            try {
+                pool.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+            }
         }
     }
-
 }

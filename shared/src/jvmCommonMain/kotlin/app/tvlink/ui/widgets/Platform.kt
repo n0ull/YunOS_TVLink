@@ -8,7 +8,11 @@ expect val platformName: String
 
 /** Motion sensor feed for the remote's motion mode. Desktop actual is a no-op. */
 expect class MotionSensor() {
-    fun start(onAccel: (x: Int, y: Int, z: Int) -> Unit, onGyro: (x: Int, y: Int, z: Int) -> Unit)
+    fun start(
+        onAccel: (x: Int, y: Int, z: Int) -> Unit,
+        onGyro: (x: Int, y: Int, z: Int) -> Unit,
+    )
+
     fun stop()
 }
 

@@ -40,14 +40,22 @@ object Mdns {
     }
 
     /** Parse a DNS message, folding PTR/SRV/A/TXT into devices keyed by source ip. */
-    fun parse(data: ByteArray, sourceIp: String, into: MutableMap<String, MdnsDevice>) {
+    fun parse(
+        data: ByteArray,
+        sourceIp: String,
+        into: MutableMap<String, MdnsDevice>,
+    ) {
         val buf = ByteBuffer.wrap(data)
         if (data.size < 12) return
         buf.position(4)
         val qd = buf.short.toInt() and 0xFFFF
         val an = buf.short.toInt() and 0xFFFF
-        buf.short; buf.short // ns, ar
-        repeat(qd) { skipName(buf); buf.position(buf.position() + 4) }
+        buf.short
+        buf.short // ns, ar
+        repeat(qd) {
+            skipName(buf)
+            buf.position(buf.position() + 4)
+        }
         repeat(an) {
             skipName(buf)
             if (buf.remaining() < 10) return
@@ -61,12 +69,14 @@ object Mdns {
             when (type) {
                 12 -> dev.name = readName(buf).removeSuffix(".$SERVICE").removeSuffix(".")
                 33 -> { // SRV
-                    buf.short; buf.short
+                    buf.short
+                    buf.short
                     dev.port = (buf.short.toInt() and 0xFFFF)
                 }
                 1 -> { // A
                     if (rdLen == 4) {
-                        val b = ByteArray(4); buf.get(b)
+                        val b = ByteArray(4)
+                        buf.get(b)
                         dev.ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() }
                     }
                 }
@@ -75,7 +85,8 @@ object Mdns {
                     while (buf.position() < end) {
                         val l = buf.get().toInt() and 0xFF
                         if (l == 0 || buf.remaining() < l) break
-                        val kv = ByteArray(l); buf.get(kv)
+                        val kv = ByteArray(l)
+                        buf.get(kv)
                         val s = String(kv, Charsets.UTF_8)
                         val eq = s.indexOf('=')
                         if (eq > 0) {
@@ -96,7 +107,10 @@ object Mdns {
             val l = buf.get().toInt() and 0xFF
             when {
                 l == 0 -> return
-                l and 0xC0 == 0xC0 -> { if (buf.hasRemaining()) buf.get(); return }
+                l and 0xC0 == 0xC0 -> {
+                    if (buf.hasRemaining()) buf.get()
+                    return
+                }
                 else -> {
                     if (buf.remaining() < l) return
                     buf.position(buf.position() + l)
@@ -122,7 +136,8 @@ object Mdns {
                     jumped = true
                 }
                 else -> {
-                    val b = ByteArray(l); buf.get(b)
+                    val b = ByteArray(l)
+                    buf.get(b)
                     if (sb.isNotEmpty()) sb.append('.')
                     sb.append(String(b, Charsets.UTF_8))
                 }
@@ -143,11 +158,12 @@ object Mdns {
     ) {
         val devices = LinkedHashMap<String, MdnsDevice>()
         val group = InetAddress.getByName(GROUP)
-        val socket = if (bindAddr != null) {
-            MulticastSocket(InetSocketAddress(bindAddr, PORT))
-        } else {
-            MulticastSocket(PORT)
-        }
+        val socket =
+            if (bindAddr != null) {
+                MulticastSocket(InetSocketAddress(bindAddr, PORT))
+            } else {
+                MulticastSocket(PORT)
+            }
         socket.soTimeout = 500
         try {
             socket.joinGroup(InetSocketAddress(group, PORT), pickInterface(bindAddr))
@@ -172,7 +188,10 @@ object Mdns {
                 }
             }
         } finally {
-            try { socket.leaveGroup(InetSocketAddress(group, PORT), pickInterface(bindAddr)) } catch (_: Exception) {}
+            try {
+                socket.leaveGroup(InetSocketAddress(group, PORT), pickInterface(bindAddr))
+            } catch (_: Exception) {
+            }
             socket.close()
         }
     }

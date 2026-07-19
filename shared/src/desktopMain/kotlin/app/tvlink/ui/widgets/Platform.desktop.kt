@@ -15,7 +15,11 @@ import app.tvlink.ui.AppViewModel
 actual val platformName: String = "desktop"
 
 actual class MotionSensor actual constructor() {
-    actual fun start(onAccel: (x: Int, y: Int, z: Int) -> Unit, onGyro: (x: Int, y: Int, z: Int) -> Unit) {}
+    actual fun start(
+        onAccel: (x: Int, y: Int, z: Int) -> Unit,
+        onGyro: (x: Int, y: Int, z: Int) -> Unit,
+    ) {}
+
     actual fun stop() {}
 }
 

@@ -29,7 +29,8 @@ class CastController(
         val rate: Float = 1f,
     )
 
-    @Volatile var state = State.DISCONNECTED; private set
+    @Volatile var state = State.DISCONNECTED
+        private set
     var onEvent: ((PlayState, duration: Long, position: Long) -> Unit)? = null
     var onStateChanged: ((State) -> Unit)? = null
 
@@ -54,73 +55,125 @@ class CastController(
         }
     }
 
-    fun setMedia(type: String, url: String, title: String, thumbnail: String? = null, startPosition: Long = 0): Boolean {
-        val body = buildString {
-            append("{\"content_url\":\"").append(url.jsonEsc()).append("\",")
-            append("\"content_name\":\"").append(title.jsonEsc()).append("\",")
-            if (thumbnail != null) append("\"thumbnail_url\":\"").append(thumbnail.jsonEsc()).append("\",")
-            append("\"exclusive\":true,\"start_position\":").append(startPosition).append("}")
-        }
+    fun setMedia(
+        type: String,
+        url: String,
+        title: String,
+        thumbnail: String? = null,
+        startPosition: Long = 0,
+    ): Boolean {
+        val body =
+            buildString {
+                append("{\"content_url\":\"").append(url.jsonEsc()).append("\",")
+                append("\"content_name\":\"").append(title.jsonEsc()).append("\",")
+                if (thumbnail != null) append("\"thumbnail_url\":\"").append(thumbnail.jsonEsc()).append("\",")
+                append("\"exclusive\":true,\"start_position\":").append(startPosition).append("}")
+            }
         return request("POST", "/setmedia", body, extraHeaders = mapOf("yunos-mediatype" to type))
     }
 
     fun play() = request("POST", "/play")
+
     fun pause() = request("POST", "/pause")
+
     fun stop() = request("POST", "/stop")
+
     fun seek(ms: Long) = request("POST", "/seek?value=$ms")
+
     fun volume(v: Int) = request("POST", "/volume?value=$v")
+
     fun rate(r: Float) = request("POST", "/rate?value=$r")
-    fun zoom(scale: Float, cx: Float, cy: Float) = request("POST", "/zoom?scale=$scale&cx=$cx&cy=$cy")
+
+    fun zoom(
+        scale: Float,
+        cx: Float,
+        cy: Float,
+    ) = request("POST", "/zoom?scale=$scale&cx=$cx&cy=$cy")
+
     fun preload(url: String) = request("POST", "/preload", "{\"content_url\":\"${url.jsonEsc()}\"}")
 
     fun playbackInfo(): PlaybackInfo? {
         val resp = requestRaw("GET", "/playback-info", null)
         if (resp == null || !resp.first.startsWith("200")) return null
         val j = resp.second
-        fun num(k: String) = Regex("\"$k\"\\s*:\\s*\"?(\\d+)\"?").find(j)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+
+        fun num(k: String) =
+            Regex("\"$k\"\\s*:\\s*\"?(\\d+)\"?")
+                .find(j)
+                ?.groupValues
+                ?.get(1)
+                ?.toLongOrNull() ?: 0L
+
         fun str(k: String) = Regex("\"$k\"\\s*:\\s*\"([^\"]*)\"").find(j)?.groupValues?.get(1) ?: ""
         return PlaybackInfo(
             name = str("name"),
             duration = num("duration"),
             position = num("position"),
             volume = num("volume").toInt(),
-            rate = Regex("\"rate\"\\s*:\\s*\"?([0-9.]+)\"?").find(j)?.groupValues?.get(1)?.toFloatOrNull() ?: 1f,
+            rate =
+                Regex("\"rate\"\\s*:\\s*\"?([0-9.]+)\"?")
+                    .find(j)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toFloatOrNull() ?: 1f,
         )
     }
 
-    private fun request(method: String, uri: String, body: String? = null, extraHeaders: Map<String, String> = emptyMap()): Boolean {
+    private fun request(
+        method: String,
+        uri: String,
+        body: String? = null,
+        extraHeaders: Map<String, String> = emptyMap(),
+    ): Boolean {
         val resp = requestRaw(method, uri, body, extraHeaders)
         return resp != null && resp.first.startsWith("200")
     }
 
     /** Returns (statusCode, body) or null on IO error. */
-    private fun requestRaw(method: String, uri: String, body: String?, extraHeaders: Map<String, String> = emptyMap()): Pair<String, String>? {
+    private fun requestRaw(
+        method: String,
+        uri: String,
+        body: String?,
+        extraHeaders: Map<String, String> = emptyMap(),
+    ): Pair<String, String>? {
         val o = out ?: return null
         val bodyBytes = body?.toByteArray(Charsets.UTF_8) ?: ByteArray(0)
         val sb = StringBuilder()
-        sb.append(method).append(' ').append(uri).append(" HTTP/1.1\r\n")
+        sb
+            .append(method)
+            .append(' ')
+            .append(uri)
+            .append(" HTTP/1.1\r\n")
         sb.append("yunos-session-id: ").append(sessionId).append("\r\n")
-        for ((k, v) in extraHeaders) sb.append(k).append(": ").append(v).append("\r\n")
+        for ((k, v) in extraHeaders) {
+            sb
+                .append(k)
+                .append(": ")
+                .append(v)
+                .append("\r\n")
+        }
         sb.append("Content-Length: ").append(bodyBytes.size).append("\r\n\r\n")
         // Arm BEFORE writing so the reader thread can never discard our response (H2 fix).
         respQueue.clear()
         waitingResp = true
-        val resp = try {
-            synchronized(sendLock) {
-                o.write(sb.toString().toByteArray(Charsets.UTF_8))
-                if (bodyBytes.isNotEmpty()) o.write(bodyBytes)
-                o.flush()
+        val resp =
+            try {
+                synchronized(sendLock) {
+                    o.write(sb.toString().toByteArray(Charsets.UTF_8))
+                    if (bodyBytes.isNotEmpty()) o.write(bodyBytes)
+                    o.flush()
+                }
+                respQueue.poll(10, TimeUnit.SECONDS)
+            } catch (e: Exception) {
+                null
+            } finally {
+                waitingResp = false
             }
-            respQueue.poll(10, TimeUnit.SECONDS)
-        } catch (e: Exception) {
-            null
-        } finally {
-            waitingResp = false
-        }
         return resp
     }
 
     private val respQueue = ArrayBlockingQueue<Pair<String, String>>(1)
+
     @Volatile private var waitingResp = false
 
     private fun startReader() {
@@ -153,10 +206,17 @@ class CastController(
                 // fall through
             }
             if (state != State.DISCONNECTED) disconnect()
-        }, "cast-reader").apply { isDaemon = true; start() }
+        }, "cast-reader").apply {
+            isDaemon = true
+            start()
+        }
     }
 
-    private fun handleMessage(startLine: String, headers: Map<String, String>, body: String) {
+    private fun handleMessage(
+        startLine: String,
+        headers: Map<String, String>,
+        body: String,
+    ) {
         when {
             startLine.startsWith("HTTP/1.1") -> {
                 // response to a request we sent
@@ -165,21 +225,25 @@ class CastController(
             }
             startLine.startsWith("POST /event") -> {
                 val q = startLine.substringAfter('?', "")
-                val params = q.split('&').mapNotNull {
-                    val i = it.indexOf('=')
-                    if (i > 0) it.substring(0, i) to it.substring(i + 1) else null
-                }.toMap()
-                val st = when (params["state"]) {
-                    "prepared" -> PlayState.PREPARED
-                    "playing" -> PlayState.PLAYING
-                    "paused" -> PlayState.PAUSED
-                    "loading" -> PlayState.LOADING
-                    "stopped" -> PlayState.STOPPED
-                    "completed" -> PlayState.COMPLETED
-                    "error" -> PlayState.ERROR
-                    "occupied" -> PlayState.OCCUPIED
-                    else -> PlayState.UNKNOWN
-                }
+                val params =
+                    q
+                        .split('&')
+                        .mapNotNull {
+                            val i = it.indexOf('=')
+                            if (i > 0) it.substring(0, i) to it.substring(i + 1) else null
+                        }.toMap()
+                val st =
+                    when (params["state"]) {
+                        "prepared" -> PlayState.PREPARED
+                        "playing" -> PlayState.PLAYING
+                        "paused" -> PlayState.PAUSED
+                        "loading" -> PlayState.LOADING
+                        "stopped" -> PlayState.STOPPED
+                        "completed" -> PlayState.COMPLETED
+                        "error" -> PlayState.ERROR
+                        "occupied" -> PlayState.OCCUPIED
+                        else -> PlayState.UNKNOWN
+                    }
                 onEvent?.invoke(st, params["duration"]?.toLongOrNull() ?: 0, params["position"]?.toLongOrNull() ?: 0)
                 // ack
                 val o = out
@@ -188,7 +252,8 @@ class CastController(
                         try {
                             o.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.UTF_8))
                             o.flush()
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
                 }
             }
@@ -201,7 +266,10 @@ class CastController(
     }
 
     fun disconnect() {
-        try { socket?.close() } catch (_: Exception) {}
+        try {
+            socket?.close()
+        } catch (_: Exception) {
+        }
         socket = null
         out = null
         setState(State.DISCONNECTED)

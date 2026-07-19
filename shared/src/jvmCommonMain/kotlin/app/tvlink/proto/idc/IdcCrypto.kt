@@ -21,7 +21,10 @@ object IdcCrypto {
     private const val INIT_KEY_HEX = "a31c5c871c597d133cb15cd68fefdc1a"
     private const val SEED_XOR_CONST = 51550860
 
-    fun deriveAesSecret(clientSeed: Int, serverSeed: Int): ByteArray {
+    fun deriveAesSecret(
+        clientSeed: Int,
+        serverSeed: Int,
+    ): ByteArray {
         val keyBytes = hexToBytes(INIT_KEY_HEX)
         val buf = ByteBuffer.allocate(keyBytes.size).order(ByteOrder.LITTLE_ENDIAN)
         buf.put(keyBytes)
@@ -44,13 +47,19 @@ object IdcCrypto {
     }
 
     /** AES/CBC/PKCS5Padding, IV == key (matches original). */
-    fun aesEncrypt(data: ByteArray, key: ByteArray): ByteArray {
+    fun aesEncrypt(
+        data: ByteArray,
+        key: ByteArray,
+    ): ByteArray {
         val c = Cipher.getInstance("AES/CBC/PKCS5Padding")
         c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(key))
         return c.doFinal(data)
     }
 
-    fun aesDecrypt(data: ByteArray, key: ByteArray): ByteArray {
+    fun aesDecrypt(
+        data: ByteArray,
+        key: ByteArray,
+    ): ByteArray {
         val c = Cipher.getInstance("AES/CBC/PKCS5Padding")
         c.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(key))
         return c.doFinal(data)

@@ -28,7 +28,11 @@ object IbConst {
 }
 
 /** ibVal = Linux input-event code; androidVal = Android keycode used on the IDC fallback path. */
-enum class RcKey(val ibVal: Int, val androidVal: Int, val needIb313: Boolean = false) {
+enum class RcKey(
+    val ibVal: Int,
+    val androidVal: Int,
+    val needIb313: Boolean = false,
+) {
     UP(103, 19),
     DOWN(108, 20),
     LEFT(105, 21),

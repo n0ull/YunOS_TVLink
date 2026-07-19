@@ -26,8 +26,9 @@ import java.util.UUID
  * exactly as the protocol requires (device has no auth by design).
  */
 @SuppressLint("MissingPermission")
-class DongleBlePairer(private val context: Context) {
-
+class DongleBlePairer(
+    private val context: Context,
+) {
     companion object {
         val SVC_UUID: UUID = UUID.fromString("00006287-3c17-d293-8e48-14fe2e4da212")
         val CHR_PASSWORD: UUID = UUID.fromString("f000aa21-0451-4000-b000-000000000000")
@@ -46,15 +47,17 @@ class DongleBlePairer(private val context: Context) {
     var onFound: ((BluetoothDevice) -> Unit)? = null
 
     /** Runtime permissions required for BLE scan + connect on this Android version. */
-    fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= 31) {
-        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-    } else {
-        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
+    fun requiredPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= 31) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
 
-    private fun hasPermissions(): Boolean = requiredPermissions().all {
-        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasPermissions(): Boolean =
+        requiredPermissions().all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
 
     private fun permissionNames(): String = requiredPermissions().joinToString(", ") { it.substringAfterLast('.') }
 
@@ -63,14 +66,19 @@ class DongleBlePairer(private val context: Context) {
     private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
     private val writeQueue = ArrayDeque<Pair<UUID, ByteArray>>()
 
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val dev = result.device ?: return
-            val name = dev.name ?: result.scanRecord?.deviceName ?: return
-            if (name.startsWith(NAME_PREFIX)) onFound?.invoke(dev)
+    private val scanCallback =
+        object : ScanCallback() {
+            override fun onScanResult(
+                callbackType: Int,
+                result: ScanResult,
+            ) {
+                val dev = result.device ?: return
+                val name = dev.name ?: result.scanRecord?.deviceName ?: return
+                if (name.startsWith(NAME_PREFIX)) onFound?.invoke(dev)
+            }
+
+            override fun onScanFailed(errorCode: Int) = phase(Phase.FAILED, "扫描失败 ($errorCode)")
         }
-        override fun onScanFailed(errorCode: Int) = phase(Phase.FAILED, "扫描失败 ($errorCode)")
-    }
 
     fun startScan() {
         if (!hasPermissions()) {
@@ -89,12 +97,21 @@ class DongleBlePairer(private val context: Context) {
     }
 
     fun stopScan() {
-        try { scanner?.stopScan(scanCallback) } catch (_: Exception) {}
+        try {
+            scanner?.stopScan(scanCallback)
+        } catch (_: Exception) {
+        }
         if (gatt == null) phase(Phase.IDLE, "扫描结束")
     }
 
     /** security: 0=OPEN 1=WEP 2=PSK 3=EAP; hotelMode: 0/1 */
-    fun pair(device: BluetoothDevice, ssid: String, password: String, security: Int = 2, hotelMode: Int = 0) {
+    fun pair(
+        device: BluetoothDevice,
+        ssid: String,
+        password: String,
+        security: Int = 2,
+        hotelMode: Int = 0,
+    ) {
         if (!hasPermissions()) {
             phase(Phase.FAILED, "缺少权限: ${permissionNames()}")
             return
@@ -122,52 +139,71 @@ class DongleBlePairer(private val context: Context) {
         gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
-    private val gattCallback = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                phase(Phase.FAILED, "连接失败 ($status)")
-                close()
-            } else if (newState == BluetoothGatt.STATE_CONNECTED) {
-                handler.postDelayed({ g.discoverServices() }, 500)
-            } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
-                phase(Phase.FAILED, "连接断开")
-                close()
-            }
-        }
-
-        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            val svc = g.getService(SVC_UUID)
-            if (svc == null) {
-                phase(Phase.FAILED, "未找到配网服务")
-                close()
-                return
-            }
-            // enable notify on security characteristic for the result
-            val chr = svc.getCharacteristic(CHR_SECURITY)
-            if (chr != null) {
-                g.setCharacteristicNotification(chr, true)
-                chr.getDescriptor(CCC_UUID)?.let { desc ->
-                    desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    g.writeDescriptor(desc)
+    private val gattCallback =
+        object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(
+                g: BluetoothGatt,
+                status: Int,
+                newState: Int,
+            ) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    phase(Phase.FAILED, "连接失败 ($status)")
+                    close()
+                } else if (newState == BluetoothGatt.STATE_CONNECTED) {
+                    handler.postDelayed({ g.discoverServices() }, 500)
+                } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                    phase(Phase.FAILED, "连接断开")
+                    close()
                 }
             }
-            phase(Phase.WRITING, "写入配网信息…")
-            writeNext(g)
-        }
 
-        override fun onCharacteristicWrite(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            writeNext(g)
-        }
+            override fun onServicesDiscovered(
+                g: BluetoothGatt,
+                status: Int,
+            ) {
+                val svc = g.getService(SVC_UUID)
+                if (svc == null) {
+                    phase(Phase.FAILED, "未找到配网服务")
+                    close()
+                    return
+                }
+                // enable notify on security characteristic for the result
+                val chr = svc.getCharacteristic(CHR_SECURITY)
+                if (chr != null) {
+                    g.setCharacteristicNotification(chr, true)
+                    chr.getDescriptor(CCC_UUID)?.let { desc ->
+                        desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        g.writeDescriptor(desc)
+                    }
+                }
+                phase(Phase.WRITING, "写入配网信息…")
+                writeNext(g)
+            }
 
-        @Deprecated("API < 33")
-        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            handleSecurityResult(characteristic.value)
-        }
+            override fun onCharacteristicWrite(
+                g: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                writeNext(g)
+            }
 
-        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-            handleSecurityResult(value)
+            @Deprecated("API < 33")
+            override fun onCharacteristicChanged(
+                g: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+            ) {
+                handleSecurityResult(characteristic.value)
+            }
+
+            override fun onCharacteristicChanged(
+                g: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+            ) {
+                handleSecurityResult(value)
+            }
         }
-    }
 
     private fun handleSecurityResult(bytes: ByteArray?) {
         val text = bytes?.let { String(it, Charsets.UTF_8) } ?: return
@@ -186,11 +222,12 @@ class DongleBlePairer(private val context: Context) {
             phase(Phase.WRITING, "等待设备确认…")
             return
         }
-        val chr = g.getService(SVC_UUID)?.getCharacteristic(next.first) ?: run {
-            phase(Phase.FAILED, "配网特征不可用")
-            close()
-            return
-        }
+        val chr =
+            g.getService(SVC_UUID)?.getCharacteristic(next.first) ?: run {
+                phase(Phase.FAILED, "配网特征不可用")
+                close()
+                return
+            }
         chr.value = next.second
         chr.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         if (!g.writeCharacteristic(chr)) {
@@ -200,21 +237,29 @@ class DongleBlePairer(private val context: Context) {
     }
 
     fun close() {
-        try { gatt?.close() } catch (_: Exception) {}
+        try {
+            gatt?.close()
+        } catch (_: Exception) {
+        }
         gatt = null
     }
 
-    private fun phase(p: Phase, msg: String) {
+    private fun phase(
+        p: Phase,
+        msg: String,
+    ) {
         handler.post { onPhase?.invoke(p, msg) }
     }
 }
 
 @SuppressLint("MissingPermission")
-fun currentSsid(context: Context): String {
-    return try {
+fun currentSsid(context: Context): String =
+    try {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifi.connectionInfo?.ssid?.removePrefix("\"")?.removeSuffix("\"") ?: ""
+        wifi.connectionInfo
+            ?.ssid
+            ?.removePrefix("\"")
+            ?.removeSuffix("\"") ?: ""
     } catch (e: Exception) {
         ""
     }
-}

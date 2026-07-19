@@ -45,8 +45,14 @@ class DeviceManager {
     /** unmatched packets from the TV (IME events, screenshot resp, ...) */
     var onPacket: ((IdcPacket) -> Unit)? = null
     private val vConnListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, ByteArray) -> Unit>()
-    fun addVConnListener(l: (Int, ByteArray) -> Unit) { vConnListeners.add(l) }
-    fun removeVConnListener(l: (Int, ByteArray) -> Unit) { vConnListeners.remove(l) }
+
+    fun addVConnListener(l: (Int, ByteArray) -> Unit) {
+        vConnListeners.add(l)
+    }
+
+    fun removeVConnListener(l: (Int, ByteArray) -> Unit) {
+        vConnListeners.remove(l)
+    }
 
     var connection: IdcConnection? = null
         private set
@@ -74,7 +80,10 @@ class DeviceManager {
         connect(device.ip, device.projectionPort)
     }
 
-    fun connect(ip: String, projectionPort: Int = 0) {
+    fun connect(
+        ip: String,
+        projectionPort: Int = 0,
+    ) {
         if (projectionPort != 0) discoveredProjectionPort = projectionPort
         _connState.value = ConnState.CONNECTING
         scope.launch {
@@ -88,15 +97,19 @@ class DeviceManager {
                 connection = conn
                 val di = conn.deviceInfo
                 // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel falls back to DEFAULT_CAST_PORT)
-                val ddhPort = di?.ddhParams?.get("mediaprojection")
-                    ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
-                _connected.value = ConnectedDevice(
-                    ip = ip,
-                    name = di?.name ?: ip,
-                    model = di?.model ?: "",
-                    uuid = di?.uuid ?: "",
-                    projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
-                )
+                val ddhPort =
+                    di
+                        ?.ddhParams
+                        ?.get("mediaprojection")
+                        ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
+                _connected.value =
+                    ConnectedDevice(
+                        ip = ip,
+                        name = di?.name ?: ip,
+                        model = di?.model ?: "",
+                        uuid = di?.uuid ?: "",
+                        projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
+                    )
                 _connState.value = ConnState.CONNECTED
             } else {
                 _connState.value = ConnState.FAILED
@@ -107,7 +120,10 @@ class DeviceManager {
     private fun wireCallbacks(conn: IdcConnection) {
         conn.onStateChanged = { s ->
             // only react if this conn is still the active one
-            if (s == IdcConnection.State.DISCONNECTED && connection === conn && _connState.value == ConnState.CONNECTED) {
+            if (s == IdcConnection.State.DISCONNECTED &&
+                connection === conn &&
+                _connState.value == ConnState.CONNECTED
+            ) {
                 disconnect()
             }
         }
@@ -136,6 +152,8 @@ class DeviceManager {
     /** Convenience: module id by TV-registered name (e.g. "com.yunos.tv.asr:etao"). */
     fun moduleId(name: String): Int? = connection?.moduleIdByName(name)
 
-    fun sendVConnJson(moduleId: Int, json: String) =
-        connection?.sendVConnData(moduleId, json.toByteArray(Charsets.UTF_8))
+    fun sendVConnJson(
+        moduleId: Int,
+        json: String,
+    ) = connection?.sendVConnData(moduleId, json.toByteArray(Charsets.UTF_8))
 }

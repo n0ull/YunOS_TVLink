@@ -7,8 +7,9 @@ import app.tvlink.proto.idc.ScreenShotResp
 /**
  * TV screenshot over the IDC command channel (20900 -> 21000). See docs/re/04 §6.
  */
-class ScreenshotService(private val deviceManager: DeviceManager) {
-
+class ScreenshotService(
+    private val deviceManager: DeviceManager,
+) {
     var onScreenshot: ((jpeg: ByteArray) -> Unit)? = null
 
     @Volatile private var pending = false
@@ -21,7 +22,11 @@ class ScreenshotService(private val deviceManager: DeviceManager) {
         }
     }
 
-    fun capture(width: Int = 1280, height: Int = 720, quality: Int = 90): Boolean {
+    fun capture(
+        width: Int = 1280,
+        height: Int = 720,
+        quality: Int = 90,
+    ): Boolean {
         val conn = deviceManager.connection ?: return false
         pending = true
         conn.send(ScreenShotReq(resizeW = width, resizeH = height, compressQuality = quality))

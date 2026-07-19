@@ -65,7 +65,11 @@ fun DevicePickerScreen(vm: AppViewModel) {
             DeviceManager.ConnState.SEARCHING -> Text("正在搜索同一 Wi-Fi 下的电视设备…", color = TvColors.TextSecondary)
             DeviceManager.ConnState.CONNECTING -> Text("正在连接…", color = TvColors.TextSecondary)
             DeviceManager.ConnState.FAILED -> Text("连接失败，请确认设备在线后重试", color = TvColors.Red)
-            else -> Text(if (vm.foundDevices.isEmpty()) "点击下方按钮搜索设备" else "发现 ${vm.foundDevices.size} 个设备", color = TvColors.TextSecondary)
+            else ->
+                Text(
+                    if (vm.foundDevices.isEmpty()) "点击下方按钮搜索设备" else "发现 ${vm.foundDevices.size} 个设备",
+                    color = TvColors.TextSecondary,
+                )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -113,7 +117,10 @@ fun DevicePickerScreen(vm: AppViewModel) {
                 label = { Text("电视 IP 地址") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { if (manualIp.isNotBlank()) vm.connectToIp(manualIp.trim()) }),
+                keyboardActions =
+                    KeyboardActions(
+                        onGo = { if (manualIp.isNotBlank()) vm.connectToIp(manualIp.trim()) },
+                    ),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -125,12 +132,14 @@ fun DevicePickerScreen(vm: AppViewModel) {
 private fun SearchPulse(active: Boolean) {
     val transition = rememberInfiniteTransition(label = "pulse")
     val a by transition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
+        initialValue = 0.3f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
         label = "alpha",
     )
     Box(
-        Modifier.size(72.dp)
+        Modifier
+            .size(72.dp)
             .alpha(if (active) a else 0.25f)
             .background(TvColors.accentBrush, CircleShape),
         contentAlignment = Alignment.Center,
