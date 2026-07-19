@@ -44,6 +44,12 @@ class RcController(private val deviceManager: DeviceManager) {
         _ibReady.value = false
     }
 
+    /** Release all resources. Call when the owning ViewModel is cleared. */
+    fun destroy() {
+        detach()
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     fun keyClick(key: RcKey) {
         val chan = ib
         if (chan != null && chan.state == IbChannel.State.READY && !key.needIb313) {

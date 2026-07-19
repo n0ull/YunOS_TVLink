@@ -120,6 +120,13 @@ class DeviceManager {
         _connState.value = ConnState.IDLE
     }
 
+    /** Release all resources. Call when the owning ViewModel is cleared. */
+    fun destroy() {
+        stopDiscovery()
+        disconnect()
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     /** Convenience: module id by TV-registered name (e.g. "com.yunos.tv.asr:etao"). */
     fun moduleId(name: String): Int? = connection?.moduleIdByName(name)
 

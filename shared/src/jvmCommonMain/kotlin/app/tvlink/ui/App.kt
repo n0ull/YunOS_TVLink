@@ -10,6 +10,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -33,6 +34,9 @@ fun App() {
         override val viewModelStore: ViewModelStore = ViewModelStore()
     } }
     val owner = LocalViewModelStoreOwner.current ?: fallbackOwner
+    DisposableEffect(owner) {
+        onDispose { if (owner === fallbackOwner) owner.viewModelStore.clear() }
+    }
     CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
         val vm: AppViewModel = viewModel { AppViewModel() }
         TvTheme(dark = vm.screen == AppViewModel.Screen.Remote) {

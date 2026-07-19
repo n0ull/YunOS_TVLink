@@ -233,4 +233,12 @@ class AppViewModel : ViewModel() {
     }
 
     fun voiceText(text: String) = asr.sendText(text)
+
+    override fun onCleared() {
+        rc.destroy()
+        cast?.disconnect()
+        mediaServer.stop()
+        deviceManager.destroy()
+        super.onCleared()
+    }
 }
