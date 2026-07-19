@@ -11,7 +11,12 @@ import javax.crypto.spec.SecretKeySpec
  * IDC session crypto — mirrors IdcEncryptionHelper / CipherUtils.
  * Note: the original HmacSHA256 helper ignores its second argument (key = data = first arg);
  * that quirk is part of the key-derivation and must be preserved.
+ *
+ * TODO: This entire path is DEAD CODE — the client always negotiates encryption_algorithm_ver=0
+ * (plaintext). deriveAesSecret's flip/putInt may be bug-compatible with the original; do NOT
+ * "fix" without a ver≠0 TV to validate against. Existing test pins current behavior.
  */
+@Suppress("unused")
 object IdcCrypto {
     private const val INIT_KEY_HEX = "a31c5c871c597d133cb15cd68fefdc1a"
     private const val SEED_XOR_CONST = 51550860

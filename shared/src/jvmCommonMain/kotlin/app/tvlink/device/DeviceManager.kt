@@ -4,6 +4,7 @@ import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.LoginReq
+import app.tvlink.proto.idc.parseJsonObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,7 +44,9 @@ class DeviceManager {
 
     /** unmatched packets from the TV (IME events, screenshot resp, ...) */
     var onPacket: ((IdcPacket) -> Unit)? = null
-    var onVConnData: ((moduleId: Int, payload: ByteArray) -> Unit)? = null
+    private val vConnListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, ByteArray) -> Unit>()
+    fun addVConnListener(l: (Int, ByteArray) -> Unit) { vConnListeners.add(l) }
+    fun removeVConnListener(l: (Int, ByteArray) -> Unit) { vConnListeners.remove(l) }
 
     var connection: IdcConnection? = null
         private set
@@ -84,12 +87,15 @@ class DeviceManager {
             if (ok) {
                 connection = conn
                 val di = conn.deviceInfo
+                // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel falls back to DEFAULT_CAST_PORT)
+                val ddhPort = di?.ddhParams?.get("mediaprojection")
+                    ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
                 _connected.value = ConnectedDevice(
                     ip = ip,
                     name = di?.name ?: ip,
                     model = di?.model ?: "",
                     uuid = di?.uuid ?: "",
-                    projectionPort = discoveredProjectionPort,
+                    projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
                 )
                 _connState.value = ConnState.CONNECTED
             } else {
@@ -109,7 +115,7 @@ class DeviceManager {
             _modules.value = conn.modules.values.toList()
         }
         conn.onPacket = { p -> onPacket?.invoke(p) }
-        conn.onVConnData = { mid, payload -> onVConnData?.invoke(mid, payload) }
+        conn.onVConnData = { mid, payload -> vConnListeners.forEach { it(mid, payload) } }
     }
 
     fun disconnect() {
@@ -118,6 +124,13 @@ class DeviceManager {
         _connected.value = null
         _modules.value = emptyList()
         _connState.value = ConnState.IDLE
+    }
+
+    /** Release all resources. Call when the owning ViewModel is cleared. */
+    fun destroy() {
+        stopDiscovery()
+        disconnect()
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }
 
     /** Convenience: module id by TV-registered name (e.g. "com.yunos.tv.asr:etao"). */

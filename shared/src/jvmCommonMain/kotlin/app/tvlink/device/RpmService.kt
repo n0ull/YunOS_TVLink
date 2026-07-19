@@ -51,9 +51,17 @@ class RpmService(private val deviceManager: DeviceManager) {
         const val ID_SYSTEMINFO = 41
     }
 
-    /** Wire into DeviceManager.onVConnData. */
+    private val vConnListener: (Int, ByteArray) -> Unit = { _, payload -> handle(payload) }
+
+    /** Register for VConn data. Idempotent — safe to call on every connect. */
     fun attach() {
-        deviceManager.onVConnData = { _, payload -> handle(payload) }
+        deviceManager.removeVConnListener(vConnListener)
+        deviceManager.addVConnListener(vConnListener)
+    }
+
+    /** Unregister from VConn data. */
+    fun detach() {
+        deviceManager.removeVConnListener(vConnListener)
     }
 
     fun getAppList(pageSize: Int = 100) = send(ID_GETLIST_REQ, """{"pageSize":$pageSize}""")

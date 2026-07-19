@@ -5,6 +5,7 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -57,7 +58,7 @@ class IdcConnection(
     private var dataIn: DataInputStream? = null
     @Volatile private var connKey = IdcConst.UNASSIGNED_KEY
     private val sendLock = Any()
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "idc-hb").apply { isDaemon = true } }
+    private var scheduler: ScheduledExecutorService? = null
     private var hbFuture: ScheduledFuture<*>? = null
     private val hbSeq = AtomicInteger(1)
     @Volatile private var lastHbAck = 0
@@ -148,7 +149,9 @@ class IdcConnection(
         modules.values.firstOrNull { it.name == name && it.online }?.id
 
     private fun startHeartbeat() {
-        hbFuture = scheduler.scheduleWithFixedDelay({
+        val sched = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "idc-hb").apply { isDaemon = true } }
+        scheduler = sched
+        hbFuture = sched.scheduleWithFixedDelay({
             try {
                 val seq = hbSeq.get()
                 send(HeartBeat(seq))
@@ -226,9 +229,11 @@ class IdcConnection(
     }
 
     fun close() {
-        if (state == State.DISCONNECTED && socket == null) return
+        if (state == State.DISCONNECTED && socket == null && scheduler == null) return
         hbFuture?.cancel(false)
         hbFuture = null
+        scheduler?.shutdownNow()
+        scheduler = null
         try { dataIn?.close() } catch (_: Exception) {}
         dataIn = null
         try { socket?.close() } catch (_: Exception) {}
@@ -240,9 +245,6 @@ class IdcConnection(
         setState(State.DISCONNECTED)
     }
 
-    /** Release the heartbeat scheduler. Call when the connection object is permanently discarded. */
-    fun shutdown() {
-        close()
-        scheduler.shutdown()
-    }
+    /** Alias for [close] — retained for call-site clarity when discarding the connection permanently. */
+    fun shutdown() = close()
 }

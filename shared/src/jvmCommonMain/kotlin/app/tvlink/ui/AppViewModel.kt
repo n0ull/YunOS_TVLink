@@ -188,6 +188,7 @@ class AppViewModel : ViewModel() {
 
     fun disconnect() {
         rc.detach()
+        rpm.detach()
         deviceManager.disconnect()
         screen = Screen.DevicePicker
     }
@@ -205,8 +206,12 @@ class AppViewModel : ViewModel() {
     }
 
     fun takeScreenshot() {
+        if (!screenshot.capture()) return
         shotBusy = true
-        screenshot.capture()
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(10_000)
+            shotBusy = false
+        }
     }
 
     fun refreshApps() = rpm.getAppList()
@@ -233,4 +238,13 @@ class AppViewModel : ViewModel() {
     }
 
     fun voiceText(text: String) = asr.sendText(text)
+
+    override fun onCleared() {
+        rc.destroy()
+        rpm.detach()
+        cast?.disconnect()
+        mediaServer.stop()
+        deviceManager.destroy()
+        super.onCleared()
+    }
 }

@@ -6,6 +6,8 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /**
  * Embedded HTTP server the TV pulls media from (NanoHTTPD-style).
@@ -21,6 +23,7 @@ class MediaHttpServer {
     @Volatile var baseUrl: String = ""; private set
 
     private var serverSocket: ServerSocket? = null
+    private var pool: ExecutorService? = null
     @Volatile private var running = false
 
     /** Register [file] under [id] (e.g. "video-item-12"); returns the URL path segment. */
@@ -51,6 +54,8 @@ class MediaHttpServer {
         port = p
         baseUrl = "http://$localIp:$p"
         running = true
+        // ponytail: TV is the only client and uses Connection: close; 4 threads ample
+        pool = Executors.newFixedThreadPool(4) { r -> Thread(r, "media-http-io").apply { isDaemon = true } }
         Thread({ acceptLoop() }, "media-http").apply { isDaemon = true; start() }
         return true
     }
@@ -59,6 +64,8 @@ class MediaHttpServer {
         running = false
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
+        pool?.shutdownNow()
+        pool = null
         registry.clear()
     }
 
@@ -69,7 +76,7 @@ class MediaHttpServer {
             try {
                 val client = ss.accept()
                 backoffMs = 0
-                Thread({ serve(client) }, "media-http-io").apply { isDaemon = true; start() }
+                pool?.execute { serve(client) }
             } catch (e: Exception) {
                 if (running) {
                     backoffMs = if (backoffMs == 0L) 10 else minOf(backoffMs * 2, 1000)

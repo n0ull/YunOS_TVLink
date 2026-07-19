@@ -102,37 +102,26 @@ class CastController(
         sb.append("yunos-session-id: ").append(sessionId).append("\r\n")
         for ((k, v) in extraHeaders) sb.append(k).append(": ").append(v).append("\r\n")
         sb.append("Content-Length: ").append(bodyBytes.size).append("\r\n\r\n")
-        synchronized(sendLock) {
-            try {
+        // Arm BEFORE writing so the reader thread can never discard our response (H2 fix).
+        respQueue.clear()
+        waitingResp = true
+        val resp = try {
+            synchronized(sendLock) {
                 o.write(sb.toString().toByteArray(Charsets.UTF_8))
                 if (bodyBytes.isNotEmpty()) o.write(bodyBytes)
                 o.flush()
-            } catch (e: Exception) {
-                disconnect()
-                return null
             }
+            respQueue.poll(10, TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            null
+        } finally {
+            waitingResp = false
         }
-        // Wait outside the lock so async events can still be acked by the reader thread.
-        // ponytail: assumes requests are issued sequentially (UI serializes them)
-        return readResponse()
+        return resp
     }
 
     private val respQueue = ArrayBlockingQueue<Pair<String, String>>(1)
     @Volatile private var waitingResp = false
-
-    private fun readResponse(): Pair<String, String>? {
-        // Responses and async events share the socket; the reader thread demultiplexes.
-        // Clear stale responses before arming, so a response racing in between isn't dropped.
-        respQueue.clear()
-        waitingResp = true
-        val resp = try {
-            respQueue.poll(10, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            null
-        }
-        waitingResp = false
-        return resp
-    }
 
     private fun startReader() {
         Thread({
