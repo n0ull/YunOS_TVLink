@@ -5,18 +5,18 @@
 
 ## Purpose
 
-Low-level protocol implementations — byte-level frame encoding/decoding, socket management,
-and wire-format constants. Each sub-package handles one protocol channel. All implementations
-are blocking-socket based with dedicated reader threads.
+Low-level protocol implementations — byte-level frame encoding/decoding, socket management, and wire-format constants.
+Each sub-package handles one protocol channel. All implementations are blocking-socket based with dedicated reader
+threads.
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `idc/` | IDC control protocol — TCP 13510, 16B big-endian header, login, module queries, commands (see `idc/AGENTS.md`) |
-| `ib/` | IB InputBoost fast channel — TCP 3988, 20B header, key/motion events (see `ib/AGENTS.md`) |
-| `cast/` | Media projection control — HTTP/1.1-style text over TCP 13520 + embedded HTTP server (see `cast/AGENTS.md`) |
-| `mdns/` | mDNS/DNS-SD query and response parsing for `_alitv_remote_control._tcp.local` (see `mdns/AGENTS.md`) |
+| Directory | Purpose                                                                                                        |
+|-----------|----------------------------------------------------------------------------------------------------------------|
+| `idc/`    | IDC control protocol — TCP 13510, 16B big-endian header, login, module queries, commands (see `idc/AGENTS.md`) |
+| `ib/`     | IB InputBoost fast channel — TCP 3988, 20B header, key/motion events (see `ib/AGENTS.md`)                      |
+| `cast/`   | Media projection control — HTTP/1.1-style text over TCP 13520 + embedded HTTP server (see `cast/AGENTS.md`)    |
+| `mdns/`   | mDNS/DNS-SD query and response parsing for `_alitv_remote_control._tcp.local` (see `mdns/AGENTS.md`)           |
 
 ## For AI Agents
 

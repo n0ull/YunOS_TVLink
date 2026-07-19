@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /** Platform image rendering for a JPEG/PNG byte array. */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 expect fun ByteArrayImage(
     bytes: ByteArray,

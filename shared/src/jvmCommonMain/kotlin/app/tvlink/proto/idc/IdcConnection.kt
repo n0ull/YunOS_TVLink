@@ -31,22 +31,25 @@ class IdcConnection(
 
     data class DeviceInfo(
         val ip: String,
-        var name: String = "",
-        var model: String = "",
-        var uuid: String = "",
-        var os: String = "",
-        var osVer: String = "",
-        var udpPort: Int = 0,
+        val name: String = "",
+        val model: String = "",
+        val uuid: String = "",
+        val os: String = "",
+        val osVer: String = "",
+        val udpPort: Int = 0,
         val ddhParams: MutableMap<String, ByteArray> = mutableMapOf(),
     )
 
-    @Volatile var state = State.DISCONNECTED
+    @Volatile
+    var state = State.DISCONNECTED
         private set
 
-    @Volatile var deviceInfo: DeviceInfo? = null
+    @Volatile
+    var deviceInfo: DeviceInfo? = null
         private set
 
-    @Volatile var sessionKey: ByteArray? = null
+    @Volatile
+    var sessionKey: ByteArray? = null
         private set
 
     /** module id -> info, as reported by the TV. Concurrent because reader thread writes and UI threads read. */
@@ -63,13 +66,15 @@ class IdcConnection(
     private var out: OutputStream? = null
     private var dataIn: DataInputStream? = null
 
-    @Volatile private var connKey = IdcConst.UNASSIGNED_KEY
+    @Volatile
+    private var connKey = IdcConst.UNASSIGNED_KEY
     private val sendLock = Any()
     private var scheduler: ScheduledExecutorService? = null
     private var hbFuture: ScheduledFuture<*>? = null
     private val hbSeq = AtomicInteger(1)
 
-    @Volatile private var lastHbAck = 0
+    @Volatile
+    private var lastHbAck = 0
 
     /** Connect and perform the login handshake. Returns true on ESTABLISHED. */
     fun connect(
@@ -88,35 +93,7 @@ class IdcConnection(
             dataIn = DataInputStream(s.getInputStream())
 
             sendRaw(login)
-            val deadline = System.currentTimeMillis() + timeoutMs
-            var established = false
-            while (System.currentTimeMillis() < deadline) {
-                val p = readPacket() ?: break
-                when (p) {
-                    is LoginEncryptionResp -> {
-                        // ver=0 sessions shouldn't get this; ignore and keep waiting for LoginResp
-                    }
-                    is LoginResp -> {
-                        connKey = p.connKey
-                        sessionKey = null // ver=0: plain session
-                        deviceInfo =
-                            DeviceInfo(
-                                ip = host,
-                                name = p.devName,
-                                model = p.devModel,
-                                uuid = p.devUuid,
-                                os = p.devOs,
-                                osVer = p.devOsVer,
-                                udpPort = p.udpPort,
-                                ddhParams = p.ddhParams,
-                            )
-                        established = true
-                        break
-                    }
-                    else -> onPacket?.let { it(p) }
-                }
-            }
-            if (!established) {
+            if (!awaitLogin(System.currentTimeMillis() + timeoutMs)) {
                 close()
                 return false
             }
@@ -126,9 +103,46 @@ class IdcConnection(
             startReader()
             true
         } catch (e: Exception) {
+            System.err.println("IdcConnection: connect failed: ${e.message}")
             close()
             false
         }
+    }
+
+    /** Read packets until a LoginResp arrives or [deadline] passes; returns true once the login handshake completed. */
+    private fun awaitLogin(deadline: Long): Boolean {
+        while (System.currentTimeMillis() < deadline) {
+            val p = readPacket() ?: return false
+            when (p) {
+                is LoginEncryptionResp -> {
+                    // ver=0 sessions shouldn't get this; ignore and keep waiting for LoginResp
+                }
+
+                is LoginResp -> {
+                    applyLoginResp(p)
+                    return true
+                }
+
+                else -> onPacket?.let { it(p) }
+            }
+        }
+        return false
+    }
+
+    private fun applyLoginResp(p: LoginResp) {
+        connKey = p.connKey
+        sessionKey = null // ver=0: plain session
+        deviceInfo =
+            DeviceInfo(
+                ip = host,
+                name = p.devName,
+                model = p.devModel,
+                uuid = p.devUuid,
+                os = p.devOs,
+                osVer = p.devOsVer,
+                udpPort = p.udpPort,
+                ddhParams = p.ddhParams,
+            )
     }
 
     /** Lightweight DETECT probe (used by discovery): login DETECT, read LoginResp, disconnect. */
@@ -175,34 +189,45 @@ class IdcConnection(
         val sched = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "idc-hb").apply { isDaemon = true } }
         scheduler = sched
         hbFuture =
-            sched.scheduleWithFixedDelay({
-                try {
-                    val seq = hbSeq.get()
-                    send(HeartBeat(seq))
-                    // TV echoes the same seq; if it lags 2 beats behind, consider the link dead
-                    if (seq - lastHbAck > 2) close()
-                    hbSeq.incrementAndGet()
-                } catch (e: Exception) {
-                    close()
-                }
-            }, 20, 20, TimeUnit.SECONDS)
+            sched.scheduleWithFixedDelay(
+                {
+                    try {
+                        val seq = hbSeq.get()
+                        send(HeartBeat(seq))
+                        // TV echoes the same seq; if it lags 2 beats behind, consider the link dead
+                        if (seq - lastHbAck > 2) close()
+                        hbSeq.incrementAndGet()
+                    } catch (e: Exception) {
+                        System.err.println("IdcConnection: heartbeat failed: ${e.message}")
+                        close()
+                    }
+                },
+                20,
+                20,
+                TimeUnit.SECONDS,
+            )
     }
 
-    @Volatile private var readerThread: Thread? = null
+    @Volatile
+    private var readerThread: Thread? = null
 
     private fun startReader() {
         val t =
-            Thread({
-                try {
-                    while (state == State.ESTABLISHED) {
-                        val p = readPacket() ?: break
-                        dispatch(p)
+            Thread(
+                {
+                    try {
+                        while (state == State.ESTABLISHED) {
+                            val p = readPacket() ?: break
+                            dispatch(p)
+                        }
+                    } catch (e: Exception) {
+                        // socket closed or IO error -> fall through to close
+                        System.err.println("IdcConnection: reader failed: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    // socket closed or IO error -> fall through to close
-                }
-                if (state != State.DISCONNECTED) close()
-            }, "idc-reader")
+                    if (state != State.DISCONNECTED) close()
+                },
+                "idc-reader",
+            )
         t.isDaemon = true
         readerThread = t
         t.start()
@@ -220,9 +245,12 @@ class IdcConnection(
                 }
                 onModulesChanged?.invoke()
             }
-            is VConnSyn -> { /* TV-initiated vconn: accept implicitly */ }
+
+            is VConnSyn -> { // TV-initiated vconn: accept implicitly
+            }
+
             is VConnData -> onVConnData?.invoke(p.moduleId, p.payload)
-            is DevNameUpdate -> deviceInfo?.name = p.devName
+            is DevNameUpdate -> deviceInfo = deviceInfo?.copy(name = p.devName)
             else -> onPacket?.invoke(p)
         }
     }
@@ -248,6 +276,7 @@ class IdcConnection(
             frame.flip()
             IdcPacket.decode(frame, sessionKey)
         } catch (e: Exception) {
+            System.err.println("IdcConnection: read failed: ${e.message}")
             null
         }
     }

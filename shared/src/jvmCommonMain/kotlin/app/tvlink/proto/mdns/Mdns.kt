@@ -7,6 +7,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MulticastSocket
 import java.net.NetworkInterface
+import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 
 /**
@@ -19,11 +20,11 @@ object Mdns {
     const val SERVICE = "_alitv_remote_control._tcp.local"
 
     data class MdnsDevice(
-        var name: String = "",
-        var ip: String = "",
-        var port: Int = 0,
-        var mac: String = "",
-        var projectionPort: Int = 0,
+        val name: String = "",
+        val ip: String = "",
+        val port: Int = 0,
+        val mac: String = "",
+        val projectionPort: Int = 0,
     )
 
     fun buildQuery(service: String = SERVICE): ByteArray {
@@ -65,41 +66,52 @@ object Mdns {
             val rdLen = buf.short.toInt() and 0xFFFF
             if (buf.remaining() < rdLen) return
             val rdStart = buf.position()
-            val dev = into.getOrPut(sourceIp) { MdnsDevice(ip = sourceIp) }
+            var dev = into.getOrPut(sourceIp) { MdnsDevice(ip = sourceIp) }
             when (type) {
-                12 -> dev.name = readName(buf).removeSuffix(".$SERVICE").removeSuffix(".")
+                12 -> dev = dev.copy(name = readName(buf).removeSuffix(".$SERVICE").removeSuffix("."))
                 33 -> { // SRV
                     buf.short
                     buf.short
-                    dev.port = (buf.short.toInt() and 0xFFFF)
+                    dev = dev.copy(port = buf.short.toInt() and 0xFFFF)
                 }
+
                 1 -> { // A
                     if (rdLen == 4) {
                         val b = ByteArray(4)
                         buf.get(b)
-                        dev.ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() }
+                        dev = dev.copy(ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() })
                     }
                 }
-                16 -> { // TXT
-                    var end = rdStart + rdLen
-                    while (buf.position() < end) {
-                        val l = buf.get().toInt() and 0xFF
-                        if (l == 0 || buf.remaining() < l) break
-                        val kv = ByteArray(l)
-                        buf.get(kv)
-                        val s = String(kv, Charsets.UTF_8)
-                        val eq = s.indexOf('=')
-                        if (eq > 0) {
-                            when (s.substring(0, eq)) {
-                                "deviceid" -> dev.mac = s.substring(eq + 1)
-                                "projectionPort" -> dev.projectionPort = s.substring(eq + 1).toIntOrNull() ?: 0
-                            }
-                        }
-                    }
-                }
+
+                16 -> dev = parseTxt(buf, rdStart + rdLen, dev) // TXT
             }
+            into[sourceIp] = dev
             buf.position(rdStart + rdLen)
         }
+    }
+
+    /** Fold TXT key/value pairs (deviceid, projectionPort) into [dev], returning the updated copy. */
+    private fun parseTxt(
+        buf: ByteBuffer,
+        end: Int,
+        dev: MdnsDevice,
+    ): MdnsDevice {
+        var updated = dev
+        while (buf.position() < end) {
+            val l = buf.get().toInt() and 0xFF
+            if (l == 0 || buf.remaining() < l) break
+            val kv = ByteArray(l)
+            buf.get(kv)
+            val s = String(kv, Charsets.UTF_8)
+            val eq = s.indexOf('=')
+            if (eq > 0) {
+                when (s.substring(0, eq)) {
+                    "deviceid" -> updated = updated.copy(mac = s.substring(eq + 1))
+                    "projectionPort" -> updated = updated.copy(projectionPort = s.substring(eq + 1).toIntOrNull() ?: 0)
+                }
+            }
+        }
+        return updated
     }
 
     private fun skipName(buf: ByteBuffer) {
@@ -111,6 +123,7 @@ object Mdns {
                     if (buf.hasRemaining()) buf.get()
                     return
                 }
+
                 else -> {
                     if (buf.remaining() < l) return
                     buf.position(buf.position() + l)
@@ -135,6 +148,7 @@ object Mdns {
                     buf.position(ptr)
                     jumped = true
                 }
+
                 else -> {
                     val b = ByteArray(l)
                     buf.get(b)
@@ -175,16 +189,9 @@ object Mdns {
                 try {
                     val p = DatagramPacket(buf, buf.size)
                     socket.receive(p)
-                    val src = p.address.hostAddress ?: continue
-                    val isNew = src !in devices
-                    try {
-                        parse(p.data.copyOf(p.length), src, devices)
-                    } catch (e: Exception) {
-                        // skip bad packet
-                    }
-                    devices[src]?.let { if (isNew || it.name.isNotEmpty()) onDevice(it) }
-                } catch (e: java.net.SocketTimeoutException) {
-                    // keep listening
+                    handlePacket(p, devices, onDevice)
+                } catch (_: SocketTimeoutException) {
+                    // soTimeout 短超时就是本循环的轮询节拍（每 500ms 必触发一次），按设计静默继续
                 }
             }
         } finally {
@@ -194,6 +201,21 @@ object Mdns {
             }
             socket.close()
         }
+    }
+
+    private fun handlePacket(
+        p: DatagramPacket,
+        devices: MutableMap<String, MdnsDevice>,
+        onDevice: (MdnsDevice) -> Unit,
+    ) {
+        val src = p.address.hostAddress ?: return
+        val isNew = src !in devices
+        try {
+            parse(p.data.copyOf(p.length), src, devices)
+        } catch (e: Exception) {
+            System.err.println("Mdns: skip bad packet from $src: ${e.message}")
+        }
+        devices[src]?.let { if (isNew || it.name.isNotEmpty()) onDevice(it) }
     }
 
     private fun pickInterface(preferred: InetAddress?): NetworkInterface? {
@@ -212,10 +234,9 @@ object Mdns {
         for (ni in ifaces) {
             if (!ni.isUp || ni.isLoopback) continue
             for (addr in ni.inetAddresses) {
-                if (addr is Inet4Address && addr.isSiteLocalAddress) {
-                    if (ni.name.startsWith("wlan")) return addr
-                    if (fallback == null) fallback = addr
-                }
+                if (addr !is Inet4Address || !addr.isSiteLocalAddress) continue
+                if (ni.name.startsWith("wlan")) return addr
+                if (fallback == null) fallback = addr
             }
         }
         return fallback

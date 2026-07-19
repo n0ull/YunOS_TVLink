@@ -73,11 +73,11 @@ jobs:
           retention-days: 14
 
   desktop:
-    name: Desktop (${{ matrix.os }})
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    name: Desktop (Windows)
+    # 仅 Windows 运行：desktopApp 的 targetFormats 只声明了 Exe/Msi（见 desktopApp/build.gradle.kts），
+    # ubuntu 上 packageDistributionForCurrentOS 没有任何可产出的格式，该矩阵腿只能空跑/报错。
+    # 若未来需要 Linux 安装包：targetFormats 增加 TargetFormat.Deb 并恢复 os 矩阵。
+    runs-on: windows-latest
     needs: test-and-lint
     steps:
       - uses: actions/checkout@v4

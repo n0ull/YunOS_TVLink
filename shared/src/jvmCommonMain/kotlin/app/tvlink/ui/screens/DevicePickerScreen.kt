@@ -46,6 +46,7 @@ import app.tvlink.device.DeviceManager
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun DevicePickerScreen(vm: AppViewModel) {
     var manualIp by remember { mutableStateOf("") }
@@ -62,7 +63,12 @@ fun DevicePickerScreen(vm: AppViewModel) {
 
         Spacer(Modifier.height(24.dp))
         when (vm.connState) {
-            DeviceManager.ConnState.SEARCHING -> Text("正在搜索同一 Wi-Fi 下的电视设备…", color = TvColors.TextSecondary)
+            DeviceManager.ConnState.SEARCHING ->
+                Text(
+                    "正在搜索同一 Wi-Fi 下的电视设备…",
+                    color = TvColors.TextSecondary,
+                )
+
             DeviceManager.ConnState.CONNECTING -> Text("正在连接…", color = TvColors.TextSecondary)
             DeviceManager.ConnState.FAILED -> Text("连接失败，请确认设备在线后重试", color = TvColors.Red)
             else ->
@@ -128,6 +134,7 @@ fun DevicePickerScreen(vm: AppViewModel) {
     }
 }
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 private fun SearchPulse(active: Boolean) {
     val transition = rememberInfiniteTransition(label = "pulse")

@@ -46,7 +46,7 @@ class MdnsTest {
     fun parsePtrAndTxt() {
         val devices = LinkedHashMap<String, Mdns.MdnsDevice>()
         Mdns.parse(buildResponse(), "192.168.1.50", devices)
-        val d = devices["192.168.1.50"]!!
+        val d = checkNotNull(devices["192.168.1.50"]) { "expected parsed device for 192.168.1.50" }
         assertEquals("MyBox", d.name)
         assertEquals("AA:BB:CC:DD:EE:FF", d.mac)
         assertEquals(13520, d.projectionPort)

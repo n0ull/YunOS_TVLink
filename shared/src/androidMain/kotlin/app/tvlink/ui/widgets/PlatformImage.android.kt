@@ -1,7 +1,7 @@
 package app.tvlink.ui.widgets
 
-import android.content.Context
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -9,15 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 
-/** Holds the application context for platform services. Initialized by MainActivity. */
-object AndroidPlatform {
-    lateinit var appContext: Context
-
-    fun init(context: Context) {
-        appContext = context.applicationContext
-    }
-}
-
+// Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 actual fun ByteArrayImage(
     bytes: ByteArray,
@@ -29,6 +22,7 @@ actual fun ByteArrayImage(
             try {
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
             } catch (e: Exception) {
+                Log.w("ByteArrayImage", "decodeByteArray failed", e)
                 null
             }
         }

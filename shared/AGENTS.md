@@ -5,25 +5,25 @@
 
 ## Purpose
 
-Kotlin Multiplatform library containing the entire protocol stack and shared Compose UI.
-Both `androidApp` and `desktopApp` depend on this module. Source sets are layered:
+Kotlin Multiplatform library containing the entire protocol stack and shared Compose UI. Both `androidApp` and
+`desktopApp` depend on this module. Source sets are layered:
 `commonMain` → `jvmCommonMain` → `androidMain` / `desktopMain`.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
+| File               | Description                                                                    |
+|--------------------|--------------------------------------------------------------------------------|
 | `build.gradle.kts` | KMP config: androidTarget + jvm("desktop"), source-set hierarchy, dependencies |
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `src/commonMain/` | Platform-agnostic Kotlin (IB data types) |
+| Directory            | Purpose                                                                     |
+|----------------------|-----------------------------------------------------------------------------|
+| `src/commonMain/`    | Platform-agnostic Kotlin (IB data types)                                    |
 | `src/jvmCommonMain/` | JVM-shared code: protocol impls, device services, Compose UI (both targets) |
-| `src/androidMain/` | Android `actual` implementations (BLE, sensors, SAF, voice) |
-| `src/desktopMain/` | Desktop `actual` implementations (AWT dialogs, file save) |
-| `src/desktopTest/` | Unit tests (IDC framing, mDNS parsing, HTTP server) |
+| `src/androidMain/`   | Android `actual` implementations (BLE, sensors, SAF, voice)                 |
+| `src/desktopMain/`   | Desktop `actual` implementations (AWT dialogs, file save)                   |
+| `src/desktopTest/`   | Unit tests (IDC framing, mDNS parsing, HTTP server)                         |
 
 ## For AI Agents
 
@@ -32,7 +32,8 @@ Both `androidApp` and `desktopApp` depend on this module. Source sets are layere
 - Source-set hierarchy: `jvmCommonMain` depends on `commonMain`; both platform targets depend on `jvmCommonMain`
 - All socket/IO code uses plain `java.net` — lives in `jvmCommonMain`, NOT `commonMain`
 - Compose UI code also lives in `jvmCommonMain` (uses JVM-only APIs in places)
-- `expect`/`actual` pattern: declarations in `jvmCommonMain/ui/widgets/Platform.kt`, implementations in platform source sets
+- `expect`/`actual` pattern: declarations in `jvmCommonMain/ui/widgets/Platform.kt`, implementations in platform source
+  sets
 
 ### Testing Requirements
 

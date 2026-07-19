@@ -35,6 +35,7 @@ actual class MotionSensor actual constructor() {
                                     (e.values[2] * 1000).toInt(),
                                 )
                             }
+
                         Sensor.TYPE_GYROSCOPE ->
                             if (now - lastGyro >= 50) {
                                 lastGyro = now
@@ -53,7 +54,9 @@ actual class MotionSensor actual constructor() {
                 override fun onAccuracyChanged(
                     sensor: Sensor?,
                     accuracy: Int,
-                ) {}
+                ) {
+                    // SensorEventListener 接口要求实现，精度变化本场景无需处理
+                }
             }
         listener = li
         mgr.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {

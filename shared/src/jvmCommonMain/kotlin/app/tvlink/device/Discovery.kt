@@ -4,6 +4,7 @@ import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.mdns.Mdns
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
@@ -25,7 +26,8 @@ class Discovery {
     var onDeviceFound: ((FoundDevice) -> Unit)? = null
     var onFinished: (() -> Unit)? = null
 
-    @Volatile private var running = false
+    @Volatile
+    private var running = false
     private val epoch =
         java.util.concurrent.atomic
             .AtomicInteger(0)
@@ -52,19 +54,25 @@ class Discovery {
                     start()
                 }
             threads.add(tScan)
-            Thread({
-                tMdns.join()
-                tScan.join()
-                onFinished?.invoke()
-            }, "disc-join").apply {
+            Thread(
+                {
+                    tMdns.join()
+                    tScan.join()
+                    onFinished?.invoke()
+                },
+                "disc-join",
+            ).apply {
                 isDaemon = true
                 start()
             }
         } else {
-            Thread({
-                tMdns.join()
-                onFinished?.invoke()
-            }, "disc-join").apply {
+            Thread(
+                {
+                    tMdns.join()
+                    onFinished?.invoke()
+                },
+                "disc-join",
+            ).apply {
                 isDaemon = true
                 start()
             }
@@ -112,6 +120,7 @@ class Discovery {
             }
         } catch (e: Exception) {
             // no multicast on this network — subnet scan still runs
+            System.err.println("Discovery: mDNS scan failed: ${e.message}")
         }
     }
 
@@ -123,37 +132,51 @@ class Discovery {
         val prefix = selfIp.substringBeforeLast('.')
         val pool = Executors.newFixedThreadPool(24) { r -> Thread(r, "disc-probe").apply { isDaemon = true } }
         try {
-            for (i in 1..254) {
-                if (!active(myEpoch)) break
-                val ip = "$prefix.$i"
-                if (ip == selfIp) continue
-                pool.execute {
-                    if (!active(myEpoch)) return@execute
-                    val conn = IdcConnection(ip, IdcConst.TCP_PORT_DETECT)
-                    try {
-                        val info = conn.detect(timeoutMs = 1200)
-                        if (info != null && active(myEpoch)) {
-                            report(
-                                FoundDevice(
-                                    ip = ip,
-                                    name = info.name,
-                                    model = info.model,
-                                    uuid = info.uuid,
-                                    source = "scan",
-                                ),
-                            )
-                        }
-                    } finally {
-                        conn.shutdown()
-                    }
-                }
-            }
+            submitProbes(pool, prefix, selfIp, myEpoch)
         } finally {
             pool.shutdown()
             try {
                 pool.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
             } catch (_: InterruptedException) {
             }
+        }
+    }
+
+    private fun submitProbes(
+        pool: ExecutorService,
+        prefix: String,
+        selfIp: String,
+        myEpoch: Int,
+    ) {
+        for (i in 1..254) {
+            if (!active(myEpoch)) return
+            val ip = "$prefix.$i"
+            if (ip == selfIp) continue
+            pool.execute { probeHost(ip, myEpoch) }
+        }
+    }
+
+    private fun probeHost(
+        ip: String,
+        myEpoch: Int,
+    ) {
+        if (!active(myEpoch)) return
+        val conn = IdcConnection(ip, IdcConst.TCP_PORT_DETECT)
+        try {
+            val info = conn.detect(timeoutMs = 1200)
+            if (info != null && active(myEpoch)) {
+                report(
+                    FoundDevice(
+                        ip = ip,
+                        name = info.name,
+                        model = info.model,
+                        uuid = info.uuid,
+                        source = "scan",
+                    ),
+                )
+            }
+        } finally {
+            conn.shutdown()
         }
     }
 }

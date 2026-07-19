@@ -5,17 +5,17 @@
 
 ## Purpose
 
-IDC (Intelligent Device Control) protocol — the primary TCP control channel to YunOS TVs
-on port 13510. Handles connection, login handshake, module enumeration, and command dispatch.
-All higher-level services (remote control fallback, RPM, screenshot, ASR) ride on IDC frames.
+IDC (Intelligent Device Control) protocol — the primary TCP control channel to YunOS TVs on port 13510. Handles
+connection, login handshake, module enumeration, and command dispatch. All higher-level services (remote control
+fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
+| File               | Description                                                                                                                         |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `IdcConnection.kt` | TCP session management: connect, login, reader thread, send/receive, keepalive (scheduler lazily created, close() fully tears down) |
-| `IdcPackets.kt` | Packet data classes, serialization, and JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`) |
-| `IdcCrypto.kt` | connKey derivation and optional encryption — DEAD CODE (ver=0 plaintext always); do not modify without ver≠0 TV |
+| `IdcPackets.kt`    | Packet data classes, serialization, and JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`)       |
+| `IdcCrypto.kt`     | connKey derivation and optional encryption — DEAD CODE (ver=0 plaintext always); do not modify without ver≠0 TV                     |
 
 ## For AI Agents
 

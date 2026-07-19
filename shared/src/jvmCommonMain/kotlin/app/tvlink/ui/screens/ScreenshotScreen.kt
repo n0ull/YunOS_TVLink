@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun ScreenshotScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -55,10 +56,12 @@ fun ScreenshotScreen(vm: AppViewModel) {
                 Text(if (vm.shotBusy) "截取中…" else "截屏")
             }
             if (vm.lastShot != null) {
-                Button(onClick = {
-                    vm.notice = app.tvlink.ui.widgets
-                        .saveShot(vm.lastShot!!) ?: "已保存"
-                }) {
+                Button(
+                    onClick = {
+                        vm.notice = app.tvlink.ui.widgets
+                            .saveShot(vm.lastShot!!) ?: "已保存"
+                    },
+                ) {
                     Text("保存")
                 }
             }

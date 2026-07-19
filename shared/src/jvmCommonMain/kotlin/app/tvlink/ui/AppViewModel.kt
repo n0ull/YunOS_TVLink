@@ -182,6 +182,7 @@ class AppViewModel : ViewModel() {
                     imeText = p.initText
                     imeActive = true
                 }
+
             is ImeFinishInput -> viewModelScope.launch(Dispatchers.Default) { imeActive = false }
         }
     }

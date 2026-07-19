@@ -6,13 +6,12 @@
 ## Purpose
 
 mDNS/DNS-SD implementation for discovering YunOS TVs on the local network. Queries the
-`_alitv_remote_control._tcp.local` service type and parses response records to extract
-device IP, name, and metadata.
+`_alitv_remote_control._tcp.local` service type and parses response records to extract device IP, name, and metadata.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
+| File      | Description                                                              |
+|-----------|--------------------------------------------------------------------------|
 | `Mdns.kt` | UDP multicast DNS query builder, response parser (A/PTR/SRV/TXT records) |
 
 ## For AI Agents

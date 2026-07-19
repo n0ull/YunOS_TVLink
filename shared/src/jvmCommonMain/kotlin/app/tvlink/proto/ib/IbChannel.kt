@@ -17,10 +17,12 @@ class IbChannel(
 ) {
     enum class State { DISCONNECTED, CONNECTING, READY }
 
-    @Volatile var state = State.DISCONNECTED
+    @Volatile
+    var state = State.DISCONNECTED
         private set
 
-    @Volatile var serverVer = 0
+    @Volatile
+    var serverVer = 0
         private set
     var onStateChanged: ((State) -> Unit)? = null
     var onCurrentApp: ((String) -> Unit)? = null
@@ -32,7 +34,8 @@ class IbChannel(
     private val reserve = Random().nextInt()
     private val sendLock = Any()
 
-    @Volatile private var readerRunning = false
+    @Volatile
+    private var readerRunning = false
     private var keepaliveThread: Thread? = null
 
     fun connect(timeoutMs: Int = 6000): Boolean {
@@ -66,6 +69,7 @@ class IbChannel(
             startKeepalive()
             true
         } catch (e: Exception) {
+            System.err.println("IbChannel: connect failed: ${e.message}")
             disconnect()
             false
         }
@@ -139,6 +143,7 @@ class IbChannel(
                 o.write(buf.array())
                 o.flush()
             } catch (e: Exception) {
+                System.err.println("IbChannel: send failed: ${e.message}")
                 disconnect()
             }
         }
@@ -160,6 +165,7 @@ class IbChannel(
             if (size > 0) inp.readFully(body)
             type to body
         } catch (e: Exception) {
+            System.err.println("IbChannel: read failed: ${e.message}")
             null
         }
     }
@@ -180,20 +186,23 @@ class IbChannel(
 
     private fun startReader() {
         readerRunning = true
-        Thread({
-            while (readerRunning && state == State.READY) {
-                val f = readFrame() ?: break
-                if (f.first == IbConst.PROTO_CURRENTAPP) {
-                    val app =
-                        Regex("\"cur_app\"\\s*:\\s*\"([^\"]*)\"")
-                            .find(String(f.second, Charsets.UTF_8))
-                            ?.groupValues
-                            ?.get(1)
-                    if (app != null) onCurrentApp?.invoke(app)
+        Thread(
+            {
+                while (readerRunning && state == State.READY) {
+                    val f = readFrame() ?: break
+                    if (f.first == IbConst.PROTO_CURRENTAPP) {
+                        val app =
+                            Regex("\"cur_app\"\\s*:\\s*\"([^\"]*)\"")
+                                .find(String(f.second, Charsets.UTF_8))
+                                ?.groupValues
+                                ?.get(1)
+                        if (app != null) onCurrentApp?.invoke(app)
+                    }
                 }
-            }
-            if (state != State.DISCONNECTED) disconnect()
-        }, "ib-reader").apply {
+                if (state != State.DISCONNECTED) disconnect()
+            },
+            "ib-reader",
+        ).apply {
             isDaemon = true
             start()
         }
@@ -201,21 +210,24 @@ class IbChannel(
 
     private fun startKeepalive() {
         keepaliveThread =
-            Thread({
-                try {
-                    Thread.sleep(10_000)
-                } catch (_: InterruptedException) {
-                    return@Thread
-                }
-                while (state == State.READY) {
-                    sendFrame(IbConst.REQ_KEEPALIVE, ByteArray(0))
+            Thread(
+                {
                     try {
-                        Thread.sleep(15_000)
+                        Thread.sleep(10_000)
                     } catch (_: InterruptedException) {
                         return@Thread
                     }
-                }
-            }, "ib-keepalive").apply {
+                    while (state == State.READY) {
+                        sendFrame(IbConst.REQ_KEEPALIVE, ByteArray(0))
+                        try {
+                            Thread.sleep(15_000)
+                        } catch (_: InterruptedException) {
+                            return@Thread
+                        }
+                    }
+                },
+                "ib-keepalive",
+            ).apply {
                 isDaemon = true
                 start()
             }

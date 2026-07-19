@@ -5,17 +5,16 @@
 
 ## Purpose
 
-JVM-shared source set containing all protocol implementations, device services, and
-the full Compose Multiplatform UI. Both Android and Desktop targets compile this code.
-Uses plain `java.net` sockets — no platform-specific APIs.
+JVM-shared source set containing all protocol implementations, device services, and the full Compose Multiplatform UI.
+Both Android and Desktop targets compile this code. Uses plain `java.net` sockets — no platform-specific APIs.
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
+| Directory | Purpose                                                                                                                 |
+|-----------|-------------------------------------------------------------------------------------------------------------------------|
 | `device/` | High-level device services: discovery, connection facade, remote control, RPM, screenshot, ASR (see `device/AGENTS.md`) |
-| `proto/` | Low-level protocol implementations: IDC, IB, Cast, mDNS (see `proto/AGENTS.md`) |
-| `ui/` | Compose Multiplatform UI: App composable, ViewModel, screens, theme, widgets (see `ui/AGENTS.md`) |
+| `proto/`  | Low-level protocol implementations: IDC, IB, Cast, mDNS (see `proto/AGENTS.md`)                                         |
+| `ui/`     | Compose Multiplatform UI: App composable, ViewModel, screens, theme, widgets (see `ui/AGENTS.md`)                       |
 
 ## For AI Agents
 

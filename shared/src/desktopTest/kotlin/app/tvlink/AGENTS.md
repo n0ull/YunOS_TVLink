@@ -5,15 +5,15 @@
 
 ## Purpose
 
-Unit tests for the protocol layer, running on the JVM (desktop) target. Tests frame
-serialization, mDNS packet parsing, and HTTP server behavior without requiring a real TV.
+Unit tests for the protocol layer, running on the JVM (desktop) target. Tests frame serialization, mDNS packet parsing,
+and HTTP server behavior without requiring a real TV.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `proto/IdcProtocolTest.kt` | IDC frame encode/decode round-trips, header field validation |
-| `proto/MdnsTest.kt` | mDNS response packet parsing from captured byte arrays |
+| File                           | Description                                                       |
+|--------------------------------|-------------------------------------------------------------------|
+| `proto/IdcProtocolTest.kt`     | IDC frame encode/decode round-trips, header field validation      |
+| `proto/MdnsTest.kt`            | mDNS response packet parsing from captured byte arrays            |
 | `proto/MediaHttpServerTest.kt` | Embedded HTTP server Range requests, Content-Length, file serving |
 
 ## For AI Agents

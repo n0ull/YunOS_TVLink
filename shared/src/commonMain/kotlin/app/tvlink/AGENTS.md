@@ -5,15 +5,14 @@
 
 ## Purpose
 
-Platform-agnostic Kotlin source set — the root of the KMP source-set hierarchy.
-Contains only code with zero platform dependencies (no java.*, no android.*).
-Currently holds IB data types used by both `jvmCommonMain` protocol code and
+Platform-agnostic Kotlin source set — the root of the KMP source-set hierarchy. Contains only code with zero platform
+dependencies (no java. *, no android.*). Currently holds IB data types used by both `jvmCommonMain` protocol code and
 potential future non-JVM targets.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
+| File                 | Description                                                                   |
+|----------------------|-------------------------------------------------------------------------------|
 | `proto/ib/IbData.kt` | `RcKey` object — remote-control key code constants (UP, DOWN, OK, BACK, etc.) |
 
 ## For AI Agents

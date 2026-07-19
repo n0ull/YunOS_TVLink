@@ -21,11 +21,23 @@ ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
 ij_kotlin_imports_layout = * # keep
 ij_kotlin_line_break_after_multiline_when_entry = true
+# 拉高 IDEA「自动收拢为星号导入」的阈值：ktlint no-wildcard-imports 禁止通配符导入，
+# 不设高阈值时 IDEA 代码清理会把超过 5 个同包导入折叠成 *，与 ktlint 检查来回冲突（已实际发生）。
+ij_kotlin_name_count_to_use_star_import = 99
+ij_kotlin_name_count_to_use_star_import_for_members = 99
 
 # ---- 自定义规则（与本项目结构/习惯冲突或噪音较大的规则关闭）----
 # KMP 的 expect/actual 平台文件（Platform.kt、PlatformImage.kt 等）没有与文件名匹配的顶层类型，
 # 关闭 filename 规则避免误报。ktlint 1.x 用「规则名 = off」的写法（ktlint_disabled_rules 已废弃）。
 ktlint_standard_filename = off
+
+# 要求 #4：排除一切 build/ 下的生成代码（Compose 资源生成器产物如 ActualResourceCollectors.kt，
+# 缩进等格式由生成器决定，人工源码的格式规则不应裁决）。
+# 注意：必须在这里按路径禁用——build.gradle.kts 中 ktlint 扩展的 filter 闭包对
+# KMP 各源集检查任务并不生效（生成目录被注册为源集根，实测仍被检查），
+# .editorconfig 由 ktlint 引擎直接按文件路径解析，与 Gradle 任务接线时序无关。
+[**/build/**]
+ktlint_standard = disabled
 
 [*.md]
 trim_trailing_whitespace = false

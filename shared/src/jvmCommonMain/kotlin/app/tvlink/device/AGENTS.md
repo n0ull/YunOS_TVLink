@@ -5,26 +5,27 @@
 
 ## Purpose
 
-High-level service layer that wraps the low-level protocol classes into cohesive,
-UI-consumable facades. Manages device lifecycle from discovery through connected sessions.
+High-level service layer that wraps the low-level protocol classes into cohesive, UI-consumable facades. Manages device
+lifecycle from discovery through connected sessions.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `DeviceManager.kt` | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` for UI |
-| `Discovery.kt` | Dual-channel device discovery: mDNS multicast + /24 subnet TCP 13511 sweep |
-| `RcController.kt` | Routes remote-control key events — IB fast channel preferred, IDC OpCmd_Key fallback |
-| `RpmService.kt` | Remote package management (list/install/uninstall apps) via IDC VConn JSON frames |
-| `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, JPEG data reassembly |
-| `AsrTextService.kt` | Voice/text command forwarding via `asr_streaming` IDC messages |
+| File                   | Description                                                                          |
+|------------------------|--------------------------------------------------------------------------------------|
+| `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` for UI    |
+| `Discovery.kt`         | Dual-channel device discovery: mDNS multicast + /24 subnet TCP 13511 sweep           |
+| `RcController.kt`      | Routes remote-control key events — IB fast channel preferred, IDC OpCmd_Key fallback |
+| `RpmService.kt`        | Remote package management (list/install/uninstall apps) via IDC VConn JSON frames    |
+| `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, JPEG data reassembly                     |
+| `AsrTextService.kt`    | Voice/text command forwarding via `asr_streaming` IDC messages                       |
 
 ## For AI Agents
 
 ### Working In This Directory
 
 - Each service takes `DeviceManager` as its connection source
-- VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses attach/detach)
+- VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses
+  attach/detach)
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
 - `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
 - `RcController.destroy()` = detach + scope cancel

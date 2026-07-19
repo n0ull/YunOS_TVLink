@@ -1,6 +1,7 @@
 package app.tvlink.ui.widgets
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ actual fun pickMediaFile(
                 }
                 onResult(out.absolutePath)
             } catch (e: Exception) {
+                Log.w("PlatformPicker", "copy picked media failed", e)
                 onResult(null)
             }
         }

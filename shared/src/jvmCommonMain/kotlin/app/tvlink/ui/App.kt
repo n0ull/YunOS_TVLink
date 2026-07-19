@@ -28,6 +28,7 @@ import app.tvlink.ui.screens.SettingsScreen
 import app.tvlink.ui.theme.TvTheme
 import app.tvlink.ui.widgets.DongleScreen
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun App() {
     val fallbackOwner =

@@ -1,6 +1,7 @@
 package app.tvlink.ui.widgets
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,6 +41,9 @@ import app.tvlink.dongle.currentSsid
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
+// BLUETOOTH_CONNECT/SCAN 已在进入本页时经 permLauncher 请求，设备列表仅在授权后扫描填充，d.name 调用安全
+@SuppressLint("MissingPermission")
 @Composable
 actual fun DongleScreen(vm: AppViewModel) {
     val context = LocalContext.current
@@ -84,10 +88,12 @@ actual fun DongleScreen(vm: AppViewModel) {
             Spacer(Modifier.weight(1f))
             Text("魔投配网", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = {
-                devices.clear()
-                pairer.startScan()
-            }) { Text("扫描") }
+            TextButton(
+                onClick = {
+                    devices.clear()
+                    pairer.startScan()
+                },
+            ) { Text("扫描") }
         }
 
         Text(
@@ -103,15 +109,15 @@ actual fun DongleScreen(vm: AppViewModel) {
 
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(devices, key = { it.address }) { d ->
-                val sel = selected?.address == d.address
+                val isSelected = selected?.address == d.address
                 Card(
                     Modifier.fillMaxWidth().clickable { selected = d },
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (sel) "◉" else "○",
-                            color = if (sel) TvColors.AccentStart else TvColors.TextSecondary,
+                            if (isSelected) "◉" else "○",
+                            color = if (isSelected) TvColors.AccentStart else TvColors.TextSecondary,
                         )
                         Spacer(Modifier.padding(6.dp))
                         Column {

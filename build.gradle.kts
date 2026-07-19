@@ -39,15 +39,9 @@ subprojects {
             reporter(ReporterType.HTML)
             reporter(ReporterType.SARIF)
         }
-        // 排除构建产物与生成代码（要求 #4：排除 build 目录）。
-        // Compose 资源生成器会把代码注入到 build/generated 下的源集；该目录本身就是某个源集根，
-        // 因此 Ant 字符串模式（相对于源集根）无法匹配。这里用 FileTreeElement 的绝对路径判断，确保过滤生效。
-        filter {
-            exclude { element: org.gradle.api.file.FileTreeElement ->
-                val p = element.file.absolutePath.replace('\\', '/')
-                p.contains("/build/") || p.contains("/generated/")
-            }
-        }
+        // 排除构建产物与生成代码（要求 #4）由 .editorconfig 的 [**/build/**] 段统一实现。
+        // 此前的 filter 闭包对 KMP 源集检查任务不生效（build/generated 被注册为源集根，
+        // 实测 ActualResourceCollectors.kt 等生成文件仍被检查），故移除，避免「看似已排除」的假象。
     }
 
     configure<DetektExtension> {
@@ -78,7 +72,35 @@ subprojects {
         tasks.named("check") {
             dependsOn(
                 tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") },
-                tasks.matching { it.name.startsWith("detekt") && !it.name.contains("Baseline", ignoreCase = true) },
+                // 仅挂 detekt 分析任务，必须排除 detektGenerateConfig（配置生成任务）：
+                // 该任务将根目录 detekt.yml 声明为自己的输出，而各模块 Detekt 任务经
+                // config.setFrom(rootProject.file("detekt.yml")) 把同一文件作为输入。
+                // 一旦生成任务随 check 进入任务图，Gradle 校验会判定 Detekt 任务
+                // 「使用了未声明依赖的任务输出」并直接使构建失败（CI 即死于此）。
+                // detekt.yml 已纳入版本管理，生成任务只会 skip，在 check 中本就不需要。
+                tasks.matching {
+                    it.name.startsWith("detekt") &&
+                        !it.name.contains("Baseline", ignoreCase = true) &&
+                        it.name != "detektGenerateConfig"
+                },
+            )
+        }
+    }
+}
+
+// 要求 #4 同样适用于 detekt：排除 build/ 下的生成代码（Compose 资源生成器产出的
+// Res.kt / ActualResourceCollectors.kt 等，其风格由生成器决定，不应由人工源码规则裁决）。
+// 必须用 projectsEvaluated：detekt 的 KMP 集成在子项目应用 kotlin 插件后才注册自己的
+// afterEvaluate 向任务追加源集目录（含 build/generated），普通 afterEvaluate 里的
+// setSource 会被其覆盖（实测 Res.kt 仍被分析）；projectsEvaluated 晚于一切 afterEvaluate。
+gradle.projectsEvaluated {
+    subprojects {
+        tasks.withType<Detekt>().matching { !it.name.contains("Baseline", ignoreCase = true) }.configureEach {
+            setSource(
+                source.filter { file ->
+                    val p = file.absolutePath.replace('\\', '/')
+                    !p.contains("/build/") && !p.contains("/generated/")
+                },
             )
         }
     }

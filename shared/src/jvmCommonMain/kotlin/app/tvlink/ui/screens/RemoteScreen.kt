@@ -1,3 +1,6 @@
+// Compose 约定可组合函数为 PascalCase，本文件含多个可组合函数，统一文件级抑制
+@file:Suppress("FunctionNaming", "ktlint:standard:function-naming")
+
 package app.tvlink.ui.screens
 
 import androidx.compose.foundation.background
@@ -33,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.tvlink.proto.ib.IbConst
@@ -112,6 +114,7 @@ fun RemoteScreen(vm: AppViewModel) {
                     KeypadPanel(
                         onKey = { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) },
                     )
+
                 RcMode.TOUCHPAD -> TouchpadPanel(vm) { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) }
                 RcMode.JOYSTICK -> JoystickPanel(vm)
                 RcMode.WHEEL -> WheelPanel(vm)
@@ -132,10 +135,12 @@ fun RemoteScreen(vm: AppViewModel) {
             title = { Text("待机") },
             text = { Text("确定要让电视待机吗？") },
             confirmButton = {
-                TextButton(onClick = {
-                    vm.keyClick(RcKey.POWER)
-                    powerConfirm = false
-                }) { Text("确定") }
+                TextButton(
+                    onClick = {
+                        vm.keyClick(RcKey.POWER)
+                        powerConfirm = false
+                    },
+                ) { Text("确定") }
             },
             dismissButton = { TextButton(onClick = { powerConfirm = false }) { Text("取消") } },
         )
@@ -216,7 +221,6 @@ private fun TouchpadPanel(
     vm: AppViewModel,
     onKey: (RcKey) -> Unit,
 ) {
-    val density = LocalDensity.current
     var cursor by remember { mutableStateOf(Offset(200f, 200f)) }
     val throttle = remember { SendThrottle() }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -318,10 +322,12 @@ private fun JoystickPanel(vm: AppViewModel) {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Stick(onRelease = {
-                left = 128 to 128
-                send()
-            }) { x, y ->
+            Stick(
+                onRelease = {
+                    left = 128 to 128
+                    send()
+                },
+            ) { x, y ->
                 left = x to y
                 throttle.trySend { send() }
             }
@@ -336,10 +342,12 @@ private fun JoystickPanel(vm: AppViewModel) {
                 }
                 RcButton("A", size = 48) { vm.keyClick(RcKey.PAD_A) }
             }
-            Stick(onRelease = {
-                right = 128 to 128
-                send()
-            }) { x, y ->
+            Stick(
+                onRelease = {
+                    right = 128 to 128
+                    send()
+                },
+            ) { x, y ->
                 right = x to y
                 throttle.trySend { send() }
             }

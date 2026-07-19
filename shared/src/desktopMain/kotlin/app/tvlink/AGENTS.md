@@ -5,16 +5,16 @@
 
 ## Purpose
 
-Desktop (JVM) `actual` implementations. Provides AWT-based file dialogs, image handling,
-and stub implementations for Android-only features (motion sensor, voice, BLE dongle).
+Desktop (JVM) `actual` implementations. Provides AWT-based file dialogs, image handling, and stub implementations for
+Android-only features (motion sensor, voice, BLE dongle).
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `ui/widgets/Platform.desktop.kt` | `actual` platform utilities (desktop file paths) |
-| `ui/widgets/PlatformImage.desktop.kt` | `actual` image display using `java.awt.image.BufferedImage` → Compose ImageBitmap |
-| `ui/widgets/PlatformPicker.desktop.kt` | `actual` file picker using `java.awt.FileDialog` |
+| File                                   | Description                                                                       |
+|----------------------------------------|-----------------------------------------------------------------------------------|
+| `ui/widgets/Platform.desktop.kt`       | `actual` platform utilities (desktop file paths)                                  |
+| `ui/widgets/PlatformImage.desktop.kt`  | `actual` image display using `java.awt.image.BufferedImage` → Compose ImageBitmap |
+| `ui/widgets/PlatformPicker.desktop.kt` | `actual` file picker using `java.awt.FileDialog`                                  |
 
 ## For AI Agents
 

@@ -28,6 +28,7 @@ import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 import app.tvlink.ui.widgets.pickMediaFile
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun CastScreen(vm: AppViewModel) {
     var pendingType by remember { mutableStateOf<String?>(null) }

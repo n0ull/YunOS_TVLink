@@ -29,7 +29,8 @@ class CastController(
         val rate: Float = 1f,
     )
 
-    @Volatile var state = State.DISCONNECTED
+    @Volatile
+    var state = State.DISCONNECTED
         private set
     var onEvent: ((PlayState, duration: Long, position: Long) -> Unit)? = null
     var onStateChanged: ((State) -> Unit)? = null
@@ -51,6 +52,7 @@ class CastController(
             startReader()
             true
         } catch (e: Exception) {
+            System.err.println("CastController: connect failed: ${e.message}")
             false
         }
     }
@@ -165,6 +167,7 @@ class CastController(
                 }
                 respQueue.poll(10, TimeUnit.SECONDS)
             } catch (e: Exception) {
+                System.err.println("CastController: request failed: ${e.message}")
                 null
             } finally {
                 waitingResp = false
@@ -174,88 +177,123 @@ class CastController(
 
     private val respQueue = ArrayBlockingQueue<Pair<String, String>>(1)
 
-    @Volatile private var waitingResp = false
+    @Volatile
+    private var waitingResp = false
+
+    private val playStateByName =
+        mapOf(
+            "prepared" to PlayState.PREPARED,
+            "playing" to PlayState.PLAYING,
+            "paused" to PlayState.PAUSED,
+            "loading" to PlayState.LOADING,
+            "stopped" to PlayState.STOPPED,
+            "completed" to PlayState.COMPLETED,
+            "error" to PlayState.ERROR,
+            "occupied" to PlayState.OCCUPIED,
+        )
 
     private fun startReader() {
-        Thread({
-            val s = socket ?: return@Thread
-            try {
-                val reader = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.ISO_8859_1))
-                while (state == State.CONNECTED) {
-                    val startLine = reader.readLine() ?: break
-                    if (startLine.isBlank()) continue
-                    val headers = LinkedHashMap<String, String>()
-                    var line = reader.readLine()
-                    while (line != null && line.isNotEmpty()) {
-                        val idx = line.indexOf(':')
-                        if (idx > 0) headers[line.substring(0, idx).trim().lowercase()] = line.substring(idx + 1).trim()
-                        line = reader.readLine()
+        Thread(
+            {
+                val s = socket ?: return@Thread
+                try {
+                    val reader = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.ISO_8859_1))
+                    while (state == State.CONNECTED) {
+                        if (!readMessage(reader)) break
                     }
-                    val len = headers["content-length"]?.toIntOrNull() ?: 0
-                    val bodyChars = CharArray(len)
-                    var read = 0
-                    while (read < len) {
-                        val n = reader.read(bodyChars, read, len - read)
-                        if (n < 0) break
-                        read += n
-                    }
-                    val body = String(bodyChars, 0, read)
-                    handleMessage(startLine, headers, body)
+                } catch (e: Exception) {
+                    System.err.println("CastController: reader failed: ${e.message}")
                 }
-            } catch (e: Exception) {
-                // fall through
-            }
-            if (state != State.DISCONNECTED) disconnect()
-        }, "cast-reader").apply {
+                if (state != State.DISCONNECTED) disconnect()
+            },
+            "cast-reader",
+        ).apply {
             isDaemon = true
             start()
         }
     }
 
+    /** Reads one HTTP-style message off [reader]. Returns false on EOF, true to keep reading. */
+    private fun readMessage(reader: BufferedReader): Boolean {
+        val startLine = reader.readLine() ?: return false
+        if (startLine.isBlank()) return true
+        val headers = readHeaders(reader)
+        val len = headers["content-length"]?.toIntOrNull() ?: 0
+        handleMessage(startLine, readBody(reader, len))
+        return true
+    }
+
+    private fun readHeaders(reader: BufferedReader): Map<String, String> {
+        val headers = LinkedHashMap<String, String>()
+        var line = reader.readLine()
+        while (line != null && line.isNotEmpty()) {
+            val idx = line.indexOf(':')
+            if (idx > 0) {
+                headers[line.substring(0, idx).trim().lowercase()] = line.substring(idx + 1).trim()
+            }
+            line = reader.readLine()
+        }
+        return headers
+    }
+
+    private fun readBody(
+        reader: BufferedReader,
+        len: Int,
+    ): String {
+        val bodyChars = CharArray(len)
+        var read = 0
+        while (read < len) {
+            val n = reader.read(bodyChars, read, len - read)
+            if (n < 0) break
+            read += n
+        }
+        return String(bodyChars, 0, read)
+    }
+
     private fun handleMessage(
         startLine: String,
-        headers: Map<String, String>,
         body: String,
     ) {
         when {
-            startLine.startsWith("HTTP/1.1") -> {
-                // response to a request we sent
-                val code = startLine.split(' ').getOrNull(1) ?: ""
-                if (waitingResp) respQueue.offer(code to body)
-            }
-            startLine.startsWith("POST /event") -> {
-                val q = startLine.substringAfter('?', "")
-                val params =
-                    q
-                        .split('&')
-                        .mapNotNull {
-                            val i = it.indexOf('=')
-                            if (i > 0) it.substring(0, i) to it.substring(i + 1) else null
-                        }.toMap()
-                val st =
-                    when (params["state"]) {
-                        "prepared" -> PlayState.PREPARED
-                        "playing" -> PlayState.PLAYING
-                        "paused" -> PlayState.PAUSED
-                        "loading" -> PlayState.LOADING
-                        "stopped" -> PlayState.STOPPED
-                        "completed" -> PlayState.COMPLETED
-                        "error" -> PlayState.ERROR
-                        "occupied" -> PlayState.OCCUPIED
-                        else -> PlayState.UNKNOWN
-                    }
-                onEvent?.invoke(st, params["duration"]?.toLongOrNull() ?: 0, params["position"]?.toLongOrNull() ?: 0)
-                // ack
-                val o = out
-                if (o != null) {
-                    synchronized(sendLock) {
-                        try {
-                            o.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.UTF_8))
-                            o.flush()
-                        } catch (_: Exception) {
-                        }
-                    }
-                }
+            startLine.startsWith("HTTP/1.1") -> handleResponse(startLine, body)
+            startLine.startsWith("POST /event") -> handleEvent(startLine)
+        }
+    }
+
+    /** Response to a request we sent. */
+    private fun handleResponse(
+        startLine: String,
+        body: String,
+    ) {
+        val code = startLine.split(' ').getOrNull(1) ?: ""
+        if (waitingResp) respQueue.offer(code to body)
+    }
+
+    private fun handleEvent(startLine: String) {
+        val q = startLine.substringAfter('?', "")
+        val params =
+            q
+                .split('&')
+                .mapNotNull {
+                    val i = it.indexOf('=')
+                    if (i > 0) it.substring(0, i) to it.substring(i + 1) else null
+                }.toMap()
+        val st = playStateByName[params["state"]] ?: PlayState.UNKNOWN
+        onEvent?.invoke(
+            st,
+            params["duration"]?.toLongOrNull() ?: 0,
+            params["position"]?.toLongOrNull() ?: 0,
+        )
+        ackEvent()
+    }
+
+    private fun ackEvent() {
+        val o = out ?: return
+        synchronized(sendLock) {
+            try {
+                o.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.UTF_8))
+                o.flush()
+            } catch (_: Exception) {
             }
         }
     }

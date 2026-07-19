@@ -16,6 +16,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.ArrayDeque
 import java.util.UUID
@@ -136,7 +137,15 @@ class DongleBlePairer(
                 }
             }
         }
-        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        // 4 参 connectGatt（指定 TRANSPORT_LE）需 API 23+；minSdk 21，低版本退化为 3 参重载，
+        // 否则在 API 21–22 设备上直接 NoSuchMethodError 崩溃（Android lint NewApi 实错）。
+        gatt =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                @Suppress("DEPRECATION")
+                device.connectGatt(context, false, gattCallback)
+            }
     }
 
     private val gattCallback =
@@ -259,7 +268,9 @@ fun currentSsid(context: Context): String =
         wifi.connectionInfo
             ?.ssid
             ?.removePrefix("\"")
-            ?.removeSuffix("\"") ?: ""
+            ?.removeSuffix("\"")
+            .orEmpty()
     } catch (e: Exception) {
+        Log.w("DongleBlePairer", "currentSsid failed", e)
         ""
     }

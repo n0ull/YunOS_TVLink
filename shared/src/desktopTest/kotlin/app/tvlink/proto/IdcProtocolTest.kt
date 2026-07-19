@@ -1,6 +1,20 @@
 package app.tvlink.proto
 
-import app.tvlink.proto.idc.*
+import app.tvlink.proto.idc.HeartBeat
+import app.tvlink.proto.idc.IdcConst
+import app.tvlink.proto.idc.IdcCrypto
+import app.tvlink.proto.idc.IdcLoginType
+import app.tvlink.proto.idc.IdcPacket
+import app.tvlink.proto.idc.LoginReq
+import app.tvlink.proto.idc.LoginResp
+import app.tvlink.proto.idc.ModuleAvailability
+import app.tvlink.proto.idc.OpCmdKey
+import app.tvlink.proto.idc.VConnData
+import app.tvlink.proto.idc.getLPString
+import app.tvlink.proto.idc.lpBytesSize
+import app.tvlink.proto.idc.lpStringSize
+import app.tvlink.proto.idc.putLPBytes
+import app.tvlink.proto.idc.putLPString
 import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,7 +46,9 @@ class IdcProtocolTest {
 
     @Test
     fun loginRespDecode() {
-        val json = """{"dev_name":"LivingRoom","dev_model":"Box1","dev_uuid":"u-1","dev_os":"YunOS","dev_os_ver":"3.0","dev_ddhparamkeys":["mediaprojection"]}"""
+        val json =
+            """{"dev_name":"LivingRoom","dev_model":"Box1","dev_uuid":"u-1","dev_os":"YunOS",""" +
+                """"dev_os_ver":"3.0","dev_ddhparamkeys":["mediaprojection"]}"""
         val ddh = """{"projectionport":13599}""".toByteArray()
         val body = ByteBuffer.allocate(12 + lpStringSize(json) + lpBytesSize(ddh))
         body.putInt(2) // ver

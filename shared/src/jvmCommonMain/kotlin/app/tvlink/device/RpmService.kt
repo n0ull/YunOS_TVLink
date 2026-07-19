@@ -88,15 +88,23 @@ class RpmService(
         versionNeeded: Int = 0,
     ) = send(
         ID_INSTALL_REQ,
-        """{"packageName":"${jsonEscape(
-            packageName,
-        )}","apkUrl":"${jsonEscape(
-            apkUrl,
-        )}","iconUrl":"${jsonEscape(
-            iconUrl,
-        )}","appName":"${jsonEscape(
-            appName,
-        )}","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""",
+        """{"packageName":"${
+            jsonEscape(
+                packageName,
+            )
+        }","apkUrl":"${
+            jsonEscape(
+                apkUrl,
+            )
+        }","iconUrl":"${
+            jsonEscape(
+                iconUrl,
+            )
+        }","appName":"${
+            jsonEscape(
+                appName,
+            )
+        }","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""",
     )
 
     fun cancelInstall(packageName: String) = send(ID_INSTALL_CANCEL, """{"packageName":"${jsonEscape(packageName)}"}""")
@@ -126,11 +134,13 @@ class RpmService(
                 val apps = parseAppArray(j.str("apps"))
                 onAppList?.invoke(apps)
             }
+
             ID_SYSTEMINFO -> onSystemInfo?.invoke(j.toMap())
             ID_INSTALL_STATUS ->
                 onInstallProgress?.invoke(
                     InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus")),
                 )
+
             ID_INSTALL_RESP -> onOpResult?.invoke("install", j.str("packageName"), j.int("errorCode"))
             ID_UNINSTALL_RESP -> onOpResult?.invoke("uninstall", j.str("packageName"), j.int("errorCode"))
             ID_OPENAPP_RESP -> onOpResult?.invoke("open", j.str("packageName"), j.int("errorCode"))
@@ -149,6 +159,7 @@ class RpmService(
                     if (depth == 0) start = i
                     depth++
                 }
+
                 '}' -> {
                     depth--
                     if (depth == 0 && start >= 0) {

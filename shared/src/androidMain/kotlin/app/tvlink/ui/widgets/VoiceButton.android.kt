@@ -28,12 +28,13 @@ import androidx.core.content.ContextCompat
  * Voice button: system SpeechRecognizer when available + permission granted,
  * text-input dialog otherwise (the TV does NLU either way).
  */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
 @Composable
 actual fun VoiceButton(onText: (String) -> Unit) {
     val context = LocalContext.current
-    var listening by remember { mutableStateOf(false) }
+    var isListening by remember { mutableStateOf(false) }
     var partial by remember { mutableStateOf("") }
-    var showTextDialog by remember { mutableStateOf(false) }
+    var isTextDialogShown by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
     val recognizer =
@@ -56,44 +57,56 @@ actual fun VoiceButton(onText: (String) -> Unit) {
             ActivityResultContracts.RequestPermission(),
         ) { granted ->
             if (granted && recognizer != null) {
-                startListening(recognizer, { partial = it }, { t ->
-                    listening = false
-                    if (t != null) onText(t)
-                }, { listening = false })
+                startListening(
+                    recognizer,
+                    { partial = it },
+                    { t ->
+                        isListening = false
+                        if (t != null) onText(t)
+                    },
+                    { isListening = false },
+                )
             } else {
-                showTextDialog = true
+                isTextDialogShown = true
             }
         }
 
     Column {
-        Button(onClick = {
-            if (recognizer == null) {
-                showTextDialog = true
-                return@Button
-            }
-            val granted =
-                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                    PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            } else if (!listening) {
-                listening = true
-                startListening(recognizer, { partial = it }, { t ->
-                    listening = false
-                    if (t != null) onText(t)
-                }, { listening = false })
-            } else {
-                recognizer.stopListening()
-                listening = false
-            }
-        }) {
-            Text(if (listening) "⏹ 停止（$partial）" else "🎤 语音指令")
+        Button(
+            onClick = {
+                if (recognizer == null) {
+                    isTextDialogShown = true
+                    return@Button
+                }
+                val isGranted =
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+                if (!isGranted) {
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                } else if (!isListening) {
+                    isListening = true
+                    startListening(
+                        recognizer,
+                        { partial = it },
+                        { t ->
+                            isListening = false
+                            if (t != null) onText(t)
+                        },
+                        { isListening = false },
+                    )
+                } else {
+                    recognizer.stopListening()
+                    isListening = false
+                }
+            },
+        ) {
+            Text(if (isListening) "⏹ 停止（$partial）" else "🎤 语音指令")
         }
     }
 
-    if (showTextDialog) {
+    if (isTextDialogShown) {
         AlertDialog(
-            onDismissRequest = { showTextDialog = false },
+            onDismissRequest = { isTextDialogShown = false },
             title = { Text("语音指令") },
             text = {
                 OutlinedTextField(
@@ -104,13 +117,15 @@ actual fun VoiceButton(onText: (String) -> Unit) {
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (text.isNotBlank()) onText(text.trim())
-                    text = ""
-                    showTextDialog = false
-                }) { Text("发送") }
+                TextButton(
+                    onClick = {
+                        if (text.isNotBlank()) onText(text.trim())
+                        text = ""
+                        isTextDialogShown = false
+                    },
+                ) { Text("发送") }
             },
-            dismissButton = { TextButton(onClick = { showTextDialog = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { isTextDialogShown = false }) { Text("取消") } },
         )
     }
 }
@@ -123,15 +138,25 @@ private fun startListening(
 ) {
     sr.setRecognitionListener(
         object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) {
+                // RecognitionListener 接口要求实现，本场景无需处理
+            }
 
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() {
+                // RecognitionListener 接口要求实现，本场景无需处理
+            }
 
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) {
+                // RecognitionListener 接口要求实现，本场景无需处理
+            }
 
-            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onBufferReceived(buffer: ByteArray?) {
+                // RecognitionListener 接口要求实现，本场景无需处理
+            }
 
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() {
+                // RecognitionListener 接口要求实现，本场景无需处理
+            }
 
             override fun onError(error: Int) = onError()
 
@@ -148,7 +173,9 @@ private fun startListening(
             override fun onEvent(
                 eventType: Int,
                 params: Bundle?,
-            ) {}
+            ) {
+                // RecognitionListener 接口要求实现，本场景无需处理
+            }
         },
     )
     val intent =

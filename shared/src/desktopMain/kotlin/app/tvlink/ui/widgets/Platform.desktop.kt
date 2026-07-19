@@ -18,19 +18,25 @@ actual class MotionSensor actual constructor() {
     actual fun start(
         onAccel: (x: Int, y: Int, z: Int) -> Unit,
         onGyro: (x: Int, y: Int, z: Int) -> Unit,
-    ) {}
+    ) {
+        // 桌面端无运动传感器，有意空实现
+    }
 
-    actual fun stop() {}
+    actual fun stop() {
+        // 桌面端无运动传感器，有意空实现
+    }
 }
 
+// Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 actual fun VoiceButton(onText: (String) -> Unit) {
-    var show by remember { mutableStateOf(false) }
+    var isTextDialogShown by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
-    Button(onClick = { show = true }) { Text("🎤 语音指令") }
-    if (show) {
+    Button(onClick = { isTextDialogShown = true }) { Text("🎤 语音指令") }
+    if (isTextDialogShown) {
         AlertDialog(
-            onDismissRequest = { show = false },
+            onDismissRequest = { isTextDialogShown = false },
             title = { Text("语音指令") },
             text = {
                 OutlinedTextField(
@@ -41,17 +47,21 @@ actual fun VoiceButton(onText: (String) -> Unit) {
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (text.isNotBlank()) onText(text.trim())
-                    text = ""
-                    show = false
-                }) { Text("发送") }
+                TextButton(
+                    onClick = {
+                        if (text.isNotBlank()) onText(text.trim())
+                        text = ""
+                        isTextDialogShown = false
+                    },
+                ) { Text("发送") }
             },
-            dismissButton = { TextButton(onClick = { show = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { isTextDialogShown = false }) { Text("取消") } },
         )
     }
 }
 
+// Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 actual fun DongleScreen(vm: AppViewModel) {
     AlertDialog(

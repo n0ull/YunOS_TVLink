@@ -17,9 +17,11 @@ expect class MotionSensor() {
 }
 
 /** Voice capture button. Android: hold-to-talk via SpeechRecognizer; desktop: text dialog. */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 expect fun VoiceButton(onText: (String) -> Unit)
 
 /** Dongle (MagicCast) BLE pairing screen — Android actual implements it, desktop shows unsupported. */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 expect fun DongleScreen(vm: AppViewModel)

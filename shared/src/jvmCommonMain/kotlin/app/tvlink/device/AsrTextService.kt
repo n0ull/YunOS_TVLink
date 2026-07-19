@@ -18,7 +18,9 @@ class AsrTextService(
     fun sendText(text: String) {
         val mid = deviceManager.moduleId(MODULE_NAME) ?: return
         val esc = jsonEscape(text)
-        val json = """{"asr_name":"ASR_COMMAND","asr_data":{"pk_type":"asr_streaming","pk_content":{"result_code":1,"model":"TVLink","question":"$esc","finish":"1"}}}"""
+        val json =
+            """{"asr_name":"ASR_COMMAND","asr_data":{"pk_type":"asr_streaming","pk_content":""" +
+                """{"result_code":1,"model":"TVLink","question":"$esc","finish":"1"}}}"""
         deviceManager.sendVConnJson(mid, json)
     }
 

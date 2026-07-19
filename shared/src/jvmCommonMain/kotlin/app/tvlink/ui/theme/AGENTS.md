@@ -5,13 +5,13 @@
 
 ## Purpose
 
-Material3 theme configuration — color scheme, typography, and shape definitions shared
-across all screens on both platforms.
+Material3 theme configuration — color scheme, typography, and shape definitions shared across all screens on both
+platforms.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
+| File       | Description                                                                        |
+|------------|------------------------------------------------------------------------------------|
 | `Theme.kt` | `TVLinkTheme` composable — Material3 color scheme (light/dark), typography, shapes |
 
 ## For AI Agents

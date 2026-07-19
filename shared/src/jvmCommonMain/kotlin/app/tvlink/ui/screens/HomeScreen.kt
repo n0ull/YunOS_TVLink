@@ -49,6 +49,7 @@ private fun features(): List<Feature> =
         add(Feature("设置", "连接信息与关于", "⚙️", AppViewModel.Screen.Settings))
     }
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun HomeScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {

@@ -12,7 +12,8 @@ class ScreenshotService(
 ) {
     var onScreenshot: ((jpeg: ByteArray) -> Unit)? = null
 
-    @Volatile private var pending = false
+    @Volatile
+    private var pending = false
 
     /** Wire into DeviceManager.onPacket (compose with other consumers at the call site). */
     fun handlePacket(p: IdcPacket) {

@@ -12,9 +12,10 @@ import javax.crypto.spec.SecretKeySpec
  * Note: the original HmacSHA256 helper ignores its second argument (key = data = first arg);
  * that quirk is part of the key-derivation and must be preserved.
  *
- * TODO: This entire path is DEAD CODE — the client always negotiates encryption_algorithm_ver=0
- * (plaintext). deriveAesSecret's flip/putInt may be bug-compatible with the original; do NOT
- * "fix" without a ver≠0 TV to validate against. Existing test pins current behavior.
+ * Maintenance note: this entire path is currently unreachable — the client always negotiates
+ * encryption_algorithm_ver=0 (plaintext). deriveAesSecret's flip/putInt may be bug-compatible
+ * with the original; do NOT "fix" without a ver≠0 TV to validate against. An existing test
+ * pins the current behavior.
  */
 @Suppress("unused")
 object IdcCrypto {

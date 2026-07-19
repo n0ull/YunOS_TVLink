@@ -28,6 +28,7 @@ import app.tvlink.device.RpmService
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun AppsScreen(vm: AppViewModel) {
     var installUrl by remember { mutableStateOf("") }
@@ -91,16 +92,22 @@ fun AppsScreen(vm: AppViewModel) {
                         label = { Text("APK 下载地址 (http/https)") },
                         singleLine = true,
                     )
-                    Text("电视将自行下载并安装该 APK", style = MaterialTheme.typography.bodySmall, color = TvColors.TextSecondary)
+                    Text(
+                        "电视将自行下载并安装该 APK",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TvColors.TextSecondary,
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (installPkg.isNotBlank() && installUrl.isNotBlank()) {
-                        vm.rpm.installByUrl(installPkg.trim(), installUrl.trim())
-                    }
-                    showInstall = false
-                }) { Text("安装") }
+                TextButton(
+                    onClick = {
+                        if (installPkg.isNotBlank() && installUrl.isNotBlank()) {
+                            vm.rpm.installByUrl(installPkg.trim(), installUrl.trim())
+                        }
+                        showInstall = false
+                    },
+                ) { Text("安装") }
             },
             dismissButton = { TextButton(onClick = { showInstall = false }) { Text("取消") } },
         )
@@ -112,10 +119,12 @@ fun AppsScreen(vm: AppViewModel) {
             title = { Text("卸载应用") },
             text = { Text("确定从电视上卸载 ${app.appName.ifEmpty { app.packageName }} 吗？") },
             confirmButton = {
-                TextButton(onClick = {
-                    vm.rpm.uninstall(app.packageName)
-                    uninstallTarget = null
-                }) { Text("卸载", color = TvColors.Red) }
+                TextButton(
+                    onClick = {
+                        vm.rpm.uninstall(app.packageName)
+                        uninstallTarget = null
+                    },
+                ) { Text("卸载", color = TvColors.Red) }
             },
             dismissButton = { TextButton(onClick = { uninstallTarget = null }) { Text("取消") } },
         )

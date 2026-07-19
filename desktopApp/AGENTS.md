@@ -5,14 +5,14 @@
 
 ## Purpose
 
-Compose Desktop application shell (JVM target). Entry point for the Windows/Linux/macOS
-client. Packages as exe/msi via the Compose Desktop packaging plugin.
+Compose Desktop application shell (JVM target). Entry point for the Windows/Linux/macOS client. Packages as exe/msi via
+the Compose Desktop packaging plugin.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `build.gradle.kts` | Compose Desktop plugin, mainClass config, native packaging (Windows exe/msi) |
+| File                                            | Description                                                                     |
+|-------------------------------------------------|---------------------------------------------------------------------------------|
+| `build.gradle.kts`                              | Compose Desktop plugin, mainClass config, native packaging (Windows exe/msi)    |
 | `src/jvmMain/kotlin/app/tvlink/desktop/Main.kt` | `fun main()` — creates application window, sets Compose content to shared App() |
 
 ## For AI Agents

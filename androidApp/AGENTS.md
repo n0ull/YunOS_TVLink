@@ -11,11 +11,11 @@ required for mDNS discovery.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `build.gradle.kts` | Android application plugin config (minSdk 21, targetSdk 37) |
+| File                                       | Description                                                                      |
+|--------------------------------------------|----------------------------------------------------------------------------------|
+| `build.gradle.kts`                         | Android application plugin config (minSdk 21, targetSdk 37)                      |
 | `src/main/java/app/tvlink/MainActivity.kt` | Single activity — sets Compose content to `shared` App(), acquires MulticastLock |
-| `src/main/AndroidManifest.xml` | Permissions (INTERNET, BLUETOOTH, ACCESS_WIFI_STATE, etc.), activity declaration |
+| `src/main/AndroidManifest.xml`             | Permissions (INTERNET, BLUETOOTH, ACCESS_WIFI_STATE, etc.), activity declaration |
 
 ## For AI Agents
 

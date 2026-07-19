@@ -5,22 +5,22 @@
 
 ## Purpose
 
-Compose Multiplatform UI layer — shared across Android and Desktop. Contains the app
-composable, central ViewModel, all screens, theme, and platform-abstracted widgets.
+Compose Multiplatform UI layer — shared across Android and Desktop. Contains the app composable, central ViewModel, all
+screens, theme, and platform-abstracted widgets.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `App.kt` | Root `@Composable` — navigation host, provides AppViewModel |
+| File              | Description                                                                       |
+|-------------------|-----------------------------------------------------------------------------------|
+| `App.kt`          | Root `@Composable` — navigation host, provides AppViewModel                       |
 | `AppViewModel.kt` | Central state: connection lifecycle, navigation, delegates to all device services |
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `screens/` | One `@Composable` per app screen (see `screens/AGENTS.md`) |
-| `theme/` | Material3 theme configuration (see `theme/AGENTS.md`) |
+| Directory  | Purpose                                                                     |
+|------------|-----------------------------------------------------------------------------|
+| `screens/` | One `@Composable` per app screen (see `screens/AGENTS.md`)                  |
+| `theme/`   | Material3 theme configuration (see `theme/AGENTS.md`)                       |
 | `widgets/` | Platform-abstracted widgets via `expect`/`actual` (see `widgets/AGENTS.md`) |
 
 ## For AI Agents

@@ -9,6 +9,8 @@ import androidx.compose.ui.layout.ContentScale
 import java.io.File
 import org.jetbrains.skia.Image as SkiaImage
 
+// Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 actual fun ByteArrayImage(
     bytes: ByteArray,
@@ -20,6 +22,7 @@ actual fun ByteArrayImage(
             try {
                 SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
             } catch (e: Exception) {
+                System.err.println("ByteArrayImage: decode failed: ${e.message}")
                 null
             }
         }

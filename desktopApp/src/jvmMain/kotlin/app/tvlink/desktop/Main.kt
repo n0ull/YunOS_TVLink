@@ -18,7 +18,7 @@ fun main() {
         }
     } catch (e: Throwable) {
         System.err.println("TVLink failed to start: ${e.javaClass.simpleName}: ${e.message}")
-        e.printStackTrace()
+        System.err.println(e.stackTraceToString())
         if (java.awt.GraphicsEnvironment.isHeadless()) {
             System.err.println("This application requires a display/GUI environment.")
         }

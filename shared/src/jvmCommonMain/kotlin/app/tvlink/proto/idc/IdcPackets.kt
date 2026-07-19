@@ -143,24 +143,41 @@ abstract class IdcPacket(
             return p
         }
 
-        fun create(id: Int): IdcPacket? =
+        fun create(id: Int): IdcPacket? = sessionPacket(id) ?: modulePacket(id) ?: inputPacket(id) ?: commandPacket(id)
+
+        private fun sessionPacket(id: Int): IdcPacket? =
             when (id) {
                 IdcConst.ID_LOGIN_REQ -> LoginReq()
                 IdcConst.ID_LOGIN_ENCRYPTION_RESP -> LoginEncryptionResp()
                 IdcConst.ID_LOGIN_RESP -> LoginResp()
                 IdcConst.ID_HEARTBEAT -> HeartBeat()
+                IdcConst.ID_DEVINFO_UPDATE_NAME -> DevNameUpdate()
+                else -> null
+            }
+
+        private fun modulePacket(id: Int): IdcPacket? =
+            when (id) {
                 IdcConst.ID_MODULE_AVAILABILITY -> ModuleAvailability()
                 IdcConst.ID_VCONN_SYN -> VConnSyn()
                 IdcConst.ID_VCONN_DATA -> VConnData()
                 IdcConst.ID_VCONN_FIN -> VConnFin()
+                else -> null
+            }
+
+        private fun inputPacket(id: Int): IdcPacket? =
+            when (id) {
                 IdcConst.ID_OPCMD_KEY -> OpCmdKey()
                 IdcConst.ID_IME_START_INPUT -> ImeStartInput()
                 IdcConst.ID_IME_FINISH_INPUT -> ImeFinishInput()
                 IdcConst.ID_IME_TEXT_CHANGE -> ImeTextChange()
                 IdcConst.ID_IME_ACTION -> ImeAction()
+                else -> null
+            }
+
+        private fun commandPacket(id: Int): IdcPacket? =
+            when (id) {
                 IdcConst.ID_CMD_SCREENSHOT_REQ -> ScreenShotReq()
                 IdcConst.ID_CMD_SCREENSHOT_RESP -> ScreenShotResp()
-                IdcConst.ID_DEVINFO_UPDATE_NAME -> DevNameUpdate()
                 else -> null
             }
     }
@@ -180,6 +197,7 @@ class RawIdcPacket(
 
 enum class IdcLoginType { UNKNOWN, NORMAL, DETECT, QRCODE }
 
+@Suppress("LongParameterList") // 协议字段一一对应，拆包需动全线调用点
 class LoginReq(
     var name: String = "app.tvlink",
     var appVerCode: Int = 1,
@@ -191,15 +209,25 @@ class LoginReq(
     var encryptionAlgorithmDetail: String = "",
 ) : IdcPacket(IdcConst.ID_LOGIN_REQ) {
     private fun json() =
-        """{"name":"${jsonEscape(
-            name,
-        )}","app_ver_code":$appVerCode,"client_type":"${jsonEscape(
-            clientType,
-        )}","dev_name":"${jsonEscape(
-            devName,
-        )}","login_type":${loginType.ordinal},"login_magic_number":$loginMagicNumber,"encryption_algorithm_ver":$encryptionAlgorithmVer,"encryption_algorithm_detail":"${jsonEscape(
-            encryptionAlgorithmDetail,
-        )}"}"""
+        """{"name":"${
+            jsonEscape(
+                name,
+            )
+        }","app_ver_code":$appVerCode,"client_type":"${
+            jsonEscape(
+                clientType,
+            )
+        }","dev_name":"${
+            jsonEscape(
+                devName,
+            )
+        }","login_type":${loginType.ordinal},"login_magic_number":$loginMagicNumber,""" +
+            """"encryption_algorithm_ver":$encryptionAlgorithmVer,""" +
+            """"encryption_algorithm_detail":"${
+                jsonEscape(
+                    encryptionAlgorithmDetail,
+                )
+            }"}"""
 
     override fun encodeBody(): ByteArray {
         val b = ByteBuffer.allocate(lpStringSize(json()))
@@ -218,6 +246,7 @@ class LoginEncryptionResp(
     }
 }
 
+@Suppress("LongParameterList") // 协议字段一一对应，拆包需动全线调用点
 class LoginResp(
     var ver: Int = 0,
     var connKey: Int = 0,
@@ -393,7 +422,9 @@ class ScreenShotReq(
     var compressQuality: Int = 90,
 ) : IdcPacket(IdcConst.ID_CMD_SCREENSHOT_REQ) {
     override fun encodeBody(): ByteArray {
-        val s = """{"resize_ratio":$resizeRatio,"resize_w":$resizeW,"resize_h":$resizeH,"compress_quality":$compressQuality}"""
+        val s =
+            """{"resize_ratio":$resizeRatio,"resize_w":$resizeW,"resize_h":$resizeH,""" +
+                """"compress_quality":$compressQuality}"""
         val b = ByteBuffer.allocate(lpStringSize(s))
         b.putLPString(s)
         return b.array()

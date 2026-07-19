@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
@@ -36,7 +37,10 @@ fun SettingsScreen(vm: AppViewModel) {
                 Text("设备: ${vm.connectedName}")
                 Text("IP: ${vm.connectedIp}", color = TvColors.TextSecondary)
                 Text("媒体服务: ${vm.mediaServerUrl.ifEmpty { "未启动" }}", color = TvColors.TextSecondary)
-                Text("IB 快速通道: ${if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）"}", color = TvColors.TextSecondary)
+                Text(
+                    "IB 快速通道: ${if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）"}",
+                    color = TvColors.TextSecondary,
+                )
             }
         }
 

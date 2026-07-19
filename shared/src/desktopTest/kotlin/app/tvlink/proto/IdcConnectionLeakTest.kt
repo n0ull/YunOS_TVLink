@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
  */
 class IdcConnectionLeakTest {
     @Test
+    @Suppress("FunctionNaming") // 反引号测试命名
     fun `detect on unreachable host leaves no idc-hb threads`() {
         // connect to a port that will refuse immediately
         val conn = IdcConnection("127.0.0.1", 1)
@@ -22,6 +23,7 @@ class IdcConnectionLeakTest {
     }
 
     @Test
+    @Suppress("FunctionNaming") // 反引号测试命名
     fun `failed connect leaves no idc-hb threads`() {
         repeat(5) {
             val conn = IdcConnection("127.0.0.1", 1)

@@ -5,16 +5,15 @@
 
 ## Purpose
 
-Local media projection (screen-cast) — the TV pulls media from an embedded HTTP server
-on the phone/PC. Control messages use an HTTP/1.1-style text protocol over a TCP long
-connection (default port 13520) with `yunos-session-id` header.
+Local media projection (screen-cast) — the TV pulls media from an embedded HTTP server on the phone/PC. Control messages
+use an HTTP/1.1-style text protocol over a TCP long connection (default port 13520) with `yunos-session-id` header.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `CastController.kt` | TCP 13520 control channel: setmedia/play/pause/seek/volume commands, playback state callbacks |
-| `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back |
+| File                 | Description                                                                                   |
+|----------------------|-----------------------------------------------------------------------------------------------|
+| `CastController.kt`  | TCP 13520 control channel: setmedia/play/pause/seek/volume commands, playback state callbacks |
+| `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back     |
 
 ## For AI Agents
 

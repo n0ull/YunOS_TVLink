@@ -40,6 +40,7 @@ class MediaHttpServerTest {
             throw AssertionError("expected failure for unknown path")
         } catch (e: Exception) {
             // server closed connection — expected
+            System.err.println("MediaHttpServerTest: unknown path read failed as expected: ${e.message}")
         }
         tmp.delete()
     }
