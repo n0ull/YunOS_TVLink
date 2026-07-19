@@ -17,12 +17,12 @@ class Discovery {
 
     data class FoundDevice(
         val ip: String,
-        var name: String = "",
-        var mac: String = "",
-        var model: String = "",
-        var uuid: String = "",
-        var projectionPort: Int = 0,
-        var source: String = "",
+        val name: String = "",
+        val mac: String = "",
+        val model: String = "",
+        val uuid: String = "",
+        val projectionPort: Int = 0,
+        val source: String = "",
     )
 
     var onDeviceFound: ((FoundDevice) -> Unit)? = null
@@ -64,19 +64,17 @@ class Discovery {
     }
 
     private fun report(d: FoundDevice) {
-        val existing = found[d.ip]
-        if (existing == null) {
-            found[d.ip] = d
-            onDeviceFound?.invoke(d)
-        } else {
-            var changed = false
-            if (d.name.isNotEmpty() && existing.name != d.name) { existing.name = d.name; changed = true }
-            if (d.mac.isNotEmpty() && existing.mac != d.mac) { existing.mac = d.mac; changed = true }
-            if (d.model.isNotEmpty() && existing.model != d.model) { existing.model = d.model; changed = true }
-            if (d.uuid.isNotEmpty() && existing.uuid != d.uuid) { existing.uuid = d.uuid; changed = true }
-            if (d.projectionPort != 0 && existing.projectionPort != d.projectionPort) { existing.projectionPort = d.projectionPort; changed = true }
-            if (changed) onDeviceFound?.invoke(existing)
-        }
+        val merged = found.compute(d.ip) { _, existing ->
+            if (existing == null) d
+            else existing.copy(
+                name = d.name.ifEmpty { existing.name },
+                mac = d.mac.ifEmpty { existing.mac },
+                model = d.model.ifEmpty { existing.model },
+                uuid = d.uuid.ifEmpty { existing.uuid },
+                projectionPort = if (d.projectionPort != 0) d.projectionPort else existing.projectionPort,
+            )
+        }!!
+        onDeviceFound?.invoke(merged)
     }
 
     private fun runMdns(myEpoch: Int) {

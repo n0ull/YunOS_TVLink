@@ -205,8 +205,12 @@ class AppViewModel : ViewModel() {
     }
 
     fun takeScreenshot() {
+        if (!screenshot.capture()) return
         shotBusy = true
-        screenshot.capture()
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(10_000)
+            shotBusy = false
+        }
     }
 
     fun refreshApps() = rpm.getAppList()

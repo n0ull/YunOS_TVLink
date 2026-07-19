@@ -21,9 +21,10 @@ class ScreenshotService(private val deviceManager: DeviceManager) {
         }
     }
 
-    fun capture(width: Int = 1280, height: Int = 720, quality: Int = 90) {
-        val conn = deviceManager.connection ?: return
+    fun capture(width: Int = 1280, height: Int = 720, quality: Int = 90): Boolean {
+        val conn = deviceManager.connection ?: return false
         pending = true
         conn.send(ScreenShotReq(resizeW = width, resizeH = height, compressQuality = quality))
+        return true
     }
 }
