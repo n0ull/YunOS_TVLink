@@ -1,0 +1,221 @@
+# detekt 配置（在 detekt 默认规则集之上叠加，见 build.gradle.kts 中 buildUponDefaultConfig = true）
+#
+# 职责划分（与 ktlint 不冲突）：
+#   - ktlint  -> 负责「代码格式」（缩进、换行、尾随逗号、导入顺序、行宽、文件末尾换行等）
+#   - detekt  -> 负责「静态分析与代码质量」（命名、复杂度、潜在缺陷、协程、性能、异常等）
+# 说明：detekt 的 formatting 规则集位于独立构件 detekt-formatting，本配置未引入该依赖，
+#       因此 detekt 不会执行任何格式化检查，天然不与 ktlint 冲突。
+
+build:
+  # CI 中任一问题即判定失败（与 ktlint ignoreFailures=false 一致）
+  maxIssues: 0
+  excludeCorrectable: false
+  weights:
+    complexity: 2
+    LongParameterList: 2
+    style: 1
+  # 排除构建产物与生成代码（第三方模块在 settings.gradle.kts 之外，天然不受 subprojects 影响）
+  excludes:
+    - "**/build/**"
+    - "**/.gradle/**"
+    - "**/buildSrc/**"
+    - "**/src/**/generated/**"
+    - "**/resources/**"
+
+config:
+  warningsAsErrors: false
+  checkExhaustiveness: false
+
+processors:
+  active: true
+  exclude:
+    - "DetektProgressListener"
+
+console-reports:
+  active: true
+  exclude:
+    - "ProjectStatisticsReport"
+    - "ComplexityReport"
+    - "NotificationReport"
+    - "FindingsReport"
+
+output-reports:
+  active: true
+  exclude:
+    - "TxtOutputReport"
+
+comments:
+  active: true
+  CommentOverPrivateFunction:
+    active: false
+  CommentOverPrivateProperty:
+    active: false
+  # 注：detekt 1.23.x 已移除 ForbiddenComment 规则（原 comments 规则集）。
+  # 如需禁止 FIXME/STOPSHIP/TODO，可在 .editorconfig 中配置 ktlint 的
+  # disabled_rules 或使用 ktlint 自定义；此处不在 detekt 中重复覆盖。
+
+complexity:
+  active: true
+  TooManyFunctions:
+    # Compose 页面常由大量小组件组成，关闭以免噪音
+    active: false
+  LongMethod:
+    active: true
+    threshold: 120
+  LongParameterList:
+    active: true
+    functionThreshold: 8
+    constructorThreshold: 8
+  ComplexCondition:
+    active: true
+    threshold: 4
+  NestedBlockDepth:
+    active: true
+    threshold: 4
+
+coroutines:
+  active: true
+  GlobalCoroutineUsage:
+    active: true
+  InjectDispatcher:
+    active: true
+  RedundantSuspendModifier:
+    active: true
+  SuspendFunWithCoroutineScopeReceiver:
+    active: false
+
+empty-blocks:
+  active: true
+  EmptyCatchBlock:
+    active: true
+  EmptyFunctionBlock:
+    active: true
+  EmptyClassBlock:
+    active: true
+  EmptyDefaultConstructor:
+    active: true
+  EmptyInitBlock:
+    active: true
+
+exceptions:
+  active: true
+  TooGenericExceptionCaught:
+    # 网络/IO 代码常需捕获泛化异常，关闭
+    active: false
+  ExceptionRaisedInUnexpectedLocation:
+    active: true
+  SwallowedException:
+    active: true
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: true
+  RethrowCaughtException:
+    active: true
+
+naming:
+  active: true
+  FunctionNaming:
+    active: true
+  VariableNaming:
+    active: true
+  ClassNaming:
+    active: true
+  EnumNaming:
+    active: true
+  PackageNaming:
+    active: true
+  TopLevelPropertyNaming:
+    active: true
+  ObjectPropertyNaming:
+    active: true
+  BooleanPropertyNaming:
+    active: true
+  MatchingDeclarationName:
+    active: true
+
+performance:
+  active: true
+  SpreadOperator:
+    active: true
+  UnnecessaryTemporaryInstantiation:
+    active: true
+  ForEachOnRange:
+    active: true
+  UnnecessaryPartOfBinaryExpression:
+    active: true
+
+potential-bugs:
+  active: true
+  HasPlatformType:
+    active: true
+  ImplicitDefaultLocale:
+    active: true
+  MapGetWithNotNullAssertionOperator:
+    active: true
+  UnsafeCallOnNullableType:
+    active: true
+  UnsafeCast:
+    active: true
+  CastToNullableType:
+    active: true
+  UnnecessaryNotNullOperator:
+    active: true
+  UnreachableCatchBlock:
+    active: true
+
+style:
+  active: true
+  # 与 ktlint 重叠的格式类规则：关闭，交由 ktlint 统一处理
+  MaxLineLength:
+    active: false
+  NewLineAtEndOfFile:
+    active: false
+  # 其余质量类规则保持开启
+  CollapsibleIfStatements:
+    active: true
+  DataClassShouldBeImmutable:
+    active: true
+  EqualsOnSignatureLine:
+    active: false
+  MagicNumber:
+    # 协议常量众多（端口号、魔数等），关闭以免大量噪音
+    active: false
+  ModifierOrder:
+    active: true
+  OptionalAbstractKeyword:
+    active: true
+  PreferToOverPairSyntax:
+    active: true
+  RedundantVisibilityModifierRule:
+    active: true
+  ReturnCount:
+    active: false
+  SpacingBetweenPackageAndImports:
+    active: true
+  ThrowsCount:
+    active: true
+    max: 3
+  UnnecessaryInheritance:
+    active: true
+  UnusedPrivateMember:
+    active: true
+  UseCheckOrError:
+    active: true
+  UseIfInsteadOfWhen:
+    active: true
+  UseRequire:
+    active: true
+  UseDataClass:
+    active: false
+  UseArrayLiteralsInAnnotations:
+    active: true
+  UselessCallOnNotNull:
+    active: true
+  VarCouldBeVal:
+    active: true
+  WildcardImport:
+    active: true
+  MayBeConst:
+    active: true
+  BracesOnWhenStatements:
+    # 保持与原 OptionalWhenBraces 关闭一致的意图：允许 when 省略大括号
+    active: false

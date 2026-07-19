@@ -1,0 +1,31 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{kt,kts}]
+# 采用 ktlint 官方代码风格，对齐 Kotlin 官方编码规范
+# https://kotlinlang.org/docs/coding-conventions.html
+ktlint_code_style = ktlint_official
+indent_size = 4
+continuation_indent_size = 4
+max_line_length = 120
+
+# 与本项目代码风格对齐的 IntelliJ 格式化选项（ktlint 会读取这些键）
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ij_kotlin_imports_layout = * # keep
+ij_kotlin_line_break_after_multiline_when_entry = true
+
+# ---- 自定义规则（与本项目结构/习惯冲突或噪音较大的规则关闭）----
+# KMP 的 expect/actual 平台文件（Platform.kt、PlatformImage.kt 等）没有与文件名匹配的顶层类型，
+# 关闭 filename 规则避免误报。ktlint 1.x 用「规则名 = off」的写法（ktlint_disabled_rules 已废弃）。
+ktlint_standard_filename = off
+
+[*.md]
+trim_trailing_whitespace = false
