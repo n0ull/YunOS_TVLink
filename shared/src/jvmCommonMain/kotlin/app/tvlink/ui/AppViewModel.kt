@@ -93,7 +93,7 @@ class AppViewModel : ViewModel() {
     var notice by mutableStateOf("")
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             deviceManager.connState.collect { s ->
                 connState = s
                 if (s == DeviceManager.ConnState.CONNECTED) {
@@ -110,7 +110,7 @@ class AppViewModel : ViewModel() {
                 }
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             deviceManager.foundDevices.collect { list ->
                 foundDevices.clear()
                 foundDevices.addAll(list)
@@ -118,30 +118,30 @@ class AppViewModel : ViewModel() {
         }
         deviceManager.onPacket = { p -> handlePacket(p) }
         rpm.onAppList = { apps ->
-            viewModelScope.launch(Dispatchers.Main) {
+            viewModelScope.launch(Dispatchers.Default) {
                 tvApps.clear(); tvApps.addAll(apps)
             }
         }
         rpm.onSystemInfo = { info ->
-            viewModelScope.launch(Dispatchers.Main) { tvSystemInfo = info }
+            viewModelScope.launch(Dispatchers.Default) { tvSystemInfo = info }
         }
         rpm.onInstallProgress = { pr ->
-            viewModelScope.launch(Dispatchers.Main) { notice = "安装 ${pr.packageName}: ${pr.progress}%" }
+            viewModelScope.launch(Dispatchers.Default) { notice = "安装 ${pr.packageName}: ${pr.progress}%" }
         }
         rpm.onOpResult = { op, pkg, err ->
-            viewModelScope.launch(Dispatchers.Main) {
+            viewModelScope.launch(Dispatchers.Default) {
                 notice = if (err == 0) "$op $pkg 成功" else "$op $pkg 失败 ($err)"
                 if (err == 0) rpm.getAppList()
             }
         }
         screenshot.onScreenshot = { jpeg ->
-            viewModelScope.launch(Dispatchers.Main) {
+            viewModelScope.launch(Dispatchers.Default) {
                 lastShot = jpeg
                 shotBusy = false
             }
         }
         rc.onCurrentApp = { app ->
-            viewModelScope.launch(Dispatchers.Main) { notice = "电视当前应用: $app" }
+            viewModelScope.launch(Dispatchers.Default) { notice = "电视当前应用: $app" }
         }
     }
 
@@ -153,7 +153,7 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val cc = CastController(c.ip, port)
             cc.onEvent = { st, dur, pos ->
-                viewModelScope.launch(Dispatchers.Main) {
+                viewModelScope.launch(Dispatchers.Default) {
                     castState = st
                     if (dur > 0) castDuration = dur
                     castPosition = pos
@@ -170,11 +170,11 @@ class AppViewModel : ViewModel() {
     private fun handlePacket(p: IdcPacket) {
         screenshot.handlePacket(p)
         when (p) {
-            is ImeStartInput -> viewModelScope.launch(Dispatchers.Main) {
+            is ImeStartInput -> viewModelScope.launch(Dispatchers.Default) {
                 imeText = p.initText
                 imeActive = true
             }
-            is ImeFinishInput -> viewModelScope.launch(Dispatchers.Main) { imeActive = false }
+            is ImeFinishInput -> viewModelScope.launch(Dispatchers.Default) { imeActive = false }
         }
     }
 
@@ -208,7 +208,7 @@ class AppViewModel : ViewModel() {
     fun takeScreenshot() {
         if (!screenshot.capture()) return
         shotBusy = true
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             kotlinx.coroutines.delay(10_000)
             shotBusy = false
         }
