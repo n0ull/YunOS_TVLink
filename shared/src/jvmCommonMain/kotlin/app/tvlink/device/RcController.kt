@@ -2,7 +2,6 @@ package app.tvlink.device
 
 import app.tvlink.proto.ib.IbChannel
 import app.tvlink.proto.ib.RcKey
-import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.OpCmdKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

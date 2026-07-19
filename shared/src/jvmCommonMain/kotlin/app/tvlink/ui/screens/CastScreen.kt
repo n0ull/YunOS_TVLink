@@ -24,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.tvlink.proto.cast.CastController
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.theme.TvColors
 import app.tvlink.ui.widgets.pickMediaFile

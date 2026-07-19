@@ -1,7 +1,6 @@
 package app.tvlink.ui.widgets
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -9,7 +8,6 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
-import javax.swing.JFileChooser
 
 @Composable
 actual fun ByteArrayImage(bytes: ByteArray, contentDescription: String?, modifier: Modifier) {
