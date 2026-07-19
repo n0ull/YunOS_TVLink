@@ -161,14 +161,22 @@ class DongleBlePairer(private val context: Context) {
 
         @Deprecated("API < 33")
         override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            val text = characteristic.value?.let { String(it, Charsets.UTF_8) } ?: return
-            if (text == "success") {
-                phase(Phase.SUCCESS, "配网成功")
-                close()
-            } else {
-                phase(Phase.FAILED, "设备返回: $text")
-                close()
-            }
+            handleSecurityResult(characteristic.value)
+        }
+
+        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            handleSecurityResult(value)
+        }
+    }
+
+    private fun handleSecurityResult(bytes: ByteArray?) {
+        val text = bytes?.let { String(it, Charsets.UTF_8) } ?: return
+        if (text == "success") {
+            phase(Phase.SUCCESS, "配网成功")
+            close()
+        } else {
+            phase(Phase.FAILED, "设备返回: $text")
+            close()
         }
     }
 
