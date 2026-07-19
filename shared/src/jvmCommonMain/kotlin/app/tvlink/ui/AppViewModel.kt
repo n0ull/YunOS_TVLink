@@ -188,6 +188,7 @@ class AppViewModel : ViewModel() {
 
     fun disconnect() {
         rc.detach()
+        rpm.detach()
         deviceManager.disconnect()
         screen = Screen.DevicePicker
     }
@@ -240,6 +241,7 @@ class AppViewModel : ViewModel() {
 
     override fun onCleared() {
         rc.destroy()
+        rpm.detach()
         cast?.disconnect()
         mediaServer.stop()
         deviceManager.destroy()

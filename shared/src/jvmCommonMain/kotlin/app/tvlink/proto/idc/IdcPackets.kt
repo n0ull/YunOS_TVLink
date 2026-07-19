@@ -2,6 +2,12 @@ package app.tvlink.proto.idc
 
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /** IDC wire constants — see docs/re/01-device-discovery.md */
 object IdcConst {
@@ -365,7 +371,7 @@ class DevNameUpdate(var devName: String = "") : IdcPacket(IdcConst.ID_DEVINFO_UP
     }
 }
 
-/* ---- minimal JSON field extractor (flat objects only; avoids dependency in protocol layer) ---- */
+/* ---- JSON utilities (kotlinx.serialization-backed; FlatJson facade keeps call sites stable) ---- */
 
 fun jsonEscape(s: String): String = buildString(s.length + 8) {
     for (c in s) when (c) {
@@ -378,45 +384,23 @@ fun jsonEscape(s: String): String = buildString(s.length + 8) {
     }
 }
 
-class FlatJson(private val map: Map<String, String>) {
-    fun str(k: String) = map[k] ?: ""
-    fun int(k: String) = map[k]?.toIntOrNull() ?: 0
-    fun bool(k: String) = map[k]?.toBoolean() ?: false
-    fun toMap(): Map<String, String> = map
+private val tvJson = Json { isLenient = true; ignoreUnknownKeys = true }
+
+class FlatJson(private val obj: JsonObject) {
+    fun str(k: String): String = obj[k]?.let {
+        if (it is JsonPrimitive) it.contentOrNull ?: "" else it.toString()
+    } ?: ""
+    fun int(k: String): Int = (obj[k] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+    fun bool(k: String): Boolean = (obj[k] as? JsonPrimitive)?.content?.toBoolean() ?: false
+    fun toMap(): Map<String, String> = obj.entries.associate { (k, v) ->
+        k to (if (v is JsonPrimitive) v.contentOrNull ?: "" else v.toString())
+    }
     fun strArray(k: String): List<String> =
-        map[k]?.removePrefix("[")?.removeSuffix("]")?.split(",")
-            ?.map { it.trim().removePrefix("\"").removeSuffix("\"") }
-            ?.filter { it.isNotEmpty() } ?: emptyList()
+        (obj[k] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
 }
 
-fun parseJsonObject(s: String): FlatJson {
-    val out = LinkedHashMap<String, String>()
-    val body = s.trim().removePrefix("{").removeSuffix("}")
-    var i = 0
-    val sb = StringBuilder()
-    var key: String? = null
-    var inStr = false
-    var depth = 0
-    while (i < body.length) {
-        val c = body[i]
-        when {
-            c == '\\' && inStr && i + 1 < body.length -> { sb.append(c); sb.append(body[i + 1]); i++ }
-            c == '"' -> inStr = !inStr
-            c == '{' || c == '[' -> { depth++; sb.append(c) }
-            c == '}' || c == ']' -> { depth--; sb.append(c) }
-            c == ':' && depth == 0 && key == null -> { key = sb.toString().trim().trim('"'); sb.setLength(0) }
-            c == ',' && depth == 0 -> {
-                if (key != null) out[key] = sb.toString().trim()
-                key = null; sb.setLength(0)
-            }
-            else -> sb.append(c)
-        }
-        i++
-    }
-    if (key != null) out[key] = sb.toString().trim()
-    return FlatJson(out.mapValues {
-        it.value.removePrefix("\"").removeSuffix("\"")
-            .replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
-            .replace("\\\\", "\\")
-    })
+fun parseJsonObject(s: String): FlatJson = try {
+    FlatJson(tvJson.parseToJsonElement(s).jsonObject)
+} catch (_: Exception) {
+    FlatJson(JsonObject(emptyMap()))
 }

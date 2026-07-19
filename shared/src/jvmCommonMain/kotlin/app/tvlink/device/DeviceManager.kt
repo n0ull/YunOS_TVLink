@@ -44,7 +44,9 @@ class DeviceManager {
 
     /** unmatched packets from the TV (IME events, screenshot resp, ...) */
     var onPacket: ((IdcPacket) -> Unit)? = null
-    var onVConnData: ((moduleId: Int, payload: ByteArray) -> Unit)? = null
+    private val vConnListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, ByteArray) -> Unit>()
+    fun addVConnListener(l: (Int, ByteArray) -> Unit) { vConnListeners.add(l) }
+    fun removeVConnListener(l: (Int, ByteArray) -> Unit) { vConnListeners.remove(l) }
 
     var connection: IdcConnection? = null
         private set
@@ -113,7 +115,7 @@ class DeviceManager {
             _modules.value = conn.modules.values.toList()
         }
         conn.onPacket = { p -> onPacket?.invoke(p) }
-        conn.onVConnData = { mid, payload -> onVConnData?.invoke(mid, payload) }
+        conn.onVConnData = { mid, payload -> vConnListeners.forEach { it(mid, payload) } }
     }
 
     fun disconnect() {
