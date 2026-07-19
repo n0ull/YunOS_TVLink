@@ -24,8 +24,12 @@ UI-consumable facades. Manages device lifecycle from discovery through connected
 ### Working In This Directory
 
 - Each service takes `DeviceManager` as its connection source
-- Callbacks (`onXxx: ((T) -> Unit)?`) fire on IO/reader threads — UI must hop dispatchers
+- VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses attach/detach)
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
+- `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
+- `RcController.destroy()` = detach + scope cancel
+- `Discovery.FoundDevice` is immutable (`val` fields); `report()` merges via `ConcurrentHashMap.compute` + `copy()`
+- `ScreenshotService.capture()` returns `Boolean` (false if no connection); caller guards `shotBusy`
 - `RcController` implements the IB-first-then-IDC-fallback policy from `docs/re/02`
 
 ### Common Patterns

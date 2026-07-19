@@ -13,9 +13,9 @@ All higher-level services (remote control fallback, RPM, screenshot, ASR) ride o
 
 | File | Description |
 |------|-------------|
-| `IdcConnection.kt` | TCP session management: connect, login, reader thread, send/receive, keepalive |
-| `IdcPackets.kt` | Packet data classes and serialization: LoginReq, OpCmdKey, ImeTextChange, etc. |
-| `IdcCrypto.kt` | connKey derivation and optional encryption (this client uses `encryption_algorithm_ver=0` plaintext) |
+| `IdcConnection.kt` | TCP session management: connect, login, reader thread, send/receive, keepalive (scheduler lazily created, close() fully tears down) |
+| `IdcPackets.kt` | Packet data classes, serialization, and JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`) |
+| `IdcCrypto.kt` | connKey derivation and optional encryption — DEAD CODE (ver=0 plaintext always); do not modify without ver≠0 TV |
 
 ## For AI Agents
 
@@ -36,7 +36,9 @@ All higher-level services (remote control fallback, RPM, screenshot, ASR) ride o
 
 - `DataInputStream` / `OutputStream` with manual big-endian read/write
 - `AtomicInteger` for packet ID sequencing
-- `ScheduledFuture` for keepalive pings
+- Scheduler lazily created in `startHeartbeat()`; `close()` calls `shutdownNow()` — no leaked threads
+- JSON parsing: `parseJsonObject(s)` → `FlatJson` facade over `JsonObject` (kotlinx.serialization, isLenient=true)
+- Test files: `IdcProtocolTest.kt` (frame round-trips), `IdcConnectionLeakTest.kt` (no thread leaks)
 
 ## Dependencies
 
