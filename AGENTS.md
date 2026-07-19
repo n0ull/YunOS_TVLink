@@ -15,7 +15,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 | `settings.gradle.kts` | Root project "TVLink"; includes `:shared`, `:androidApp`, `:desktopApp` |
 | `build.gradle.kts` | Root build config: plugin versions + ktlint 12.1.2 / detekt 1.23.8 |
 | `gradle.properties` | JVM args, Kotlin style, `applyDefaultHierarchyTemplate=false` |
-| `.editorconfig` | ktlint_official code style (line width 120, import layout) |
+| `.editorconfig` | ktlint_official code style (line width 120, import layout); `[**/build/**]` 段排除生成代码 |
 | `detekt.yml` | detekt static analysis rules (complexity, naming, coroutines, exceptions) |
 | `local.properties` | Android SDK path (machine-specific, gitignored) |
 | `.gitignore` | Ignores build/, .gradle/, local.properties |
@@ -29,6 +29,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 | `androidApp/` | Android application shell (see `androidApp/AGENTS.md`) |
 | `desktopApp/` | Compose Desktop application shell (see `desktopApp/AGENTS.md`) |
 | `docs/` | Reverse-engineering reports and protocol specs (see `docs/AGENTS.md`) |
+| `.github/` | GitHub Actions CI — Build & Test 工作流 (see `.github/AGENTS.md`) |
 | `gradle/` | Gradle wrapper JAR and properties |
 | `apktool_out/` | Decompiled APK resources (reference only, not compiled) |
 | `jadx_out/` | Decompiled APK Java source (reference only, not compiled) |
@@ -50,7 +51,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 ./gradlew :androidApp:assembleDebug   # Android APK
 ./gradlew :desktopApp:run             # Run desktop app
 ./gradlew :shared:desktopTest         # Protocol unit tests
-./gradlew check                       # ktlint + detekt (all modules)
+./gradlew check                       # 统一门禁：单元测试 + ktlint + detekt + Android lint（CI 入口）
 ./gradlew ktlintFormat                # Auto-format to ktlint_official style
 ```
 

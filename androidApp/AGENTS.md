@@ -13,7 +13,7 @@ required for mDNS discovery.
 
 | File                                       | Description                                                                      |
 |--------------------------------------------|----------------------------------------------------------------------------------|
-| `build.gradle.kts`                         | Android application plugin config (minSdk 21, targetSdk 37)                      |
+| `build.gradle.kts`                         | Android application plugin config (minSdk 21, compileSdk/targetSdk 36)                     |
 | `src/main/java/app/tvlink/MainActivity.kt` | Single activity — sets Compose content to `shared` App(), acquires MulticastLock |
 | `src/main/AndroidManifest.xml`             | Permissions (INTERNET, BLUETOOTH, ACCESS_WIFI_STATE, etc.), activity declaration |
 
@@ -38,6 +38,6 @@ required for mDNS discovery.
 ### External
 
 - AndroidX Activity Compose
-- Android SDK (compileSdk 37)
+- Android SDK (compileSdk 36)
 
 <!-- MANUAL: -->

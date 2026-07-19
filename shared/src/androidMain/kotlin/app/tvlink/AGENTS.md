@@ -14,6 +14,7 @@ SAF file picker, and Android image handling.
 | File                                   | Description                                                                              |
 |----------------------------------------|------------------------------------------------------------------------------------------|
 | `dongle/DongleBlePairer.kt`            | MagicCast BLE provisioning — GATT scan, connect, write WiFi credentials (18-byte chunks) |
+| `ui/widgets/AndroidPlatform.android.kt` | `object AndroidPlatform` — 持有 applicationContext 的平台服务入口（由 MainActivity.init 注入） |
 | `ui/widgets/Platform.android.kt`       | `actual` platform utilities (Android context access)                                     |
 | `ui/widgets/PlatformImage.android.kt`  | `actual` image display using Android Bitmap/ImageBitmap                                  |
 | `ui/widgets/PlatformPicker.android.kt` | `actual` file picker using SAF (Storage Access Framework)                                |
@@ -27,6 +28,7 @@ SAF file picker, and Android image handling.
 
 - All files here may use `android.*` APIs freely
 - BLE code requires `@SuppressLint("MissingPermission")` — permissions declared in androidApp manifest
+- API 版本守卫：minSdk 21，调用 API 23+ 的 BLE 重载（如 4 参 `connectGatt`）必须有 `Build.VERSION` 分支与回退（lint NewApi 强制）
 - MagicCast BLE protocol: see `docs/re/03-dongle-ble-asr.md` for GATT UUIDs and write format
 - `actual` implementations must match `expect` signatures in `jvmCommonMain/ui/widgets/`
 

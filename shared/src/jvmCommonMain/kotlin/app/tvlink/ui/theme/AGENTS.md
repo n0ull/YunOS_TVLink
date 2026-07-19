@@ -10,15 +10,16 @@ platforms.
 
 ## Key Files
 
-| File       | Description                                                                        |
-|------------|------------------------------------------------------------------------------------|
-| `Theme.kt` | `TVLinkTheme` composable — Material3 color scheme (light/dark), typography, shapes |
+| File          | Description                                                                  |
+|---------------|------------------------------------------------------------------------------|
+| `Theme.kt`    | `TvTheme` composable — Material3 color scheme, typography, shapes            |
+| `TvColors.kt` | `object TvColors` — 自定义调色板常量（AccentStart/Red/Green/TextSecondary 等） |
 
 ## For AI Agents
 
 ### Working In This Directory
 
-- Use `MaterialTheme.colorScheme.*` in screens — never hardcode colors
+- Use `MaterialTheme.colorScheme.*` in screens — never hardcode colors;项目自定义色用 `TvColors.*`
 - Dark theme follows system preference via `isSystemInDarkTheme()`
 
 <!-- MANUAL: -->
