@@ -1,55 +1,192 @@
 # TVLink
 
 YunOS 电视/盒子的跨平台局域网控制客户端（Android + Windows 桌面）。
-基于对 `com.yunos.tvhelper` v5.2.2 的逆向分析（见 `docs/REPORT.md` 与 `docs/re/`），
-以原创代码重新实现其局域网协议栈与功能，**不包含**原 App 的任何代码、素材与商标。
 
-## 功能
+基于对 `com.yunos.tvhelper` v5.2.2 的逆向分析（见 [`docs/REPORT.md`](docs/REPORT.md) 与 [`docs/re/`](docs/re/)），以原创代码重新实现其局域网协议栈与功能。**不包含**原 App 的任何代码、素材与商标。
+
+---
+
+## 目录
+
+- [功能特性](#功能特性)
+- [环境要求](#环境要求)
+- [安装与构建](#安装与构建)
+- [使用方法](#使用方法)
+- [项目结构](#项目结构)
+- [协议要点](#协议要点)
+- [配置说明](#配置说明)
+- [免责声明与许可证](#免责声明与许可证)
+
+---
+
+## 功能特性
 
 | 功能 | Android | 桌面端 | 说明 |
-|---|---|---|---|
+|------|:-------:|:------:|------|
 | 设备发现 | ✅ | ✅ | mDNS（`_alitv_remote_control._tcp.local`）+ /24 子网 TCP 13511 遍历 |
 | 遥控（按键/触屏/手柄/方向盘） | ✅ | ✅ | IB 快速通道 TCP 3988 + IDC 回退（TCP 13510, OpCmd_Key） |
 | 体感遥控 | ✅ | — | 陀螺仪/加速度经 IB 通道发送 |
-| 远程文字输入 | ✅ | ✅ | 电视 IME 激活自动弹出（IDC 10600-10900） |
-| 本地投屏 | ✅ | ✅ | 手机/电脑内嵌 HTTP 服务（8192+，Range），电视回拉；控制通道 TCP 13520 |
+| 远程文字输入 | ✅ | ✅ | 电视 IME 激活自动弹出（IDC 10600–10900） |
+| 本地投屏 | ✅ | ✅ | 内嵌 HTTP 服务（8192+，Range），电视回拉；控制通道 TCP 13520 |
 | 电视截屏 | ✅ | ✅ | IDC Cmd 20900→21000，JPEG 回传保存 |
 | 应用管理 | ✅ | ✅ | 列表/打开/卸载/按 URL 推装（RPM over VConn） |
-| 语音指令 | ✅（系统语音识别） | ✅（文本输入） | 文本经 `asr_streaming` 转发，NLU 在电视端执行 |
+| 语音指令 | ✅ | ✅ | 系统语音识别（Android）/ 文本输入（桌面），经 `asr_streaming` 转发 |
 | 魔投 BLE 配网 | ✅ | — | MagicCast 扫描 + GATT 写入 SSID/密码 |
 
-## 构建
+---
+
+## 环境要求
+
+| 依赖 | 版本 |
+|------|------|
+| JDK | 17+ |
+| Kotlin | 2.1.20 |
+| Compose Multiplatform | 1.8.0 |
+| Gradle | 8.11.1（wrapper 自带） |
+| Android SDK | compileSdk 37（`local.properties` 指向） |
+| Android 设备 | API 21+（Android 5.0） |
+
+---
+
+## 安装与构建
+
+### 1. 克隆项目
 
 ```bash
-./gradlew :androidApp:assembleDebug     # Android APK
-./gradlew :desktopApp:run               # 桌面端运行
-./gradlew :shared:desktopTest           # 协议层单元测试
+git clone <repo-url> tvhelper3
+cd tvhelper3
 ```
 
-需要 JDK 17+、Android SDK（`local.properties` 指向）。
+### 2. 配置 Android SDK
 
-## 结构
+在项目根目录创建 `local.properties`（已 gitignore）：
 
-```
-shared/                 协议栈与共享 UI（Kotlin Multiplatform）
-  src/jvmCommonMain/    IDC/IB/投屏/mDNS/RPM 协议实现（两端 JVM 共用，java.net）
-  src/commonMain/       Compose UI（全部页面两端共享）
-  src/androidMain/      BLE 配网、系统语音识别、传感器、SAF 媒体选择
-  src/desktopMain/      AWT 文件对话框、截图保存
-androidApp/             Android 壳（权限、MulticastLock）
-desktopApp/             Compose Desktop 壳（Windows exe/msi）
-docs/REPORT.md          逆向分析总报告
-docs/re/01-06           分模块协议细节
+```properties
+sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 ```
 
-## 协议要点（逆向所得，用于互操作）
+> macOS 示例：`sdk.dir=/Users/<you>/Library/Android/sdk`
 
-- IDC 帧：16B 大端头（magic=130311 / key / packetId / totalLen）+ 包体；字符串与字节数组均为 4B 长度前缀
-- 登录后 connKey 作为后续包的 key；本客户端以 `encryption_algorithm_ver=0` 走明文会话（原协议支持的合法分支）
-- IB 帧：20B 头（magic=0x11223399 / size / type / reserve / checksum=(size+reserve)^helloId）+ 文本包体
-- 投屏控制：HTTP/1.1 风格文本，`yunos-session-id` 头，POST /setmedia|/play|/pause|/seek|/volume 等
+### 3. 构建
 
-## 免责声明
+```bash
+# Android APK
+./gradlew :androidApp:assembleDebug
 
-本项目仅用于学习协议与私人设备的互操作控制。与原 App 厂商无任何关联；
+# 桌面端运行（开发模式）
+./gradlew :desktopApp:run
+
+# 桌面端打包（Windows exe/msi）
+./gradlew :desktopApp:packageDistributionForCurrentOS
+```
+
+### 4. 运行测试
+
+```bash
+# 协议层单元测试
+./gradlew :shared:desktopTest
+```
+
+---
+
+## 使用方法
+
+### 连接电视
+
+1. 确保手机/电脑与电视在**同一局域网**
+2. 启动 App → 自动扫描（mDNS + 子网遍历）
+3. 点击发现的设备 → 连接
+
+> 也可手动输入电视 IP 地址连接。
+
+### 遥控
+
+连接后进入遥控页面：
+- **方向键 / OK / 返回 / 主页 / 菜单**：通过 IB 快速通道（低延迟）
+- **音量 / 频道**：同上
+- **文字输入**：电视激活 IME 后自动弹出输入框
+
+### 投屏
+
+1. 进入「投屏」页面
+2. 选择本地视频/音频/图片文件
+3. 点击播放 → 电视通过 HTTP 回拉媒体
+
+### 截屏
+
+进入「截屏」页面 → 点击「截取」→ JPEG 保存到本地。
+
+### 应用管理
+
+进入「应用」页面：查看已安装应用、打开、卸载、通过 APK URL 推装。
+
+---
+
+## 项目结构
+
+```
+tvhelper3/
+├── shared/                      # 协议栈 + 共享 UI（Kotlin Multiplatform 库）
+│   ├── src/commonMain/          #   平台无关代码（IB 键码常量）
+│   ├── src/jvmCommonMain/       #   JVM 共用：协议实现 + Compose UI
+│   │   └── kotlin/app/tvlink/
+│   │       ├── device/          #     设备服务层（Discovery, DeviceManager, RcController...）
+│   │       ├── proto/           #     协议实现
+│   │       │   ├── idc/         #       IDC 控制协议（TCP 13510）
+│   │       │   ├── ib/          #       IB 快速输入通道（TCP 3988）
+│   │       │   ├── cast/        #       投屏控制（TCP 13520）+ HTTP 媒体服务
+│   │       │   └── mdns/        #       mDNS 设备发现
+│   │       └── ui/              #     Compose UI（screens, theme, widgets）
+│   ├── src/androidMain/         #   Android actual（BLE 配网、传感器、语音、SAF）
+│   ├── src/desktopMain/         #   Desktop actual（AWT 对话框、截图保存）
+│   └── src/desktopTest/         #   单元测试
+├── androidApp/                  # Android 应用壳（权限、MulticastLock）
+├── desktopApp/                  # Compose Desktop 壳（Windows exe/msi）
+├── docs/                        # 逆向分析文档
+│   ├── REPORT.md                #   总报告
+│   └── re/                      #   分模块协议细节（01–06）
+└── AGENTS.md                    # AI 代理导航文档（层级结构）
+```
+
+---
+
+## 协议要点
+
+> 逆向所得，仅用于互操作。详见 [`docs/re/`](docs/re/)。
+
+| 协议 | 端口 | 帧格式 |
+|------|------|--------|
+| IDC | TCP 13510 | 16B 大端头（magic=130311 / key / packetId / totalLen）+ 包体 |
+| IB | TCP 3988 | 20B 头（magic=0x11223399 / size / type / reserve / checksum）+ 文本包体 |
+| 投屏控制 | TCP 13520 | HTTP/1.1 风格文本，`yunos-session-id` 头 |
+| 媒体服务 | TCP 8192+ | 标准 HTTP/1.1 + Range（电视回拉） |
+| mDNS | UDP 5353 | `_alitv_remote_control._tcp.local` 查询 |
+| DETECT | TCP 13511 | IDC 握手子集（设备发现用） |
+
+**关键细节：**
+
+- 字符串与字节数组均为 4B 长度前缀 + UTF-8
+- 登录后 `connKey` 作为后续帧的 key 字段
+- 本客户端以 `encryption_algorithm_ver=0` 走明文会话（原协议支持的合法分支）
+- IB checksum = `(size + reserve) ^ helloId`
+
+---
+
+## 配置说明
+
+| 文件 | 用途 | 是否入库 |
+|------|------|:--------:|
+| `local.properties` | Android SDK 路径 | ❌ gitignored |
+| `gradle.properties` | JVM 参数、Kotlin 代码风格 | ✅ |
+| `settings.gradle.kts` | 模块声明（shared / androidApp / desktopApp） | ✅ |
+
+> 本项目为纯局域网应用，**无云端配置、无账号系统、无 API Key**。
+
+---
+
+## 免责声明与许可证
+
+本项目仅用于学习协议与私人设备的互操作控制。与原 App 厂商无任何关联。
 云端业务（影视内容、账号、推送）依赖厂商闭源签名组件，不在本项目范围内。
+
+**私人学习用途，未开源许可。** 未经授权不得用于商业分发。
