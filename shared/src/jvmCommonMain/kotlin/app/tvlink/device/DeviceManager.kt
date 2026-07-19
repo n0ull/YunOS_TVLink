@@ -4,6 +4,7 @@ import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.LoginReq
+import app.tvlink.proto.idc.parseJsonObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -84,12 +85,15 @@ class DeviceManager {
             if (ok) {
                 connection = conn
                 val di = conn.deviceInfo
+                // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel falls back to DEFAULT_CAST_PORT)
+                val ddhPort = di?.ddhParams?.get("mediaprojection")
+                    ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
                 _connected.value = ConnectedDevice(
                     ip = ip,
                     name = di?.name ?: ip,
                     model = di?.model ?: "",
                     uuid = di?.uuid ?: "",
-                    projectionPort = discoveredProjectionPort,
+                    projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
                 )
                 _connState.value = ConnState.CONNECTED
             } else {

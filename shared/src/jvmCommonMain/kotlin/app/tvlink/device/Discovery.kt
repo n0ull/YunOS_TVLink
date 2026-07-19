@@ -3,8 +3,6 @@ package app.tvlink.device
 import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.mdns.Mdns
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
@@ -103,16 +101,14 @@ class Discovery {
                 if (ip == selfIp) continue
                 pool.execute {
                     if (!active(myEpoch)) return@execute
-                    if (probePort(ip, IdcConst.TCP_PORT_DETECT, 800)) {
-                        val conn = IdcConnection(ip, IdcConst.TCP_PORT_DETECT)
-                        try {
-                            val info = conn.detect(timeoutMs = 1200)
-                            if (info != null && active(myEpoch)) {
-                                report(FoundDevice(ip = ip, name = info.name, model = info.model, uuid = info.uuid, source = "scan"))
-                            }
-                        } finally {
-                            conn.shutdown()
+                    val conn = IdcConnection(ip, IdcConst.TCP_PORT_DETECT)
+                    try {
+                        val info = conn.detect(timeoutMs = 1200)
+                        if (info != null && active(myEpoch)) {
+                            report(FoundDevice(ip = ip, name = info.name, model = info.model, uuid = info.uuid, source = "scan"))
                         }
+                    } finally {
+                        conn.shutdown()
                     }
                 }
             }
@@ -122,9 +118,4 @@ class Discovery {
         }
     }
 
-    private fun probePort(ip: String, port: Int, timeoutMs: Int): Boolean = try {
-        Socket().use { it.connect(InetSocketAddress(ip, port), timeoutMs); true }
-    } catch (e: Exception) {
-        false
-    }
 }
