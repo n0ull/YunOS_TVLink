@@ -6,6 +6,9 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.util.Random
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * IB (InputBoost) fast input channel — TCP 3988, 20-byte big-endian header + text body.
@@ -33,6 +36,9 @@ class IbChannel(
     private var helloId = 0
     private val reserve = Random().nextInt()
     private val sendLock = Any()
+
+    @Volatile
+    private var sendExecutor: ExecutorService? = null
 
     @Volatile
     private var readerRunning = false
@@ -64,6 +70,7 @@ class IbChannel(
             val verStr = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"").find(body)?.groupValues?.get(1)
             serverVer = parseVer(verStr)
             sendFrame(IbConst.REQ_MODULEINFO, ByteArray(0))
+            sendExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "ib-send").apply { isDaemon = true } }
             setState(State.READY)
             startReader()
             startKeepalive()
@@ -118,12 +125,22 @@ class IbChannel(
         z: Int,
     ) = sendBody(IbConst.PROTO_GYRO_SENSOR, "[$x,$y,$z]")
 
+    /**
+     * Queue an event frame. Writes run on a single background thread (FIFO preserved) —
+     * socket IO on the Android main thread crashes with NetworkOnMainThreadException.
+     */
     private fun sendBody(
         type: Int,
         body: String,
     ) {
         if (state != State.READY) return
-        sendFrame(type, body.toByteArray(Charsets.UTF_8))
+        val ex = sendExecutor ?: return
+        val bytes = body.toByteArray(Charsets.UTF_8)
+        try {
+            ex.execute { sendFrame(type, bytes) }
+        } catch (_: RejectedExecutionException) {
+            // disconnected between the state check and execute — drop the event
+        }
     }
 
     private fun sendFrame(
@@ -241,6 +258,8 @@ class IbChannel(
     fun disconnect() {
         if (state == State.DISCONNECTED && socket == null) return
         readerRunning = false
+        sendExecutor?.shutdown()
+        sendExecutor = null
         keepaliveThread?.interrupt()
         try {
             dataIn?.close()

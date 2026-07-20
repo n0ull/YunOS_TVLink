@@ -4,7 +4,9 @@ import java.io.DataInputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -69,6 +71,9 @@ class IdcConnection(
     @Volatile
     private var connKey = IdcConst.UNASSIGNED_KEY
     private val sendLock = Any()
+
+    @Volatile
+    private var sendExecutor: ExecutorService? = null
     private var scheduler: ScheduledExecutorService? = null
     private var hbFuture: ScheduledFuture<*>? = null
     private val hbSeq = AtomicInteger(1)
@@ -84,6 +89,7 @@ class IdcConnection(
         if (state != State.DISCONNECTED) close()
         setState(State.CONNECTING)
         return try {
+            sendExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "idc-send").apply { isDaemon = true } }
             val s = Socket()
             s.connect(InetSocketAddress(host, port), timeoutMs)
             s.tcpNoDelay = true
@@ -157,10 +163,25 @@ class IdcConnection(
         }
     }
 
+    /**
+     * Queue a packet for sending. Writes run on a single background thread (FIFO preserved) —
+     * socket IO on the Android main thread crashes with NetworkOnMainThreadException.
+     */
     fun send(packet: IdcPacket) {
         if (state == State.DISCONNECTED) return
-        packet.key = connKey
-        sendRaw(packet)
+        val ex = sendExecutor ?: return
+        try {
+            ex.execute {
+                packet.key = connKey
+                try {
+                    sendRaw(packet)
+                } catch (e: Exception) {
+                    System.err.println("IdcConnection: send failed: ${e.message}")
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            // closed between the state check and execute — drop the packet
+        }
     }
 
     private fun sendRaw(packet: IdcPacket) {
@@ -288,6 +309,8 @@ class IdcConnection(
 
     fun close() {
         if (state == State.DISCONNECTED && socket == null && scheduler == null) return
+        sendExecutor?.shutdown()
+        sendExecutor = null
         hbFuture?.cancel(false)
         hbFuture = null
         scheduler?.shutdownNow()
