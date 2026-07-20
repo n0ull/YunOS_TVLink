@@ -178,7 +178,7 @@ tvhelper3/
 | 协议 | 端口 | 帧格式 |
 |------|------|--------|
 | IDC | TCP 13510 | 16B 大端头（magic=130311 / key / packetId / totalLen）+ 包体 |
-| IB | TCP 3988 | 20B 头（magic=0x11223399 / size / type / reserve / checksum）+ 文本包体 |
+| IB | TCP 3988 | 20B 头（magic=0x11228899 / size / type / reserve / checksum）+ 文本包体 |
 | 投屏控制 | TCP 13520 | HTTP/1.1 风格文本，`yunos-session-id` 头 |
 | 媒体服务 | TCP 8192+ | 标准 HTTP/1.1 + Range（电视回拉） |
 | mDNS | UDP 5353 | `_alitv_remote_control._tcp.local` 查询 |

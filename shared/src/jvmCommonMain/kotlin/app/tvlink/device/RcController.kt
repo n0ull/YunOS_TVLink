@@ -52,9 +52,19 @@ class RcController(
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }
 
-    fun keyClick(key: RcKey) {
+    /**
+     * Mirror of the original IbRc routing: the IB channel when READY (keys flagged needIb313
+     * additionally require server ver >= 313); callers fall back to IDC OpCmd_Key when this
+     * returns null and an Android keycode exists.
+     */
+    private fun ibFor(key: RcKey): IbChannel? {
         val chan = ib
-        if (chan != null && chan.state == IbChannel.State.READY && !key.needIb313) {
+        return chan?.takeIf { it.state == IbChannel.State.READY && (!key.needIb313 || it.serverVer >= 313) }
+    }
+
+    fun keyClick(key: RcKey) {
+        val chan = ibFor(key)
+        if (chan != null) {
             chan.keyClick(key)
         } else if (key.androidVal != 0) {
             deviceManager.connection?.send(OpCmdKey(key.androidVal, 0))
@@ -62,8 +72,8 @@ class RcController(
     }
 
     fun keyDown(key: RcKey) {
-        val chan = ib
-        if (chan != null && chan.state == IbChannel.State.READY && !key.needIb313) {
+        val chan = ibFor(key)
+        if (chan != null) {
             chan.keyEvent(key, true)
         } else if (key.androidVal != 0) {
             deviceManager.connection?.send(OpCmdKey(key.androidVal, 1))
@@ -71,8 +81,8 @@ class RcController(
     }
 
     fun keyUp(key: RcKey) {
-        val chan = ib
-        if (chan != null && chan.state == IbChannel.State.READY && !key.needIb313) {
+        val chan = ibFor(key)
+        if (chan != null) {
             chan.keyEvent(key, false)
         } else if (key.androidVal != 0) {
             deviceManager.connection?.send(OpCmdKey(key.androidVal, 2))

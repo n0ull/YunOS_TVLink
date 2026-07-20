@@ -25,7 +25,7 @@ threads.
 - **Always reference `docs/re/` before modifying frame formats or command codes**
 - All integers are big-endian unless documented otherwise
 - String/byte-array encoding: 4-byte length prefix + UTF-8 bytes
-- Magic numbers: IDC=130311, IB=0x11223399 — do not change
+- Magic numbers: IDC=130311, IB=0x11228899 — do not change
 - Reader threads invoke callbacks directly; never block the reader
 
 ### Testing Requirements

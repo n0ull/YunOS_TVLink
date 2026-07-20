@@ -28,7 +28,7 @@
 20 字节大端头 + body：
 
 ```
-[0]  int32 magicNum = 0x11223399 (287475865)
+[0]  int32 magicNum = 0x11228899 (287475865)
 [4]  int32 size      = body 长度
 [8]  int32 type      = 命令字
 [12] int32 reserve   = 随机数（连接期生成）
@@ -54,23 +54,26 @@
 
 ## 3. 键值映射表
 
-来源：`inputboost/api/IbPublic.java:91-128`（IbKey 枚举 `(ibVal, androidVal, needCheckIbVer)`）；UI 映射 `ui/rc/main/RcUtil.java:100-172`。ibVal 即 Linux input-event 键码。
+来源：`inputboost/api/IbPublic.java:91-128`（IbKey 枚举 `(ibVal, androidVal, needCheckIbVer)`）；UI 映射 `ui/rc/main/RcUtil.java:100-172`。ibVal 是 IB 线协议键码（普通键与 Linux input-event 码一致，手柄键来自混淆常量，见下表注）。
 
 | 按键 | IB 码 | Android 码 | 备注 |
 |---|---|---|---|
 | 上/下/左/右 | 103/108/105/106 | 19/20/21/22 | |
-| OK ENTER | 28 | 23 | |
-| 返回 ESC | 1 | 4 | |
-| 菜单 MENU | 139 | 82 | |
-| 主页 HOME | 172 | 3 | |
+| OK ENTER | 28 | 23 | 需 IB≥3.13 |
+| 返回 ESC | 1 | 4 | 需 IB≥3.13 |
+| 菜单 MENU | 139 | 82 | 需 IB≥3.13 |
+| 主页 HOME | 172 | 3 | 需 IB≥3.13 |
 | 电源 POWER | 116 | 26 | 需 IB≥3.13 |
-| 音量-/+ | 114/115 | 25/24 | |
-| 手柄 A/B/X/Y | 305/304/307/308 | 0 | 仅 IB 通道 |
-| LT/LB/RT/RB | 303/308/310/309 | 0 | 仅 IB；UI `rc_key_d` 也映射 LB |
-| SELECT/START | 296/306 | 0 | 仅 IB |
+| 音量-/+ | 114/115 | 25/24 | 需 IB≥3.13 |
+| 手柄 A/B/X/Y | 306/305/307/304 | 0 | 仅 IB 通道 |
+| LT/LB/RT/RB | 310/308/311/309 | 0 | 仅 IB；UI `rc_key_d` 也映射 LB |
+| SELECT/START | 296/312 | 0 | 仅 IB |
 | 魔键 MAGIC | 193 | 0 | 仅 IB |
 
-手柄键无 Android 码，IB 不可用时**不回退** IDC。LB/RB/SELECT 码值与标准 Linux（BTN_TL2=310 等）有出入，**标注不确定，需抓包验证**。
+手柄键无 Android 码，IB 不可用时**不回退** IDC。手柄键码取自 `IbKey` 引用的 `SecExceptionCode`
+混淆常量（A=306/B=305/LT=310/RT=311/START=312，已在 `SecExceptionCode.java` 还原），
+**不是**标准 Linux input-event 码；与 Python 工具真机实测值一致。"需 IB≥3.13"对应
+`IbKey.mNeedCheckIbVer`：不足版本时原 App 对这些键回退 IDC OpCmd_Key。
 
 ## 4. 触摸板 / 摇杆 / 体感协议
 

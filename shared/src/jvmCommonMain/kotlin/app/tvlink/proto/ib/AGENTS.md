@@ -24,7 +24,7 @@ data. Preferred over IDC for input due to lower overhead. Falls back to IDC OpCm
 
 ### Working In This Directory
 
-- **Frame format**: 20-byte header (magic=0x11223399, size, type, reserve, checksum= (size+reserve)^helloId) + text body
+- **Frame format**: 20-byte header (magic=0x11228899, size, type, reserve, checksum= (size+reserve)^helloId) + text body
 - Checksum depends on `helloId` received during handshake — store it after connect
 - Key codes in `RcKey` (commonMain) — see `docs/re/02-remote-control.md` for full list
 - `tcpNoDelay = true` is critical for input latency
