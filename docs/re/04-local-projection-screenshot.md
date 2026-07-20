@@ -92,8 +92,8 @@ POST /event?state=<prepared|playing|paused|loading|stopped|completed|error|occup
 
 走 **IDC 命令通道**（二进制私有 packet，与遥控器同链路），非投屏 HTTP-like 通道：
 
-1. `ui/screenshot/fragment/ScreenShotFragment.java:332-341`：发 `IdcPacket_Cmd_ScreenShot_Req`（packet id **20900**），参数 JSON `{"resize_ratio":0,"resize_w":1280,"resize_h":720,"compress_quality":90}`。
-2. 电视截屏→缩放 1280x720→JPEG q90，回 `IdcPacket_Cmd_ScreenShot_Resp`（id **21000**），字节在 `mImgData`。
+1. `ui/screenshot/fragment/ScreenShotFragment.java:332-341`：发 `IdcPacket_Cmd_ScreenShot_Req`（packet id **20900**）。Cmd 类包 body 为**两段 LPString**：`LPString({"cmdReqID":N})`（`IdcPacket_CmdReqBase.param_encode`）+ `LPString({"resize_ratio":0,"resize_w":1280,"resize_h":720,"compress_quality":90})`。
+2. 电视截屏→缩放 1280x720→JPEG q90，回 `IdcPacket_Cmd_ScreenShot_Resp`（id **21000**），body = `LPString({"cmdReqID":N})` + `LPString({"dummy":0})` + `LPBytes(jpeg)`，字节在 `mImgData`。
 3. 保存 `DCIM/TV_SCREEN*/<时间戳>.jpg`（`ui/screenshot/util/PhotoSaveUtil.java:17,35`），触发媒体扫描。
 4. 单击 1 张；长按连拍 300ms/帧，上限 `SCREENSHOT_MAX_NUM`；电视版本 ≥ `SCREENSHOT_RCS_VER` 才可用。
 

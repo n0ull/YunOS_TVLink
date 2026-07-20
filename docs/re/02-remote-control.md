@@ -103,7 +103,7 @@
 3. **完成**：发 `Ime_Action`(ID **10900**, actionId=-1) 关页面。
 4. 收到 `Ime_FinishInput`(**10700**) 或 IDC 断开 → 关闭。
 
-IDC 帧（`ali_tvidclib/packet/BaseIdcPacket.java`）：16 字节大端头 `[magic=130311(0x1FC47)][key][packetID][length]` + 参数体；key>0 时 body 加密（算法在 idc lib，未展开）。按键回退包 `OpCmd_Key`(ID **10500**)：`int keyCode(Android码) + int op(0=click,1=down,2=up)`，App 只用 click。
+IDC 帧（`ali_tvidclib/packet/BaseIdcPacket.java`）：16 字节大端头 `[magic=130311(0x1FD07)][key][packetID][length]` + 参数体；key>0 时 body 加密（算法在 idc lib，未展开）。按键回退包 `OpCmd_Key`(ID **10500**)：`int keyCode(Android码) + int op(0=click,1=down,2=up)`，App 只用 click。**注意：该 IDC 回退路径在 2026-07-15 真机实测中未命中（疑旧版/未启用），按键主通道是 IB 3988。**
 
 ## 6. 语音输入 ASR
 
