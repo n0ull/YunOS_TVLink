@@ -12,8 +12,8 @@ screens, theme, and platform-abstracted widgets.
 
 | File              | Description                                                                       |
 |-------------------|-----------------------------------------------------------------------------------|
-| `App.kt`          | Root `@Composable` — navigation host, provides AppViewModel                       |
-| `AppViewModel.kt` | Central state: connection lifecycle, navigation, delegates to all device services |
+| `App.kt`          | Root `@Composable` — 导航宿主 + `BackHandler`(非 DevicePicker 屏拦截系统返回键),提供 AppViewModel |
+| `AppViewModel.kt` | Central state: 连接生命周期/导航/服务代理; 暴露 `connectedIbVer`/`connectedIbSid`(IB 探测诊断信息) |
 
 ## Subdirectories
 
@@ -31,6 +31,8 @@ screens, theme, and platform-abstracted widgets.
 - Navigation: `sealed interface Screen` + `var screen by mutableStateOf(...)`
 - Platform-specific UI needs `expect`/`actual` in `widgets/Platform.kt`
 - All screens are in `jvmCommonMain` — both platforms render identical UI
+- **BackHandler**: `App()` 调用 `BackHandler(enabled = screen != DevicePicker) { vm.navBack() }`,统一处理 Android 系统返回键
+- **IB 诊断信息**: `AppViewModel.connectedIbVer`/`connectedIbSid` 来自 3988 探测响应,供 SettingsScreen 展示
 
 ### Common Patterns
 

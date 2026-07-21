@@ -63,6 +63,8 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 - **Socket writes never run on the caller thread** (Android kills with NetworkOnMainThreadException) — `IdcConnection.send`/`IbChannel.sendBody` queue onto per-connection single-thread executors (`idc-send`/`ib-send`, FIFO preserved)
 - UI state via Compose `mutableStateOf` / `StateFlow` in ViewModels; updates use `Dispatchers.Default` (thread-safe snapshot state)
 - VConn callbacks: `CopyOnWriteArrayList` multicast in DeviceManager (services add/remove listeners)
+- **VConn 自动打开**: service 通过 `onModuleAvailability` 感知 module 上线后主动 `openVConn()`,打破 moduleId 死锁
+- **BackHandler**: `expect/actual` 跨平台抽象,Android 接 `androidx.activity.compose.BackHandler`,桌面空实现
 - Lifecycle: `AppViewModel.onCleared()` → `DeviceManager.destroy()` → `IdcConnection.close()` chain
 - Frame formats: big-endian, length-prefixed; see `docs/re/` for byte layouts
 - JSON parsing: `parseJsonObject()` returns `FlatJson` facade over kotlinx.serialization `JsonObject`

@@ -12,7 +12,7 @@ implementations in `androidMain` and `desktopMain`.
 
 | File                | Description                                                                   |
 |---------------------|-------------------------------------------------------------------------------|
-| `Platform.kt`       | `expect` declarations: file picker, image save, motion sensor, voice input    |
+| `Platform.kt`       | `expect` declarations: file picker, image save, motion sensor, voice input, **BackHandler**(跨平台系统返回键) |
 | `PlatformImage.kt`  | `expect` composable for platform-native image display (bitmap handling)       |
 | `PlatformPicker.kt` | `expect` composable for file/media selection (SAF on Android, AWT on Desktop) |
 
@@ -24,6 +24,7 @@ implementations in `androidMain` and `desktopMain`.
 - Keep `expect` signatures minimal — platform details stay in `actual` implementations
 - Android actuals: `shared/src/androidMain/.../ui/widgets/`
 - Desktop actuals: `shared/src/desktopMain/.../ui/widgets/`
+- **BackHandler**: `expect fun BackHandler(enabled, onBack)` — Android actual 接 `androidx.activity.compose.BackHandler`,桌面空实现; 由 `App()` 统一调用拦截系统返回键
 
 ### Common Patterns
 
