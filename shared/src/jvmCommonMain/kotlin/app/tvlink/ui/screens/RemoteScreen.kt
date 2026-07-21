@@ -50,7 +50,7 @@ private enum class RcMode(
     val ibMode: Int,
 ) {
     KEYPAD("按键", IbConst.CHANGETYPE_DEFAULT),
-    TOUCHPAD("触屏", IbConst.CHANGETYPE_DEFAULT),
+    TOUCHPAD("触控板", IbConst.CHANGETYPE_DEFAULT),
     JOYSTICK("手柄", IbConst.CHANGETYPE_JOYSTICK),
     WHEEL("方向盘", IbConst.CHANGETYPE_DEFAULT),
     MOTION("体感", IbConst.CHANGETYPE_MOTIONPAD),

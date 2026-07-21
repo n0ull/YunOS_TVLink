@@ -27,6 +27,7 @@ class CastController(
         val position: Long = 0,
         val volume: Int = 0,
         val rate: Float = 1f,
+        val state: String = "",
     )
 
     @Volatile
@@ -74,11 +75,11 @@ class CastController(
         return request("POST", "/setmedia", body, extraHeaders = mapOf("yunos-mediatype" to type))
     }
 
-    fun play() = request("POST", "/play")
+    fun play() = request("POST", "/play").also { if (it) startPolling() }
 
     fun pause() = request("POST", "/pause")
 
-    fun stop() = request("POST", "/stop")
+    fun stop() = request("POST", "/stop").also { if (it) stopPolling() }
 
     fun seek(ms: Long) = request("POST", "/seek?value=$ms")
 
@@ -100,7 +101,7 @@ class CastController(
         val j = resp.second
 
         fun num(k: String) =
-            Regex("\"$k\"\\s*:\\s*\"?(\\d+)\"?")
+            Regex("\"$k\"\\s*:\\s*\"?(-?\\d+)\"?")
                 .find(j)
                 ?.groupValues
                 ?.get(1)
@@ -118,6 +119,7 @@ class CastController(
                     ?.groupValues
                     ?.get(1)
                     ?.toFloatOrNull() ?: 1f,
+            state = str("state"),
         )
     }
 
@@ -131,49 +133,54 @@ class CastController(
         return resp != null && resp.first.startsWith("200")
     }
 
+    /** Serializes request/response cycles so the poller and UI actions can't cross answers. */
+    private val reqLock = Any()
+
     /** Returns (statusCode, body) or null on IO error. */
     private fun requestRaw(
         method: String,
         uri: String,
         body: String?,
         extraHeaders: Map<String, String> = emptyMap(),
-    ): Pair<String, String>? {
-        val o = out ?: return null
-        val bodyBytes = body?.toByteArray(Charsets.UTF_8) ?: ByteArray(0)
-        val sb = StringBuilder()
-        sb
-            .append(method)
-            .append(' ')
-            .append(uri)
-            .append(" HTTP/1.1\r\n")
-        sb.append("yunos-session-id: ").append(sessionId).append("\r\n")
-        for ((k, v) in extraHeaders) {
+    ): Pair<String, String>? =
+        synchronized(reqLock) {
+            val o = out ?: return null
+            val bodyBytes = body?.toByteArray(Charsets.UTF_8) ?: ByteArray(0)
+            val sb = StringBuilder()
             sb
-                .append(k)
-                .append(": ")
-                .append(v)
-                .append("\r\n")
-        }
-        sb.append("Content-Length: ").append(bodyBytes.size).append("\r\n\r\n")
-        // Arm BEFORE writing so the reader thread can never discard our response (H2 fix).
-        respQueue.clear()
-        waitingResp = true
-        val resp =
-            try {
-                synchronized(sendLock) {
-                    o.write(sb.toString().toByteArray(Charsets.UTF_8))
-                    if (bodyBytes.isNotEmpty()) o.write(bodyBytes)
-                    o.flush()
-                }
-                respQueue.poll(10, TimeUnit.SECONDS)
-            } catch (e: Exception) {
-                System.err.println("CastController: request failed: ${e.message}")
-                null
-            } finally {
-                waitingResp = false
+                .append(method)
+                .append(' ')
+                .append(uri)
+                .append(" HTTP/1.1\r\n")
+            sb.append("yunos-device-id: tvlink\r\n")
+            sb.append("yunos-session-id: ").append(sessionId).append("\r\n")
+            for ((k, v) in extraHeaders) {
+                sb
+                    .append(k)
+                    .append(": ")
+                    .append(v)
+                    .append("\r\n")
             }
-        return resp
-    }
+            sb.append("Content-Length: ").append(bodyBytes.size).append("\r\n\r\n")
+            // Arm BEFORE writing so the reader thread can never discard our response (H2 fix).
+            respQueue.clear()
+            waitingResp = true
+            val resp =
+                try {
+                    synchronized(sendLock) {
+                        o.write(sb.toString().toByteArray(Charsets.UTF_8))
+                        if (bodyBytes.isNotEmpty()) o.write(bodyBytes)
+                        o.flush()
+                    }
+                    respQueue.poll(10, TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    System.err.println("CastController: request failed: ${e.message}")
+                    null
+                } finally {
+                    waitingResp = false
+                }
+            return@synchronized resp
+        }
 
     private val respQueue = ArrayBlockingQueue<Pair<String, String>>(1)
 
@@ -298,12 +305,52 @@ class CastController(
         }
     }
 
+    @Volatile
+    private var poller: Thread? = null
+
+    /**
+     * The tested TV firmware (server_vers 3.2.0) never pushes POST /event — playback
+     * state/duration/position come from polling GET /playback-info (~1/s while playing).
+     */
+    private fun startPolling() {
+        if (poller?.isAlive == true) return
+        poller =
+            Thread(
+                {
+                    while (state == State.CONNECTED) {
+                        playbackInfo()?.let { info ->
+                            onEvent?.invoke(
+                                playStateByName[info.state] ?: PlayState.UNKNOWN,
+                                info.duration,
+                                info.position,
+                            )
+                        }
+                        try {
+                            Thread.sleep(1000)
+                        } catch (_: InterruptedException) {
+                            return@Thread
+                        }
+                    }
+                },
+                "cast-poll",
+            ).apply {
+                isDaemon = true
+                start()
+            }
+    }
+
+    private fun stopPolling() {
+        poller?.interrupt()
+        poller = null
+    }
+
     private fun setState(s: State) {
         state = s
         onStateChanged?.invoke(s)
     }
 
     fun disconnect() {
+        stopPolling()
         try {
             socket?.close()
         } catch (_: Exception) {
