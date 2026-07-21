@@ -11,6 +11,9 @@
 - IB `ver=3.29`(≥3.13 → needIb313 键走 IB 通道);IB 魔数修正后握手成功
 - IDC `mVer=2121108324`(≥2100200600 → LaunchSth 可用 activity_new)
 - **截图无加密成功**(229090 字节 JPEG)——加密墙不成立
+- **投屏:TV 不推 POST /event**(server_vers 3.2.0),播放状态/时长/进度靠轮询
+  `GET /playback-info`(自带 state 字段;未知时长报 `duration:-1`)——`4679231` 已改为
+  play() 后 1s 轮询,真机复测总时长/进度均正常
 - 本 PC mDNS 套接字创建失败(WinError 10065)→ 子网扫描兜底是必需路径,非可选项
 
 ## 待真机验证
@@ -57,7 +60,8 @@ tvhelper 工具扫 3988 更强,能拿设备名);但若某型号 TV 不监听 135
 
 Python 实测可用:`PUT /image`,头 `yunos-assetkey: <id>` + `yunos-assetaction:
 cacheOnly|displayCached`(可空),body 为 JPEG 字节。TV 直收,无需手机起 HTTP 服务。
-本项目现走 `/setmedia` + 内嵌 `MediaHttpServer`。
+本项目现走 `/setmedia` + 内嵌 `MediaHttpServer`——视频投屏真机已验证(2026-07-21,
+含轮询进度)。图片投屏未单独验证。
 
 - [ ] 若真机图片投屏失败,改为 `PUT /image` 直传
 
