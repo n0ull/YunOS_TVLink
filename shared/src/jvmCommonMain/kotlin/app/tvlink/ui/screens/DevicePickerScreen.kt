@@ -92,12 +92,18 @@ fun DevicePickerScreen(vm: AppViewModel) {
                         ) { Text("TV", color = androidx.compose.ui.graphics.Color.White) }
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(d.name.ifEmpty { "未命名设备" }, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                d.name.ifEmpty {
+                                    if (d.source == "ib-scan") "电视 (IB 通道)" else "未命名设备"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                             Text(
                                 listOfNotNull(
                                     d.ip,
                                     d.model.takeIf { it.isNotEmpty() },
                                     d.mac.takeIf { it.isNotEmpty() },
+                                    d.ibVer.takeIf { it.isNotEmpty() }?.let { "IB v$it" },
                                 ).joinToString("  ·  "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TvColors.TextSecondary,

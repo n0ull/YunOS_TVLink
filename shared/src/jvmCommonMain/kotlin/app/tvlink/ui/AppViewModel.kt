@@ -74,6 +74,7 @@ class AppViewModel : ViewModel() {
     var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
     var connectedName by mutableStateOf("")
     var connectedIp by mutableStateOf("")
+    var connectedIbVer by mutableStateOf("")
     val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
 
     // ---- IME (remote text input) ----
@@ -106,10 +107,12 @@ class AppViewModel : ViewModel() {
                     val c = deviceManager.connected.value
                     connectedName = c?.name ?: ""
                     connectedIp = c?.ip ?: ""
+                    connectedIbVer = c?.ibVer ?: ""
                     onConnected()
                     screen = Screen.Home
                 } else if (s == DeviceManager.ConnState.IDLE) {
                     connectedName = ""
+                    connectedIbVer = ""
                     cast?.disconnect()
                     cast = null
                     mediaServer.stop()

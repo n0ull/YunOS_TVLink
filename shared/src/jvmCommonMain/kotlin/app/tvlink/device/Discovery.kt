@@ -23,6 +23,8 @@ class Discovery {
         val uuid: String = "",
         val projectionPort: Int = 0,
         val source: String = "",
+        /** IB 服务器版本(如 "3.29"),由 3988 探测响应 body 解析;IDC/mDNS 探测不产出。 */
+        val ibVer: String = "",
     )
 
     var onDeviceFound: ((FoundDevice) -> Unit)? = null
@@ -99,6 +101,7 @@ class Discovery {
                         model = d.model.ifEmpty { existing.model },
                         uuid = d.uuid.ifEmpty { existing.uuid },
                         projectionPort = if (d.projectionPort != 0) d.projectionPort else existing.projectionPort,
+                        ibVer = d.ibVer.ifEmpty { existing.ibVer },
                     )
                 }
             }!!
@@ -237,17 +240,29 @@ class Discovery {
             socket.getOutputStream().write(hello.array())
             socket.getOutputStream().flush()
             val header = ByteArray(20)
-            java.io.DataInputStream(socket.getInputStream()).readFully(header)
+            val dataIn = java.io.DataInputStream(socket.getInputStream())
+            dataIn.readFully(header)
             val rsp = ByteBuffer.wrap(header)
             val magic = rsp.int
             val size = rsp.int
             val type = rsp.int
             if (magic == IbConst.MAGIC &&
-                size >= 0 &&
+                size in 0..1024 &&
                 type == (IbConst.RSP_MASK or IbConst.REQ_HELLO) &&
                 active(myEpoch)
             ) {
-                report(FoundDevice(ip = ip, source = "ib-scan"))
+                // 读取响应 body 并提取 IB 服务器版本(如 "3.29"),用于 UI 诊断展示。
+                var ibVer = ""
+                if (size > 0) {
+                    val body = ByteArray(size)
+                    dataIn.readFully(body)
+                    ibVer = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"")
+                        .find(String(body, Charsets.UTF_8))
+                        ?.groupValues
+                        ?.get(1)
+                        ?: ""
+                }
+                report(FoundDevice(ip = ip, source = "ib-scan", ibVer = ibVer))
             }
         } catch (_: Exception) {
             // 连接拒绝/超时/IO 错误 -> 该 host 无 IB 通道,静默跳过
