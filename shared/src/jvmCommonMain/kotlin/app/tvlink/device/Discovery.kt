@@ -1,8 +1,10 @@
 package app.tvlink.device
 
+import app.tvlink.proto.ib.IbConst
 import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.mdns.Mdns
+import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -156,7 +158,38 @@ class Discovery {
         }
     }
 
+    /**
+     * 对单个 host 并行探测 IDC(13511) 与 IB(3988)。某型号 TV 不监听 13511 时会漏扫,
+     * 此时 IB 通道仍开放,可作为兜底发现路径。report() 按 IP 合并,双通时 IDC 的
+     * name/model/uuid 信息更丰富,IB 仅补 source 标签。
+     */
     private fun probeHost(
+        ip: String,
+        myEpoch: Int,
+    ) {
+        if (!active(myEpoch)) return
+        // 线程池是整轮扫描的瓶颈,而非单 host 探测;并行发起避免串行叠加超时。
+        val tIdc =
+            Thread({ probeIdc(ip, myEpoch) }, "disc-idc-$ip").apply {
+                isDaemon = true
+                start()
+            }
+        val tIb =
+            Thread({ probeIb(ip, myEpoch) }, "disc-ib-$ip").apply {
+                isDaemon = true
+                start()
+            }
+        try {
+            tIdc.join(1500)
+        } catch (_: InterruptedException) {
+        }
+        try {
+            tIb.join(1500)
+        } catch (_: InterruptedException) {
+        }
+    }
+
+    private fun probeIdc(
         ip: String,
         myEpoch: Int,
     ) {
@@ -177,6 +210,52 @@ class Discovery {
             }
         } finally {
             conn.shutdown()
+        }
+    }
+
+    /**
+     * 轻量 IB 探测:raw socket 发 hello 帧,校验 response magic + type。
+     * 不引入 IbChannel 整套(reader/keepalive 线程),仅做存在性探测。
+     */
+    private fun probeIb(
+        ip: String,
+        myEpoch: Int,
+    ) {
+        if (!active(myEpoch)) return
+        val socket = java.net.Socket()
+        try {
+            socket.connect(java.net.InetSocketAddress(ip, IbConst.PORT), 1200)
+            socket.tcpNoDelay = true
+            socket.soTimeout = 1200
+            val reserve = java.util.Random().nextInt()
+            val hello = ByteBuffer.allocate(20)
+            hello.putInt(IbConst.MAGIC)
+            hello.putInt(0) // body size
+            hello.putInt(IbConst.REQ_HELLO)
+            hello.putInt(reserve)
+            hello.putInt(reserve) // checksum = (size + reserve) ^ helloId; helloId unknown pre-handshake -> reserve
+            socket.getOutputStream().write(hello.array())
+            socket.getOutputStream().flush()
+            val header = ByteArray(20)
+            java.io.DataInputStream(socket.getInputStream()).readFully(header)
+            val rsp = ByteBuffer.wrap(header)
+            val magic = rsp.int
+            val size = rsp.int
+            val type = rsp.int
+            if (magic == IbConst.MAGIC &&
+                size >= 0 &&
+                type == (IbConst.RSP_MASK or IbConst.REQ_HELLO) &&
+                active(myEpoch)
+            ) {
+                report(FoundDevice(ip = ip, source = "ib-scan"))
+            }
+        } catch (_: Exception) {
+            // 连接拒绝/超时/IO 错误 -> 该 host 无 IB 通道,静默跳过
+        } finally {
+            try {
+                socket.close()
+            } catch (_: Exception) {
+            }
         }
     }
 }
