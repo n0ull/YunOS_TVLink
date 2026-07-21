@@ -60,6 +60,12 @@ class IdcConnection(
     var onStateChanged: ((State) -> Unit)? = null
     var onModulesChanged: (() -> Unit)? = null
 
+    /**
+     * 单个 module 的在线状态变化。[online]=true 表示上线(含模块 ID 与名称),
+     * =false 表示下线([moduleId] 此时无意义)。
+     */
+    var onModuleChanged: ((moduleId: Int, name: String, online: Boolean) -> Unit)? = null
+
     /** unmatched packets: IME events, screenshot resp, dev-name updates */
     var onPacket: ((IdcPacket) -> Unit)? = null
     var onVConnData: ((moduleId: Int, payload: ByteArray) -> Unit)? = null
@@ -265,6 +271,7 @@ class IdcConnection(
                     modules.remove(p.moduleId)
                 }
                 onModulesChanged?.invoke()
+                onModuleChanged?.invoke(p.moduleId, p.moduleName, p.online)
             }
 
             is VConnSyn -> { // TV-initiated vconn: accept implicitly

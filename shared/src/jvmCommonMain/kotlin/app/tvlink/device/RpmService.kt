@@ -33,6 +33,14 @@ class RpmService(
     var onOpResult: ((op: String, packageName: String, errorCode: Int) -> Unit)? = null
 
     private val requestId = AtomicInteger(1)
+    private var moduleId: Int? = null
+    private var vconnOpen = false
+
+    /**
+     * 挂起的请求:VConn 打开后补发。仅缓存最近一次(列表刷新优先级最高)。
+     * null 表示无挂起请求。
+     */
+    private var pendingRequest: Pair<Int, String>? = null
 
     companion object {
         const val MODULE_NAME = "com.yunos.tv.appstore"
@@ -58,18 +66,48 @@ class RpmService(
 
     private val vConnListener: (Int, ByteArray) -> Unit = { _, payload -> handle(payload) }
 
-    /** Register for VConn data. Idempotent — safe to call on every connect. */
+    /**
+     * 注册 VConn 数据监听 + module 在线状态回调。module 上线时主动 openVConn 并补发挂起请求。
+     * 幂等——每次连接都可安全调用。
+     */
     fun attach() {
         deviceManager.removeVConnListener(vConnListener)
         deviceManager.addVConnListener(vConnListener)
+        deviceManager.onModuleAvailability = { name, mid, online ->
+            if (name == MODULE_NAME) {
+                if (online) {
+                    moduleId = mid
+                    if (!vconnOpen) {
+                        vconnOpen = true
+                        deviceManager.connection?.openVConn(mid)
+                        pendingRequest?.let { (packetId, json) ->
+                            pendingRequest = null
+                            sendData(packetId, json)
+                        }
+                    }
+                } else {
+                    moduleId = null
+                    vconnOpen = false
+                }
+            }
+        }
     }
 
-    /** Unregister from VConn data. */
+    /** 注销 VConn 数据监听与 module 回调,清理状态。 */
     fun detach() {
         deviceManager.removeVConnListener(vConnListener)
+        deviceManager.onModuleAvailability = null
+        moduleId = null
+        vconnOpen = false
+        pendingRequest = null
     }
 
-    fun getAppList(pageSize: Int = 100) = send(ID_GETLIST_REQ, """{"pageSize":$pageSize}""")
+    fun getAppList(pageSize: Int = 100) {
+        if (!send(ID_GETLIST_REQ, """{"pageSize":$pageSize}""")) {
+            // module 未就绪(VConn 未打开)——缓存请求,待 VConn 打开后补发。
+            pendingRequest = ID_GETLIST_REQ to """{"pageSize":$pageSize}"""
+        }
+    }
 
     fun getSystemInfo() = send(ID_GET_SYSTEMINFO, "{}")
 
@@ -109,11 +147,24 @@ class RpmService(
 
     fun cancelInstall(packageName: String) = send(ID_INSTALL_CANCEL, """{"packageName":"${jsonEscape(packageName)}"}""")
 
+    /**
+     * 发送请求。module 就绪(VConn 已打开)时立即发送返回 true;
+     * 未就绪时缓存请求并返回 false(待 VConn 打开后补发)。
+     */
     private fun send(
         packetId: Int,
         json: String,
+    ): Boolean {
+        val mid = moduleId ?: return false
+        sendData(packetId, json)
+        return true
+    }
+
+    private fun sendData(
+        packetId: Int,
+        json: String,
     ) {
-        val mid = deviceManager.moduleId(MODULE_NAME) ?: return
+        val mid = moduleId ?: return
         val body = json.toByteArray(Charsets.UTF_8)
         val buf = ByteBuffer.allocate(8 + body.size)
         buf.putInt(packetId)

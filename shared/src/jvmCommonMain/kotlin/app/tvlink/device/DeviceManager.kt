@@ -50,6 +50,12 @@ class DeviceManager {
     var onPacket: ((IdcPacket) -> Unit)? = null
     private val vConnListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, ByteArray) -> Unit>()
 
+    /**
+     * 指定 module 的在线状态变化回调。service 据此打开 VConn 并补发挂起的请求。
+     * [moduleId] 模块 ID(来自 ModuleAvailability 包 body),[online] 是否上线。
+     */
+    var onModuleAvailability: ((name: String, moduleId: Int, online: Boolean) -> Unit)? = null
+
     fun addVConnListener(l: (Int, ByteArray) -> Unit) {
         vConnListeners.add(l)
     }
@@ -137,6 +143,9 @@ class DeviceManager {
         }
         conn.onModulesChanged = {
             _modules.value = conn.modules.values.toList()
+        }
+        conn.onModuleChanged = { moduleId, name, online ->
+            onModuleAvailability?.invoke(name, moduleId, online)
         }
         conn.onPacket = { p -> onPacket?.invoke(p) }
         conn.onVConnData = { mid, payload -> vConnListeners.forEach { it(mid, payload) } }
