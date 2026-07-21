@@ -5,48 +5,44 @@
 遥控器的 Python 版)的交叉提取,均经 jadx 反编译复核。已落地的修正见 `a116245`
 (IB 魔数/手柄键码/路由)、`547a8bd`(截图 Cmd 帧格式)。以下为本项目待办。
 
+## 真机档案(2026-07-20 探针实测,TV 192.168.1.109)
+
+- 端口:13510/13511/3988/13521 开放;13520 关闭(投屏走 ddh 下发的 13521)
+- IB `ver=3.29`(≥3.13 → needIb313 键走 IB 通道);IB 魔数修正后握手成功
+- IDC `mVer=2121108324`(≥2100200600 → LaunchSth 可用 activity_new)
+- **截图无加密成功**(229090 字节 JPEG)——加密墙不成立
+- 本 PC mDNS 套接字创建失败(WinError 10065)→ 子网扫描兜底是必需路径,非可选项
+
 ## 待真机验证
 
-### 0. IDC OpCmd_Key 兜底路径有效性 — 高优先
+### 0. IDC OpCmd_Key 兜底路径有效性 — ✅ 已验证有效(2026-07-20)
 
 反编译事实:`OpCmd_Key`(10500)在 App 端**确实接线**——唯一发送点 `IbRc.java:71`(IB 不可用
 且有 Android 键码时回退,op=keyClick);编码 `int keyCode + int op.ordinal`(click=0/down=1/up=2)
 与本项目 `OpCmdKey` 一致。`OpCmd_Multitouch`(11200)/`OpCmd_MouseClick`(10400)手机端
-**无发送方**(仅 `IdcPacketFactory` 注册用于解码),纯预留。tvhelper2 真机实测(2026-07-15)
-该回退**未命中**——TV 端是否执行无法从手机 APK 证实,只能真机验证。
+**无发送方**(仅 `IdcPacketFactory` 注册用于解码),纯预留。
 
-- [ ] 真机验证:IB 未连接(或老固件 <313 的 needIb313 键)时按键是否有效
-- [ ] 若无效:UI 暴露"IB 未连接"状态(IB READY 指示),而非静默回退
+2026-07-20 探针:以正确 connKey 连发 3 次 `OpCmd_Key(VOL_UP=24, op=keyClick)`,
+**电视音量 OSD 出现**——兜底路径在此 TV 上有效,`RcController` 的静默回退是真实可用的
+(IB 掉线时按键仍可达)。tvhelper2 的「未命中」结论同样系错误 key(UNASSIGNED)所致。
 
 ## 已知限制
 
-### 1. 截图:帧格式已修,待真机重测(「加密墙」未证实)— 高优先
+### 1. 截图 — ✅ 已解决(2026-07-20 真机验证通过)
 
-反编译事实:无加密登录后 `mSecretKey=null`,Cmd 包结构上**可未加密发送**
-(`IdcConnection.doSend` → `BaseIdcPacket.encode(null)`,ali_tvidclib);登录后每包盖章
-connKey(`sendPacket`),收端 key 不匹配即拒。tvhelper 的「截屏→TV 断连 ⇒ 需加密通道」
-结论**被 idc.py 自身 bug 污染,不成立**:
+无加密 IDC + 正确 connKey + 正确帧格式,真机截屏成功(229090 字节 JPEG,192.168.1.109)。
+「加密墙」不成立——tvhelper idc.py 的断连实验系其自身三处 bug 所致(UNASSIGNED key、
+conn_key 读错偏移、Cmd body 缺 `LPString({"cmdReqID":N})` 前缀段)。本项目帧格式已于
+`547a8bd` 修正。剩余工作:
 
-1. 截屏 header 用了 UNASSIGNED_KEY 而非 connKey(idc.py:162)
-2. conn_key 读错偏移(extra[:4] 是 mVer,真值在 [4:8],idc.py:110)
-3. Cmd body 应为两段 LPString(`LPString({"cmdReqID":N})` + `LPString({参数})`,
-   IdcPacket_CmdReqBase.param_encode),idc.py 合并成一段
-
-本项目曾犯同样的格式错误(Req 缺 cmdReqID 前缀段;Resp 解析会把帧字节混进 JPEG),
-已修正并加帧格式测试。下一步:
-
-- [ ] 真机重测截图(正确 connKey + 正确帧格式 + 无加密)——可能直接可用
-- [ ] 若仍断连才坐实加密墙,再走 frida(`extract_idc_key.js` hook
-      `IdcEncryptionHelper.getAesSecret`)或 ADB `screencap` 兜底
+- [ ] App 内验证:`ScreenshotService` 走真机截图(`./gradlew :desktopApp:run` 或 Android)
 - [ ] Cmd 类包实现时的帧格式分工:**CmdReqBase 家族**(ScreenShot/SysProp/PackageInfo/PathInfo)
       要带 `LPString({"cmdReqID":N})` 前缀段;**LaunchSth 例外**——它直接继承 BaseIdcPacket,
       body 是单段 `LPString({"launch_type":N,"action":A,"extra_str":E})`,且由
       `idcComm().sendPacket()` 直发(IdcCmds.java:151),不走 IdcCmds 的 req/resp 配对
-- [ ] (加密深挖备用)KDF 已完全逆向(`IdcEncryptionHelper.java`):init-key 串
-      `a31c5c871c597d133cb15cd68fefdc1a` 转 16B,前 4 字节小端覆写为
-      `(clientSeed ^ 51550860) ^ serverSeed`,同 buffer 作 key=data 做 **HmacSHA256**
-      取前 16B 得 AES-128;唯一缺口是 detail 的 secguard 加解密(native `libsgmain.so`,
-      apktool lib 已证实;tvhelper2 所称 `libwbsafeedit*.so` 实为腾讯 QQ SDK 库,已证伪)
+- [ ] (加密深挖已非必需,仅存档)KDF:`a31c5c871c597d133cb15cd68fefdc1a` 转 16B,前 4 字节
+      小端覆写 `(clientSeed ^ 51550860) ^ serverSeed`,同 buffer 作 key=data 做 HmacSHA256
+      取前 16B 得 AES-128(`IdcEncryptionHelper.java`)
 
 ## 健壮性增强
 
