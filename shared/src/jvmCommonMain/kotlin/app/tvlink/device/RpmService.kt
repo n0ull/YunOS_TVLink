@@ -77,21 +77,31 @@ class RpmService(
         deviceManager.addVConnListener(vConnListener)
         deviceManager.onModuleAvailability = { name, mid, online ->
             if (name == MODULE_NAME) {
-                if (online) {
-                    moduleId = mid
-                    if (!vconnOpen) {
-                        vconnOpen = true
-                        deviceManager.connection?.openVConn(mid)
-                        pendingRequest?.let { (packetId, json) ->
-                            pendingRequest = null
-                            sendData(packetId, json)
-                        }
-                    }
-                } else {
-                    moduleId = null
-                    vconnOpen = false
-                }
+                onAppStoreModule(online, mid)
             }
+        }
+    }
+
+    /** module 上线时打开 VConn 并补发挂起请求;下线时清空状态。 */
+    private fun onAppStoreModule(
+        online: Boolean,
+        mid: Int,
+    ) {
+        if (online) {
+            moduleId = mid
+            if (!vconnOpen) openVConnAndFlushPending(mid)
+        } else {
+            moduleId = null
+            vconnOpen = false
+        }
+    }
+
+    private fun openVConnAndFlushPending(mid: Int) {
+        vconnOpen = true
+        deviceManager.connection?.openVConn(mid)
+        pendingRequest?.let { (packetId, json) ->
+            pendingRequest = null
+            sendData(packetId, json)
         }
     }
 

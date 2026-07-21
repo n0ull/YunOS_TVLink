@@ -249,11 +249,11 @@ class Discovery {
             val magic = rsp.int
             val size = rsp.int
             val type = rsp.int
-            if (magic == IbConst.MAGIC &&
-                size in 0..1024 &&
-                type == (IbConst.RSP_MASK or IbConst.REQ_HELLO) &&
-                active(myEpoch)
-            ) {
+            val validHelloRsp =
+                magic == IbConst.MAGIC &&
+                    size in 0..1024 &&
+                    type == (IbConst.RSP_MASK or IbConst.REQ_HELLO)
+            if (validHelloRsp && active(myEpoch)) {
                 // 读取响应 body 提取诊断字段(hello 响应 JSON {"ver":"x.xx","sid":n})。
                 var ibVer = ""
                 var ibSid = ""
