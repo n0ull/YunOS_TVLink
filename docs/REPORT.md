@@ -33,7 +33,7 @@
 业务全部复用 ③ 的模块路由（VConn + JSON 包）：
 - **遥控按键回退**：`OpCmd_Key`(10500，Android 键码）
 - **远程输入**：IME 10600/10700/10800/10900（电视拉起手机输入法，全量文本回传）
-- **应用管理 RPM**：`com.yunos.tv.appstore.idc.datapacket`（列表/详情/按URL推装/卸载/打开/进度推送）
+- **应用管理 RPM**：模块名 `com.yunos.idc.appstore`（消息类 Java 包为 `com.yunos.tv.appstore.idc.datapacket`；列表/详情/按URL推装/卸载/打开/进度推送，细节见 [re/05 §3](re/05-cloud-api.md)）
 - **电视截屏**：Cmd 20900→21000（1280×720 JPEG q90 回传）
 - **语音**：模块 `com.yunos.tv.asr:etao`，`asr_streaming` 流式文本实时转发（NLU 在电视端）
 - **伴看 immersive**：setMedia/playerAction/danmaku 等

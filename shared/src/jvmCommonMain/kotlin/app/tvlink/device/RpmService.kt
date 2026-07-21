@@ -6,7 +6,9 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * RPM — remote package management over IDC VConn (module "com.yunos.tv.appstore").
+ * RPM — remote package management over IDC VConn (module wire name "com.yunos.idc.appstore";
+ * `com.yunos.tv.appstore` is only the Java package of the decompiled message classes — the
+ * MODULE_NAME constant below still carries the wrong name, fix tracked in TODO.md P1 R1).
  * Frame: int32 packetId + int32 requestId + JSON body. See docs/re/05 §3.
  */
 class RpmService(

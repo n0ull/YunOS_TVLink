@@ -26,7 +26,7 @@ lifecycle from discovery through connected sessions.
 - Each service takes `DeviceManager` as its connection source
 - VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses
   attach/detach)
-- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调,module("com.yunos.tv.appstore")上线时主动 `openVConn()`; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
+- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调,module("com.yunos.idc.appstore",线上名;代码常量待修见 TODO.md R1)上线时主动 `openVConn()`; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
 - `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
 - `RcController.destroy()` = detach + scope cancel

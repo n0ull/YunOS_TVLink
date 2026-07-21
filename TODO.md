@@ -15,6 +15,7 @@
 - OpCmd_Key(IDC 按键回退):有效(VOL_UP 音量 OSD 实测)
 - 该 PC mDNS 创建失败(WinError 10065)→ 子网扫描兜底是必需路径,非可选项
 - 桌面端已验证:连接/按键/触控板/手柄/截图/投屏视频(状态/总时长/进度)
+- RPM 模块状态未知:`com.yunos.idc.appstore` 是否常驻、是否需 `Cmd_LaunchSth` 唤醒才上线待测(P1 修复计划 R2 依据)
 
 ## 下一步(按优先级)
 
@@ -25,7 +26,24 @@
 
 ### P1 — 未测功能真机验证(桌面/Android)
 
-- [ ] **应用管理(RPM)**:列表/打开/卸载/推装——从未测过,当前最大盲区
+- [ ] **应用管理(RPM)**:从未测过,当前最大盲区。2026-07-21 反编译复核已定位「暂时没用」
+      根因,修复计划如下(证据见 `docs/re/05` §3):
+  - **R1 [致命·1 行]**:`RpmService.kt:46` `MODULE_NAME` 改为 `com.yunos.idc.appstore`
+    (现值 `com.yunos.tv.appstore` 在 APK 零字面量,仅为消息类 Java 包名;依据 `IdcConstant.java:6`)。
+    症状链:ModuleAvailability 永不匹配 → VConn 永不开 → 请求静默挂起无报错
+  - **R2 [高]**:接线模块唤醒——module 未在线时先发 `Cmd_LaunchSth`(20400,复用
+    `IdcPackets.kt:37` 已有常量),体 = 单 LPString
+    `{"launch_type":1,"action":"yunos.appstore.startprocessservice","extra_str":""}`
+    (launch_type ordinal:activity=0/service=1/activity_new=2;依据
+    `IdcPacket_Cmd_LaunchSth.java:17-21,35-37`)。原 App 流程:唤醒 → tryOpenModule
+    → 等 ModuleAvailability → VConnSyn
+  - **R3 [中]**:`ModuleAvailability.decodeBody`(`IdcPackets.kt:303-310`)对 `m_name`
+    增加 JSON `{"name":…}` fallback(依据 `IDC.java:360-368`);R1 后真机仍不匹配首查此项
+  - **R4 [低]**:`RpmService.parseAppArray` 兼容 `apps` 为单对象
+    (依据 `IdcPacket_GetListResponse.java:45,62-65`)
+  - **真机回归**(R1–R3 后):列表(4)→打开(14)→卸载(11)→URL 推装(7;
+    `result==2` 下载开始、`appStatus=18` 完成);顺带证伪「TV 端校验 login.name」假设。
+    注:卸载/列表/打开在原 App v5.2.2 无 UI 调用点,电视端实现属推断,此轮回归即首次实证
 - [ ] 图片投屏(`/setmedia` image 类型;失败则换「备选」的 `PUT /image`)
 - [ ] 远程文字输入(电视端触发 IME,如进入搜索框,手机应弹输入窗)
 - [ ] 语音指令(Android 系统语音识别 / 桌面文本输入 → `asr_streaming`)
@@ -47,9 +65,11 @@
    注:应用管理页「打开」已走 AppStore(14) 覆盖常规拉起,LaunchSth 的增量价值
    是诊断页与自定义 service。
 2. `Cmd_SysProp`(21100/21200):读写 TV 系统属性。
-3. AppStore 增量:UpdateRequest(20)、ContinueDownload(21)、GetListCancel(26)、
-   GetAppInfo(2/3)。⚠ packetId **21 撞号(反编译已证实)**:`ContinueDownloadRequest`
-   super(21) 与 `ID_UPDATE_RESPONSE`=21 冲突,实现前先抓包确认 TV 实际用哪个。
+3. AppStore 增量:UpdateRequest(20)、ContinueDownload、GetListCancel(26)、
+   GetAppInfo(2/3)。⚠ packetId **21 撞号(已证实)**:`ContinueDownloadRequest`
+   `super(21)`(`IdcPacket_ContinueDownloadRequest.java:7,17`)与 `ID_UPDATE_RESPONSE`=21
+   冲突,靠收发方向消歧;常量 `ID_CONTINUE_DOWNLOAD=24` 为死常量(零引用)。
+   实现续传**必须发 21**。
 
 **明确不做**:Racct 账号/支付、弹幕 MTOP、TV 搜索(依赖已停服云端);
 PROTO_MULTITOUCH(原 App 也无 UI 调用方)。

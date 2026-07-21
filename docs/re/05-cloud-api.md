@@ -81,17 +81,39 @@
 idc 模块 = **设备互联框架**（非测速/诊断）。发现/连接细节见 01 报告。
 
 ### rpm（Remote Package Management，远程应用管理）
-**手机遥控电视端 AppStore**（`rpm/biz/main/RPM.java`）。全部经 VConn 发 `com.yunos.tv.appstore.idc.datapacket` JSON 包：
+**手机遥控电视端 AppStore**（`rpm/biz/main/RPM.java`）。消息类位于 Java 包 `com.yunos.tv.appstore.idc.datapacket`——**注意这只是包名**：IDC 模块线上名为 **`com.yunos.idc.appstore`**（`com/yunos/tv/appstore/idc/IdcConstant.java:6`、`rpm/biz/observer/RpmObserver.java:16`；字符串 `com.yunos.tv.appstore` 在 APK 内零字面量）。全部命令经 VConn 发 JSON 包：
 
 | 包（ID） | 方法 | 参数 | 用途 |
 |---|---|---|---|
-| IdcPacket_GetSystemInfo | `doGetTvSystemInfo` | — | 取电视系统信息 |
-| IdcPacket_GetListRequest | `doGetAppList` | `pageSize` | 电视应用列表 |
-| IdcPacket_GetAppInfoRequest | `doGetAppInfo` | `packageName` | 应用详情 |
-| IdcPacket_InstallRequest (7) | `doInstallByPackageName` / `doInstallByUrl` | `packageName+apkUrl+appName+iconUrl+apkSize` | **推装 APK**：只把 URL 下发给电视，电视端自行下载安装——文件不经过手机 |
-| IdcPacket_UpdateRequest / IdcPacket_UninstallRequest | `doUpdate` / `doDeletePackage` | `packageName` | 更新/卸载 |
-| IdcPacket_InstallCancelRequest / ContinueDownloadRequest | — | `packageName` | 取消/续传 |
-| IdcPacket_OpenAppRequest | `doOpenByUri/PackageName` | `uri` 或 `packageName` | 远程打开应用 |
+| IdcPacket_GetSystemInfo (40) | `doGetTvSystemInfo` | 空 JSON 体 | 取电视系统信息（**兼作 RPM 就绪门**） |
+| IdcPacket_GetListRequest (4) | `doGetAppList` | `pageSize`（默认 10） | 电视应用列表 |
+| IdcPacket_GetAppInfoRequest (2) | `doGetAppInfo` | `packageName`、`iconType`（`JPEG`/`PNG`） | 应用详情 |
+| IdcPacket_InstallRequest (7) | `doInstallByUrl` / `doInstallByPackageName` | byUrl：`packageName+apkUrl+appName+iconUrl+apkSize`(String)；byPackage：`packageName+versionNeeded`(int) | **推装 APK**：只把 URL 下发给电视，电视端自行下载安装——文件不经过手机 |
+| IdcPacket_UpdateRequest (20) / IdcPacket_UninstallRequest (11) | `doUpdate` / `doDeletePackage` | `packageName` | 更新/卸载 |
+| IdcPacket_InstallCancelRequest (10) / ContinueDownloadRequest | — | `packageName` / 空体 | 取消/续传 |
+| IdcPacket_OpenAppRequest (14) | `doOpenByUri/PackageName` | `uri` 或 `packageName` | 远程打开应用 |
+
+⚠ **ContinueDownload 线上值为 21**（`IdcPacket_ContinueDownloadRequest.java:7,17` `super(21)`），与 `UpdateResponse`(21) 撞号，靠收发方向消歧（手机→TV=续传，TV→手机=更新响应）；常量 `ID_CONTINUE_DOWNLOAD=24`（`AbsIdcDataPacket.java:15`）是**死常量**，全仓零引用。
+
+**开启模块流程**（`RpmObserver.java:24-27,75-80`）：
+
+1. **唤醒**：`launchRemoteService("yunos.appstore.startprocessservice")`——即 `Cmd_LaunchSth`(20400)，体为单 LPString JSON `{"launch_type":1,"action":...,"extra_str":...}`（launch_type 取枚举 ordinal：activity=0 / service=1 / activity_new=2，`IdcPacket_Cmd_LaunchSth.java:17-21,35-37`）
+2. `tryOpenModule("com.yunos.idc.appstore", listener)`——等电视广播 `ModuleAvailability`(20000)，body 字段 `m_name/m_ver/m_extprop/m_id/isOnline`；`m_name` 可为 `{"name","category"}` JSON，原 App 双分支解析（`IDC.java:360-368`）
+3. 模块上线后 `IdcRemoteModule` 构造即自动发 `VConnSyn{"mid":m_id}`（`IdcRemoteModule.java:32,105-110`）
+4. `doGetTvSystemInfo` 作就绪门：`isAvailable() = mSystemInfo != null`（`RpmObserver.java:115-117`）
+
+**帧格式与分发**：VConn 包 = **int32 packetId + int32 requestId + JSON body**（8B 大端头，`AbsIdcDataPacket.java:13,138-146`；requestId 由 `AtomicInteger` 自动分配，响应回调按 requestId 关联）。`RpmVConn.onRecvPacket`（`RpmVConn.java:103-221`）对首 int32 硬编码 switch，仅处理 3/5/8/9/12/15/21/41；`GetListResponse` 回调跨页保持至 `isFinished || isInterrupt`（:129-132）。外层再经 `IdcPacket_VConnData` 封装：长度前缀 `{"mid":N}` + 原始 payload（`IdcRemoteModule.java:120-134`）。
+
+**线上细节**（复刻需注意）：
+
+- `InstallResponse.result == 2` = 下载已开始（`WindVaneFragment.java:638-644`）；安装进度经 `IdcPacket_AppStatus`(9) 异步推送：`{"appInfo":{...},"appStatus":N,"errorCode":N}`，状态枚举 INSTALLING=2 / DOWNLOAD_PROGRESS=10 / INSTALLED=18 / INSTALL_FAILED=20 / UNINSTALLED=22 等（`IdcPacket_AppStatus.java:11-23`；18→onPackageAdded，22→onPackageRemoved）
+- `GetListResponse` 的 `apps` 字段在**单应用场景为 JSON 对象而非数组**（`accumulate` 行为，:45；解码双分支兼容，:62-65）
+- 嵌套 `AppInfo` 对象用 `size`/`status` 键（≠ 顶层 `apkSize`/`appStatus`），另有 `versionName/versionCode/time/canRemove/canShow/iconType`（`pojo/AppInfo.java:15-28`）
+- `SystemInfo`(41)：`uuid/productId/productVer/productVerName/OSInfo/model/sysVer/frameVer`；**`lang` 序列化在 `"packageName"` 键下**（`pojo/SystemInfo.java:38,51`，原 App bug，解析需容忍）
+
+**鉴权与加密**：报文中**零鉴权材料**——`InstallRequest` 仅上述业务字段（`IdcPacket_InstallRequest.java:24-35`）；IDC 层登录身份为自报字符串（`IdcUtils.java:20-23`，`name="com.yunos.tvhelper"` 可伪造）。加密为**会话级整帧**（登录协商 `encryption_algorithm_ver`；`IdcComm.java:98-100`：ver=0 即走明文继续；原 App 请求 ver=1 但电视可答 0），从不按命令加密。反编译中无任何 TV 端校验调用方签名/白名单的证据。
+
+**调用点现状（v5.2.2）**：原 App **无原生应用管理 UI**，唯一调用方为 H5 桥 `common.installTvApk` → `doInstallByUrl`（`WindVaneFragment.java:455,607-644`）。`doDeletePackage`/`doOpenByPackageName`/`doGetAppList` 零 UI 调用点（API 面见 `rpm/api/RpmPublic.java:30-44`）——这三者的电视端实现仅有响应包定义佐证，属推断，**需真机验证**。
 
 ### remoteaccount（远程账号同步）
 把手机登录态同步到电视：
@@ -119,7 +141,7 @@ ACCSClient 注册服务：`accs`、`accs-console`、`tvassist` → `CallbackServ
 - mtop 路由/域名：`support/biz/mtop/Mtoper.java:50-57,296-307`、`support/api/MtopPublic.java:13-18`
 - 设备身份：`support/biz/taid/TaidMgr.java:52-60`
 - 优酷 token：`acctyk/biz/yktoken/YkToken.java:82-115`
-- RPM：`rpm/biz/main/RPM.java:68-201`、`com/yunos/tv/appstore/idc/datapacket/IdcPacket_InstallRequest.java:11-17`
+- RPM：`rpm/biz/main/RPM.java:68-201`、`rpm/biz/observer/RpmObserver.java:16-17,24-27,75-80`、`rpm/biz/main/RpmVConn.java:103-221`、`com/yunos/tv/appstore/idc/IdcConstant.java:6`、`com/yunos/tv/appstore/idc/datapacket/AbsIdcDataPacket.java:13,138-146`、`IdcPacket_InstallRequest.java:24-35`、`IdcPacket_ContinueDownloadRequest.java:7,17`、`IdcPacket_Cmd_LaunchSth.java:17-21,35-37`、`ui/h5/fragment/WindVaneFragment.java:455,607-644`
 - 推送：`push/biz/main/AccsBiz.java:105-128`、`push/biz/main/PushMgr.java:252,265,318`
 
 ## 7. 不确定之处
@@ -128,3 +150,4 @@ ACCSClient 注册服务：`accs`、`accs-console`、`tvassist` → `CallbackServ
 2. ACCS 推送原始 payload 格式未细读，确认"通知→mtop 拉详情"两段式。
 3. asoToken 的实际获取路径（TbAsoToken 为空壳）。
 4. `preid` 常量用途不明，登录/未登录分支同值。
+5. RPM：电视固件是否校验 `login.name`（自报字符串，可伪造为 `com.yunos.tvhelper`）、`com.yunos.idc.appstore` 模块是否常驻（即 Cmd_LaunchSth 唤醒是否必需）——反编译均无证据，待真机证伪。
