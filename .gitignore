@@ -17,3 +17,6 @@ local.properties
 jadx_out/
 apktool_out/
 *.apk
+
+# local test media (not for VCS)
+media/
