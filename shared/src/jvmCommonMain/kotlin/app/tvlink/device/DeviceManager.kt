@@ -30,6 +30,8 @@ class DeviceManager {
         val projectionPort: Int,
         /** IB 服务器版本(如 "3.29"),由 3988 探测产出;手动输入 IP 连接时为空。 */
         val ibVer: String = "",
+        /** IB hello 响应中的 sid(会话标识),3988 探测产出;手动输入 IP 连接时为空。 */
+        val ibSid: String = "",
     )
 
     private val _connState = MutableStateFlow(ConnState.IDLE)
@@ -79,13 +81,14 @@ class DeviceManager {
     fun stopDiscovery() = discovery.stop()
 
     fun connect(device: Discovery.FoundDevice) {
-        connect(device.ip, device.projectionPort, device.ibVer)
+        connect(device.ip, device.projectionPort, device.ibVer, device.ibSid)
     }
 
     fun connect(
         ip: String,
         projectionPort: Int = 0,
         ibVer: String = "",
+        ibSid: String = "",
     ) {
         if (projectionPort != 0) discoveredProjectionPort = projectionPort
         _connState.value = ConnState.CONNECTING
@@ -113,6 +116,7 @@ class DeviceManager {
                         uuid = di?.uuid ?: "",
                         projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
                         ibVer = ibVer,
+                        ibSid = ibSid,
                     )
                 _connState.value = ConnState.CONNECTED
             } else {

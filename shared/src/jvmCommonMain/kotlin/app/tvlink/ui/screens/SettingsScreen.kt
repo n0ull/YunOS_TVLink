@@ -40,6 +40,10 @@ fun SettingsScreen(vm: AppViewModel) {
                     "IB 版本: ${vm.connectedIbVer.ifEmpty { "未探测（手动连接）" }}",
                     color = TvColors.TextSecondary,
                 )
+                Text(
+                    "IB sid: ${vm.connectedIbSid.ifEmpty { "未探测（手动连接）" }}",
+                    color = TvColors.TextSecondary,
+                )
                 Text("媒体服务: ${vm.mediaServerUrl.ifEmpty { "未启动" }}", color = TvColors.TextSecondary)
                 Text(
                     "IB 快速通道: ${if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）"}",

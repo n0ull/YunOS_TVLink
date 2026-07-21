@@ -25,6 +25,8 @@ class Discovery {
         val source: String = "",
         /** IB 服务器版本(如 "3.29"),由 3988 探测响应 body 解析;IDC/mDNS 探测不产出。 */
         val ibVer: String = "",
+        /** IB hello 响应中的 sid(会话标识),3988 探测产出;IDC/mDNS 探测不产出。 */
+        val ibSid: String = "",
     )
 
     var onDeviceFound: ((FoundDevice) -> Unit)? = null
@@ -102,6 +104,7 @@ class Discovery {
                         uuid = d.uuid.ifEmpty { existing.uuid },
                         projectionPort = if (d.projectionPort != 0) d.projectionPort else existing.projectionPort,
                         ibVer = d.ibVer.ifEmpty { existing.ibVer },
+                        ibSid = d.ibSid.ifEmpty { existing.ibSid },
                     )
                 }
             }!!
@@ -251,18 +254,17 @@ class Discovery {
                 type == (IbConst.RSP_MASK or IbConst.REQ_HELLO) &&
                 active(myEpoch)
             ) {
-                // 读取响应 body 并提取 IB 服务器版本(如 "3.29"),用于 UI 诊断展示。
+                // 读取响应 body 提取诊断字段(hello 响应 JSON {"ver":"x.xx","sid":n})。
                 var ibVer = ""
+                var ibSid = ""
                 if (size > 0) {
                     val body = ByteArray(size)
                     dataIn.readFully(body)
-                    ibVer = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"")
-                        .find(String(body, Charsets.UTF_8))
-                        ?.groupValues
-                        ?.get(1)
-                        ?: ""
+                    val text = String(body, Charsets.UTF_8)
+                    ibVer = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"").find(text)?.groupValues?.get(1) ?: ""
+                    ibSid = Regex("\"sid\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1) ?: ""
                 }
-                report(FoundDevice(ip = ip, source = "ib-scan", ibVer = ibVer))
+                report(FoundDevice(ip = ip, source = "ib-scan", ibVer = ibVer, ibSid = ibSid))
             }
         } catch (_: Exception) {
             // 连接拒绝/超时/IO 错误 -> 该 host 无 IB 通道,静默跳过

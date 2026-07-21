@@ -104,6 +104,7 @@ fun DevicePickerScreen(vm: AppViewModel) {
                                     d.model.takeIf { it.isNotEmpty() },
                                     d.mac.takeIf { it.isNotEmpty() },
                                     d.ibVer.takeIf { it.isNotEmpty() }?.let { "IB v$it" },
+                                    d.ibSid.takeIf { it.isNotEmpty() }?.let { "sid=$it" },
                                 ).joinToString("  ·  "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TvColors.TextSecondary,
