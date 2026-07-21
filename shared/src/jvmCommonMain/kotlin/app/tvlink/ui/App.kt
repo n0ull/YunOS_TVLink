@@ -26,6 +26,7 @@ import app.tvlink.ui.screens.RemoteScreen
 import app.tvlink.ui.screens.ScreenshotScreen
 import app.tvlink.ui.screens.SettingsScreen
 import app.tvlink.ui.theme.TvTheme
+import app.tvlink.ui.widgets.BackHandler
 import app.tvlink.ui.widgets.DongleScreen
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
@@ -44,6 +45,9 @@ fun App() {
     CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
         val vm: AppViewModel = viewModel { AppViewModel() }
         TvTheme(dark = vm.screen == AppViewModel.Screen.Remote) {
+            // 拦截系统返回键：已连接时回退到 Home，未连接回退到 DevicePicker，
+            // DevicePicker 不禁用则 Activity.finish() 正常退出。
+            BackHandler(enabled = vm.screen != AppViewModel.Screen.DevicePicker) { vm.navBack() }
             val snackbar = remember { SnackbarHostState() }
             LaunchedEffect(vm.notice) {
                 if (vm.notice.isNotEmpty()) {

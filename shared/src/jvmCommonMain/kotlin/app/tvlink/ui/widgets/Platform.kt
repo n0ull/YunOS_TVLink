@@ -6,6 +6,17 @@ import app.tvlink.ui.AppViewModel
 /** "android" or "desktop" */
 expect val platformName: String
 
+/**
+ * 拦截系统返回键。Android actual 接入 [androidx.activity.compose.BackHandler]，
+ * 桌面端无系统返回键，为空实现。
+ */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+expect fun BackHandler(
+    enabled: Boolean = true,
+    onBack: () -> Unit,
+)
+
 /** Motion sensor feed for the remote's motion mode. Desktop actual is a no-op. */
 expect class MotionSensor() {
     fun start(

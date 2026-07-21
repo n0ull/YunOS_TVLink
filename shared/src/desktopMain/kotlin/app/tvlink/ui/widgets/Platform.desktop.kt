@@ -14,6 +14,16 @@ import app.tvlink.ui.AppViewModel
 
 actual val platformName: String = "desktop"
 
+// 桌面端无系统返回键，有意空实现。
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+actual fun BackHandler(
+    enabled: Boolean,
+    onBack: () -> Unit,
+) {
+    // no-op: desktop has no system back button
+}
+
 actual class MotionSensor actual constructor() {
     actual fun start(
         onAccel: (x: Int, y: Int, z: Int) -> Unit,
