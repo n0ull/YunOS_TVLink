@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # shared
 
@@ -35,7 +35,7 @@ Kotlin Multiplatform library containing the entire protocol stack and shared Com
 - `expect`/`actual` pattern: declarations in `jvmCommonMain/ui/widgets/Platform.kt`, implementations in platform source
   sets
 
-### Testing Requirements
+### Build & Test Commands
 
 - Run `./gradlew :shared:desktopTest` after protocol changes
 - Tests live in `src/desktopTest/` (JVM target only)

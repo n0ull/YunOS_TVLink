@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # widgets
 
@@ -12,9 +12,9 @@ implementations in `androidMain` and `desktopMain`.
 
 | File                | Description                                                                   |
 |---------------------|-------------------------------------------------------------------------------|
-| `Platform.kt`       | `expect` declarations: file picker, image save, motion sensor, voice input, **BackHandler**(跨平台系统返回键) |
-| `PlatformImage.kt`  | `expect` composable for platform-native image display (bitmap handling)       |
-| `PlatformPicker.kt` | `expect` composable for file/media selection (SAF on Android, AWT on Desktop) |
+| `Platform.kt`       | `expect` declarations: `platformName`、`MotionSensor`(体感)、`VoiceButton`(语音)、`DongleScreen`(配网页)、**BackHandler**(跨平台系统返回键) |
+| `PlatformImage.kt`  | `expect` `ByteArrayImage`(字节数组→图片)与 `saveShot`(保存截图,返回结果文案)   |
+| `PlatformPicker.kt` | `expect fun pickMediaFile(type, onResult)` — 媒体文件选择(SAF on Android, AWT on Desktop),回调文件系统路径 |
 
 ## For AI Agents
 
@@ -28,7 +28,7 @@ implementations in `androidMain` and `desktopMain`.
 
 ### Common Patterns
 
-- `@Composable expect fun PlatformPicker(onPicked: (File?) -> Unit)`
+- `@Composable expect fun pickMediaFile(type: String, onResult: (String?) -> Unit)`
 - Android: Activity Result API / SAF intents
 - Desktop: `java.awt.FileDialog` / `javax.swing.JFileChooser`
 

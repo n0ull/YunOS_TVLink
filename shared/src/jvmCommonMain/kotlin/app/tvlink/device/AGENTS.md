@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # device
 
@@ -17,7 +17,7 @@ lifecycle from discovery through connected sessions.
 | `RcController.kt`      | Routes key events — IB preferred (needIb313 keys additionally require server ver≥313), IDC OpCmd_Key fallback(真机已验证有效) |
 | `RpmService.kt`        | Remote package management (list/install/uninstall apps); 自动 openVConn(module 在线时) + 挂起请求补发              |
 | `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图)                                       |
-| `AsrTextService.kt`    | Voice/text command forwarding via `asr_streaming` IDC messages                                                     |
+| `AsrTextService.kt`    | Voice/text command forwarding via `com.yunos.tv.asr` VConn module — sends finished `asr_streaming` packets; NLU runs on the TV |
 
 ## For AI Agents
 
@@ -26,7 +26,7 @@ lifecycle from discovery through connected sessions.
 - Each service takes `DeviceManager` as its connection source
 - VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses
   attach/detach)
-- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调,module("com.yunos.idc.appstore",线上名;代码常量待修见 TODO.md R1)上线时主动 `openVConn()`; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
+- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调 → `onAppStoreModule()` 在 module("com.yunos.idc.appstore",线上名;代码 `MODULE_NAME` 常量仍是错的 "com.yunos.tv.appstore",待修见 TODO.md R1)上线时经 `openVConnAndFlushPending()` 主动 `openVConn()` 并补发挂起请求; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
 - `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
 - `RcController.destroy()` = detach + scope cancel
@@ -46,9 +46,8 @@ lifecycle from discovery through connected sessions.
 ### Internal
 
 - `app.tvlink.proto.idc` — IDC connection and packet types
-- `app.tvlink.proto.ib` — IB channel and key codes
-- `app.tvlink.proto.cast` — Cast controller and media server
-- `app.tvlink.proto.mdns` — mDNS query/response
+- `app.tvlink.proto.ib` — IB channel and key codes (RcController, Discovery IB probe)
+- `app.tvlink.proto.mdns` — mDNS query/response (Discovery)
 
 ### External
 

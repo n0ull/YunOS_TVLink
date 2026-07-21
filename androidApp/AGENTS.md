@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # androidApp
 
@@ -25,7 +25,7 @@ required for mDNS discovery.
 - Android-specific platform code (BLE, sensors) lives in `shared/src/androidMain/`, not here
 - Only manifest/permissions and the hosting Activity belong here
 
-### Testing Requirements
+### Build & Test Commands
 
 - Build check: `./gradlew :androidApp:assembleDebug`
 

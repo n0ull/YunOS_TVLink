@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # mdns
 
@@ -31,8 +31,8 @@ mDNS/DNS-SD implementation for discovering YunOS TVs on the local network. Queri
 
 ### Common Patterns
 
-- `DatagramSocket` with `SO_REUSEADDR` for multicast receive
-- Manual DNS wire-format parsing (no external DNS library)
+- `MulticastSocket` bound to 5353 with 500ms `soTimeout` poll loop; `localLanAddress()` prefers `wlan*` interfaces (Android)
+- Manual DNS wire-format parsing incl. name compression (no external DNS library)
 
 ## Dependencies
 

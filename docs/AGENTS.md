@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # docs
 
@@ -28,6 +28,7 @@ and device behavior when implementing or debugging the protocol stack in `shared
 - These are **reference documents**, not code — do not modify unless correcting factual errors
 - When implementing a new protocol feature, read the relevant `re/0X-*.md` first
 - Frame formats, command codes, and port numbers here are authoritative
+- `REPORT.md` line 36: the RPM **module name** is `com.yunos.idc.appstore` (IDC routing name); the Java package `com.yunos.tv.appstore.idc.datapacket` is only its message-class namespace — do not conflate them in proto code
 
 ### Common Patterns
 

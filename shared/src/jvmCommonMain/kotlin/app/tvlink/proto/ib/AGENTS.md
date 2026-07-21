@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # ib
 
@@ -18,7 +18,7 @@ data. Preferred over IDC for input due to lower overhead. Falls back to IDC OpCm
 
 | File        | Location                              | Description                                                           |
 |-------------|---------------------------------------|-----------------------------------------------------------------------|
-| `IbData.kt` | `shared/src/commonMain/.../proto/ib/` | Key code constants (`RcKey`) and data types shared across source sets |
+| `IbData.kt` | `shared/src/commonMain/.../proto/ib/` | `IbConst` wire constants (port 3988, magic 0x11228899, frame types) + `RcKey` key-code table shared across source sets |
 
 ## For AI Agents
 

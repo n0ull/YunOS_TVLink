@@ -1,5 +1,5 @@
 <!-- Parent: ../../../../../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # app.tvlink (androidApp main)
 
@@ -22,7 +22,7 @@ Android 宿主 Activity 层。唯一的 Activity 负责：初始化 `AndroidPlat
 - `AndroidPlatform.init()` 必须先于任何 shared 平台服务调用（`appContext` 为 lateinit）
 - MulticastLock 在 `onCreate` 获取、`onDestroy` 释放——mDNS 收包在部分机型上无锁会被系统丢弃
 
-### Testing Requirements
+### Build & Test Commands
 
 - `./gradlew :androidApp:assembleDebug` 编译验证
 

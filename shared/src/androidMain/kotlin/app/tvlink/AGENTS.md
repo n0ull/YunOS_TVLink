@@ -1,5 +1,5 @@
 <!-- Parent: ../../../../../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # app.tvlink (androidMain)
 
@@ -15,7 +15,7 @@ SAF file picker, and Android image handling.
 |----------------------------------------|------------------------------------------------------------------------------------------|
 | `dongle/DongleBlePairer.kt`            | MagicCast BLE provisioning — GATT scan, connect, write WiFi credentials (18-byte chunks) |
 | `ui/widgets/AndroidPlatform.android.kt` | `object AndroidPlatform` — 持有 applicationContext 的平台服务入口（由 MainActivity.init 注入） |
-| `ui/widgets/Platform.android.kt`       | `actual` platform utilities (Android context access)                                     |
+| `ui/widgets/Platform.android.kt`       | `actual platformName` + `BackHandler`(委托 `androidx.activity.compose.BackHandler`)      |
 | `ui/widgets/PlatformImage.android.kt`  | `actual` image display using Android Bitmap/ImageBitmap                                  |
 | `ui/widgets/PlatformPicker.android.kt` | `actual` file picker using SAF (Storage Access Framework)                                |
 | `ui/widgets/MotionSensor.android.kt`   | `actual` gyroscope/accelerometer via SensorManager for motion remote                     |

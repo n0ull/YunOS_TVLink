@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # cast
 
@@ -34,8 +34,8 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 ### Common Patterns
 
 - `BufferedReader` line-based parsing for the text control protocol
-- `ArrayBlockingQueue` for response synchronization
-- `com.sun.net.httpserver.HttpServer` for the media server
+- `ArrayBlockingQueue` for response synchronization (armed before write — reader thread can't discard the response)
+- `MediaHttpServer` is hand-rolled: raw `ServerSocket` + 4-thread pool, `Connection: close` per request (TV is the only client)
 
 ## Dependencies
 
@@ -45,6 +45,6 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 
 ### External
 
-- java.net.Socket, com.sun.net.httpserver
+- java.net.Socket / ServerSocket, java.io.FileInputStream
 
 <!-- MANUAL: -->

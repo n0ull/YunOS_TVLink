@@ -1,5 +1,5 @@
 <!-- Parent: ../../../../../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # app.tvlink (desktopMain)
 
@@ -12,8 +12,8 @@ Android-only features (motion sensor, voice, BLE dongle).
 
 | File                                   | Description                                                                       |
 |----------------------------------------|-----------------------------------------------------------------------------------|
-| `ui/widgets/Platform.desktop.kt`       | `actual` platform utilities (desktop file paths)                                  |
-| `ui/widgets/PlatformImage.desktop.kt`  | `actual` image display using `java.awt.image.BufferedImage` → Compose ImageBitmap |
+| `ui/widgets/Platform.desktop.kt`       | `actual platformName`、`BackHandler`/`MotionSensor`(空实现)、`VoiceButton`(文本对话框)、`DongleScreen`(不支持提示) |
+| `ui/widgets/PlatformImage.desktop.kt`  | `actual ByteArrayImage`(Skia `Image` → Compose ImageBitmap)与 `saveShot`(保存到 `~/Pictures/TVLink`) |
 | `ui/widgets/PlatformPicker.desktop.kt` | `actual` file picker using `java.awt.FileDialog`                                  |
 
 ## For AI Agents

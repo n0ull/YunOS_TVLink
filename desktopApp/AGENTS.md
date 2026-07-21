@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
 
 # desktopApp
 
@@ -23,7 +23,7 @@ the Compose Desktop packaging plugin.
 - Desktop-specific platform code (AWT file dialogs, screenshot save) lives in `shared/src/desktopMain/`
 - Window sizing and app metadata configured in `Main.kt`
 
-### Testing Requirements
+### Build & Test Commands
 
 - Run check: `./gradlew :desktopApp:run`
 - Tests run via `:shared:desktopTest` (shared module's JVM target)
