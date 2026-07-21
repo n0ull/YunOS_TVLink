@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
 
 # ib
 
@@ -36,9 +36,11 @@ data. Preferred over IDC for input due to lower overhead. Falls back to IDC OpCm
 
 ### Common Patterns
 
-- `synchronized(sendLock)` for write path
+- `sendBody` queues frames onto a single-thread executor (`ib-send`, FIFO preserved); handshake/keepalive write synchronously on their own threads
+- `synchronized(sendLock)` guards the actual socket write
 - Keepalive thread sends periodic PING frames
 - `@Volatile` state + `onStateChanged` callback
+- `disconnect()` shuts down the send executor along with reader/keepalive threads
 
 ## Dependencies
 

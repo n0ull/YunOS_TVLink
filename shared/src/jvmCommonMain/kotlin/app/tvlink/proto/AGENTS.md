@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
 
 # proto
 
@@ -38,5 +38,6 @@ threads.
 - `Socket` + `DataInputStream`/`OutputStream` with explicit big-endian writes
 - Reader loop: `while (running) { readFrame(); dispatch(); }`
 - `@Volatile` state flags, `synchronized`/lock objects for send paths
+- Send paths queue onto per-connection single-thread executors (`idc-send`/`ib-send`) — caller threads (incl. Android UI) never touch socket IO
 
 <!-- MANUAL: -->

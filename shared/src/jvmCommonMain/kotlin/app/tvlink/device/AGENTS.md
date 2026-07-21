@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
 
 # device
 
@@ -10,14 +10,14 @@ lifecycle from discovery through connected sessions.
 
 ## Key Files
 
-| File                   | Description                                                                          |
-|------------------------|--------------------------------------------------------------------------------------|
-| `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` for UI    |
-| `Discovery.kt`         | Dual-channel device discovery: mDNS multicast + /24 subnet TCP 13511 sweep           |
-| `RcController.kt`      | Routes remote-control key events — IB fast channel preferred, IDC OpCmd_Key fallback |
-| `RpmService.kt`        | Remote package management (list/install/uninstall apps) via IDC VConn JSON frames    |
-| `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, JPEG data reassembly                     |
-| `AsrTextService.kt`    | Voice/text command forwarding via `asr_streaming` IDC messages                       |
+| File                   | Description                                                                                                        |
+|------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` for UI                                  |
+| `Discovery.kt`         | Dual-channel device discovery: mDNS multicast + /24 subnet TCP 13511 sweep                                         |
+| `RcController.kt`      | Routes key events — IB preferred (needIb313 keys additionally require server ver≥313), IDC OpCmd_Key fallback(真机已验证有效) |
+| `RpmService.kt`        | Remote package management (list/install/uninstall apps) via IDC VConn JSON frames                                  |
+| `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图)                                       |
+| `AsrTextService.kt`    | Voice/text command forwarding via `asr_streaming` IDC messages                                                     |
 
 ## For AI Agents
 

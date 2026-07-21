@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
 
 # idc
 
@@ -11,25 +11,26 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 ## Key Files
 
-| File               | Description                                                                                                                         |
-|--------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `IdcConnection.kt` | TCP session management: connect, login, reader thread, send/receive, keepalive (scheduler lazily created, close() fully tears down) |
-| `IdcPackets.kt`    | Packet data classes, serialization, and JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`)       |
-| `IdcCrypto.kt`     | connKey derivation and optional encryption — DEAD CODE (ver=0 plaintext always); do not modify without ver≠0 TV                     |
+| File               | Description                                                                                                                                           |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved)              |
+| `IdcPackets.kt`    | Packet data classes, serialization, and JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`)                         |
+| `IdcCrypto.kt`     | connKey derivation and optional encryption — DEAD CODE (ver=0 plaintext always; 真机已验证无加密可截屏); do not modify without ver≠0 TV                 |
 
 ## For AI Agents
 
 ### Working In This Directory
 
 - **Frame format**: 16-byte header (magic=130311, key, packetId, totalLen) + body; all big-endian
-- Login flow: DETECT→HELLO→LOGIN; after login, `connKey` becomes the frame key field
+- Login flow: LoginReq(10000)→LoginResp(10100); after login, `connKey` becomes the frame key field (every packet must carry it)
 - Strings/byte arrays: 4-byte length prefix + content
+- **Cmd packet framing**: CmdReqBase family (ScreenShot/SysProp/PackageInfo/PathInfo) body = `LPString({"cmdReqID":N})` + `LPString({params})`; `Cmd_LaunchSth`(20400) is the exception — single LPString, sent raw without req/resp pairing
 - `IdcConnection` callbacks fire on the reader thread — callers must dispatch to UI thread
 - Reference: `docs/re/01-device-discovery.md`, `docs/re/02-remote-control.md`
 
 ### Testing Requirements
 
-- Test file: `shared/src/desktopTest/kotlin/app/tvlink/proto/IdcProtocolTest.kt`
+- Test files: `IdcProtocolTest.kt` (frame round-trips), `IdcConnectionLeakTest.kt` (no thread leaks), `IdcConnectionTest.kt` (async send via loopback, Cmd framing)
 - Test frame encode/decode round-trips, especially header field ordering
 
 ### Common Patterns

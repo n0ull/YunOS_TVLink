@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-20 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-21 -->
 
 # TVLink
 
@@ -18,8 +18,9 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 | `.editorconfig` | ktlint_official code style (line width 120, import layout); `[**/build/**]` 段排除生成代码 |
 | `detekt.yml` | detekt static analysis rules (complexity, naming, coroutines, exceptions) |
 | `local.properties` | Android SDK path (machine-specific, gitignored) |
-| `.gitignore` | Ignores build/, .gradle/, local.properties |
+| `.gitignore` | Ignores build/, .gradle/, local.properties, media/ |
 | `README.md` | Feature matrix, build instructions, protocol summary (Chinese) |
+| `TODO.md` | 真机验证档案 + 待办清单(经 jadx 反编译复核:截图/OpCmd_Key 兜底已验证,加密深挖/3988 探测/PUT /image 备选) |
 
 ## Subdirectories
 
@@ -33,6 +34,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 | `gradle/` | Gradle wrapper JAR and properties |
 | `apktool_out/` | Decompiled APK resources (reference only, not compiled) |
 | `jadx_out/` | Decompiled APK Java source (reference only, not compiled) |
+| `media/` | 本地真机测试媒体(gitignored,勿提交) |
 
 ## For AI Agents
 
@@ -58,6 +60,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 ### Common Patterns
 
 - Protocol classes use blocking `java.net.Socket` + reader threads (not coroutines for IO)
+- **Socket writes never run on the caller thread** (Android kills with NetworkOnMainThreadException) — `IdcConnection.send`/`IbChannel.sendBody` queue onto per-connection single-thread executors (`idc-send`/`ib-send`, FIFO preserved)
 - UI state via Compose `mutableStateOf` / `StateFlow` in ViewModels; updates use `Dispatchers.Default` (thread-safe snapshot state)
 - VConn callbacks: `CopyOnWriteArrayList` multicast in DeviceManager (services add/remove listeners)
 - Lifecycle: `AppViewModel.onCleared()` → `DeviceManager.destroy()` → `IdcConnection.close()` chain

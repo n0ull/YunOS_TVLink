@@ -14,7 +14,7 @@ state and renders UI — no business logic lives here.
 |-------------------------|----------------------------------------------------------------------|
 | `DevicePickerScreen.kt` | Device discovery list — scan, display found TVs, connect             |
 | `HomeScreen.kt`         | Post-connection hub — device info, feature navigation grid           |
-| `RemoteScreen.kt`       | Remote control — D-pad, volume, home/back/menu keys via RcController |
+| `RemoteScreen.kt`       | Remote control — 五模式切换:按键/触控板/手柄/方向盘/体感,经 RcController(IB 优先,IDC 兜底) |
 | `CastScreen.kt`         | Local media projection — file pick, play/pause/seek, playback status |
 | `ScreenshotScreen.kt`   | TV screenshot capture and display/save                               |
 | `AppsScreen.kt`         | TV app management — list, launch, uninstall, push-install by URL     |
