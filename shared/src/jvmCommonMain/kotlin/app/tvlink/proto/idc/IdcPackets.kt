@@ -420,12 +420,16 @@ class ScreenShotReq(
     var resizeW: Int = 1280,
     var resizeH: Int = 720,
     var compressQuality: Int = 90,
+    var cmdReqId: Int = 1,
 ) : IdcPacket(IdcConst.ID_CMD_SCREENSHOT_REQ) {
+    // IdcPacket_CmdReqBase.param_encode: body = LPString({"cmdReqID":N}) + LPString({params})
     override fun encodeBody(): ByteArray {
+        val req = """{"cmdReqID":$cmdReqId}"""
         val s =
             """{"resize_ratio":$resizeRatio,"resize_w":$resizeW,"resize_h":$resizeH,""" +
                 """"compress_quality":$compressQuality}"""
-        val b = ByteBuffer.allocate(lpStringSize(s))
+        val b = ByteBuffer.allocate(lpStringSize(req) + lpStringSize(s))
+        b.putLPString(req)
         b.putLPString(s)
         return b.array()
     }
@@ -436,23 +440,11 @@ class ScreenShotResp(
 ) : IdcPacket(IdcConst.ID_CMD_SCREENSHOT_RESP) {
     override fun encodeBody() = ByteArray(0)
 
+    // IdcPacket_CmdRespBase + ScreenShot_Resp.param_decode: LPString({"cmdReqID":N}) + LPString({"dummy":0}) + LPBytes(jpeg)
     override fun decodeBody(buf: ByteBuffer) {
-        // best-effort: image bytes may be raw remainder or LP-prefixed
-        if (buf.remaining() >= 4) {
-            val mark = buf.position()
-            val n = buf.int
-            imgData =
-                if (n > 0 && n == buf.remaining()) {
-                    val b = ByteArray(n)
-                    buf.get(b)
-                    b
-                } else {
-                    buf.position(mark)
-                    val b = ByteArray(buf.remaining())
-                    buf.get(b)
-                    b
-                }
-        }
+        buf.getLPString() // {"cmdReqID":N}
+        buf.getLPString() // {"dummy":0}
+        imgData = buf.getLPBytes()
     }
 }
 

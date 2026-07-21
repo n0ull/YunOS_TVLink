@@ -5,6 +5,13 @@ import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.idc.ImeAction
 import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.OpCmdKey
+import app.tvlink.proto.idc.ScreenShotReq
+import app.tvlink.proto.idc.ScreenShotResp
+import app.tvlink.proto.idc.getLPString
+import app.tvlink.proto.idc.lpBytesSize
+import app.tvlink.proto.idc.lpStringSize
+import app.tvlink.proto.idc.putLPBytes
+import app.tvlink.proto.idc.putLPString
 import java.io.DataInputStream
 import java.net.ServerSocket
 import java.nio.ByteBuffer
@@ -101,5 +108,30 @@ class IdcConnectionTest {
 
         conn.close()
         conn.send(OpCmdKey(1, 1)) // must be a silent no-op, not a crash
+    }
+
+    /** Cmd packets: body = LPString({"cmdReqID":N}) + LPString({params}); resp adds LPBytes(img). */
+    @Test
+    fun screenShotCmdFramingMatchesDecompiledFormat() {
+        val req = ScreenShotReq(resizeW = 640, resizeH = 360, compressQuality = 80, cmdReqId = 7)
+        val frame = req.encode() // full frame; body starts after the 16-byte header
+        frame.position(IdcConst.HEADER_LEN)
+        assertEquals("""{"cmdReqID":7}""", frame.getLPString())
+        val params = frame.getLPString()
+        assertTrue(params.contains("\"resize_w\":640"))
+        assertTrue(params.contains("\"compress_quality\":80"))
+        assertEquals(0, frame.remaining())
+
+        val jpeg = byteArrayOf(1, 2, 3, 42)
+        val cmdJson = """{"cmdReqID":7}"""
+        val dummyJson = """{"dummy":0}"""
+        val body = ByteBuffer.allocate(lpStringSize(cmdJson) + lpStringSize(dummyJson) + lpBytesSize(jpeg))
+        body.putLPString(cmdJson)
+        body.putLPString(dummyJson)
+        body.putLPBytes(jpeg)
+        body.flip()
+        val resp = ScreenShotResp()
+        resp.decodeBody(body)
+        assertTrue(jpeg.contentEquals(resp.imgData))
     }
 }
