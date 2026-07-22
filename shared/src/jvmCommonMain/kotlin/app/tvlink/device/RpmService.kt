@@ -98,10 +98,14 @@ class RpmService(
             moduleId = mid
             if (!vconnOpen) openVConnAndFlushPending(mid)
         } else {
-            moduleId = null
-            vconnOpen = false
-            wakeSent = false
+            resetModuleState()
         }
+    }
+
+    private fun resetModuleState() {
+        moduleId = null
+        vconnOpen = false
+        wakeSent = false
     }
 
     private fun openVConnAndFlushPending(mid: Int) {
@@ -117,16 +121,15 @@ class RpmService(
     fun detach() {
         deviceManager.removeVConnListener(vConnListener)
         deviceManager.onModuleAvailability = null
-        moduleId = null
-        vconnOpen = false
-        wakeSent = false
+        resetModuleState()
         pendingRequest = null
     }
 
     fun getAppList(pageSize: Int = 100) {
-        if (!send(ID_GETLIST_REQ, """{"pageSize":$pageSize}""")) {
+        val json = """{"pageSize":$pageSize}"""
+        if (!send(ID_GETLIST_REQ, json)) {
             // module 未就绪(VConn 未打开)——缓存请求,待 VConn 打开后补发。
-            pendingRequest = ID_GETLIST_REQ to """{"pageSize":$pageSize}"""
+            pendingRequest = ID_GETLIST_REQ to json
         }
     }
 
