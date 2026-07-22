@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,9 @@ fun AppsScreen(vm: AppViewModel) {
     var showInstall by remember { mutableStateOf(false) }
     var uninstallTarget by remember { mutableStateOf<RpmService.TvApp?>(null) }
 
+    // 进屏即拉列表:module 未就绪时该请求同时触发 R2 唤醒,模块上线后经挂起补发回填
+    LaunchedEffect(Unit) { vm.refreshApps() }
+
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { vm.navBack() }) { Text("‹ 返回") }
@@ -52,6 +56,14 @@ fun AppsScreen(vm: AppViewModel) {
         ) {
             Text("共 ${vm.tvApps.size} 个应用", color = TvColors.TextSecondary)
             TextButton(onClick = { showInstall = true }) { Text("按 URL 安装") }
+        }
+
+        if (vm.tvApps.isEmpty()) {
+            Text(
+                "列表为空——电视的应用管理模块(com.yunos.idc.appstore)未就绪；部分固件不提供该模块。",
+                modifier = Modifier.padding(vertical = 12.dp),
+                color = TvColors.TextSecondary,
+            )
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {

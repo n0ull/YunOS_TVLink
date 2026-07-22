@@ -302,7 +302,11 @@ class ModuleAvailability(
 
     override fun decodeBody(buf: ByteBuffer) {
         val j = parseJsonObject(buf.getLPString())
-        moduleName = j.str("m_name")
+        // m_name 可能是裸模块名,也可能是字符串化的 {"name":…,"category":…} JSON——原 App 双分支解析:
+        // 尝试按 JSON 取 name,失败则回退原串(IDC.java:360-368 parseModuleKeyFromFullName)
+        val rawName = j.str("m_name")
+        val jsonName = if (rawName.startsWith("{")) parseJsonObject(rawName).str("name") else ""
+        moduleName = jsonName.ifEmpty { rawName }
         moduleVer = j.int("m_ver")
         moduleExtProp = j.str("m_extprop")
         moduleId = j.int("m_id")
@@ -411,6 +415,25 @@ class ImeAction(
     override fun encodeBody(): ByteArray {
         val b = ByteBuffer.allocate(4)
         b.putInt(actionId)
+        return b.array()
+    }
+}
+
+/**
+ * Cmd_LaunchSth(20400) — 唤醒电视端模块/服务。launchType 取枚举 ordinal:
+ * 0=activity, 1=service, 2=activity_new(IdcPacket_Cmd_LaunchSth.java:17-21)。
+ * body 为单段 LPString JSON(CmdReqBase 家族的双 LPString 格式不适用,LaunchSth 是例外)。
+ */
+class CmdLaunchSth(
+    var launchType: Int = 1,
+    var action: String = "",
+    var extraStr: String = "",
+) : IdcPacket(IdcConst.ID_CMD_LAUNCH_STH) {
+    override fun encodeBody(): ByteArray {
+        val s =
+            """{"launch_type":$launchType,"action":"${jsonEscape(action)}","extra_str":"${jsonEscape(extraStr)}"}"""
+        val b = ByteBuffer.allocate(lpStringSize(s))
+        b.putLPString(s)
         return b.array()
     }
 }

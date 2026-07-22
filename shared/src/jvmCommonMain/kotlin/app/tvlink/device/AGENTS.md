@@ -26,7 +26,8 @@ lifecycle from discovery through connected sessions.
 - Each service takes `DeviceManager` as its connection source
 - VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses
   attach/detach)
-- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调 → `onAppStoreModule()` 在 module("com.yunos.idc.appstore",线上名;代码 `MODULE_NAME` 常量仍是错的 "com.yunos.tv.appstore",待修见 TODO.md R1)上线时经 `openVConnAndFlushPending()` 主动 `openVConn()` 并补发挂起请求; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
+- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调 → `onAppStoreModule()` 在 module(`MODULE_NAME` = "com.yunos.idc.appstore",线上名,见 `IdcConstant.java:6`)上线时经 `openVConnAndFlushPending()` 主动 `openVConn()` 并补发挂起请求; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
+- **模块唤醒**: module 离线时首个 RPM 请求经 `wakeModuleIfNeeded()` 发一次 `CmdLaunchSth`(launch_type=1/service, action="yunos.appstore.startprocessservice";`RpmObserver.java:74-77` 原流程),module 下线/detach 复位; `ModuleAvailability.m_name` 兼容 `{"name","category"}` 字符串化 JSON(`IDC.java:360-368`); `parseAppArray` 兼容 `apps` 单对象(`IdcPacket_GetListResponse.java:62-65`,回归见 `RpmFixTest`)
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
 - `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
 - `RcController.destroy()` = detach + scope cancel

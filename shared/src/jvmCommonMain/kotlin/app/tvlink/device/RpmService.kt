@@ -1,14 +1,15 @@
 package app.tvlink.device
 
+import app.tvlink.proto.idc.CmdLaunchSth
 import app.tvlink.proto.idc.jsonEscape
 import app.tvlink.proto.idc.parseJsonObject
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * RPM — remote package management over IDC VConn (module wire name "com.yunos.idc.appstore";
- * `com.yunos.tv.appstore` is only the Java package of the decompiled message classes — the
- * MODULE_NAME constant below still carries the wrong name, fix tracked in TODO.md P1 R1).
+ * RPM — remote package management over IDC VConn. Module wire name is "com.yunos.idc.appstore"
+ * (IdcConstant.java:6, RpmObserver.java:16; `com.yunos.tv.appstore` is only the Java package of
+ * the decompiled message classes). Module 离线时经 Cmd_LaunchSth 唤醒(RpmObserver.java:74-77)。
  * Frame: int32 packetId + int32 requestId + JSON body. See docs/re/05 §3.
  */
 class RpmService(
@@ -38,6 +39,9 @@ class RpmService(
     private var moduleId: Int? = null
     private var vconnOpen = false
 
+    /** 本次会话是否已发过唤醒包(防止重复 LaunchSth)。module 下线或 detach 时复位。 */
+    private var wakeSent = false
+
     /**
      * 挂起的请求:VConn 打开后补发。仅缓存最近一次(列表刷新优先级最高)。
      * null 表示无挂起请求。
@@ -45,7 +49,10 @@ class RpmService(
     private var pendingRequest: Pair<Int, String>? = null
 
     companion object {
-        const val MODULE_NAME = "com.yunos.tv.appstore"
+        const val MODULE_NAME = "com.yunos.idc.appstore"
+
+        /** 唤醒动作(RpmObserver.java:17):module 离线时发 Cmd_LaunchSth(service) 拉起电视端 appstore 服务。 */
+        private const val WAKE_ACTION = "yunos.appstore.startprocessservice"
         const val ID_GETAPPINFO_REQ = 2
         const val ID_GETAPPINFO_RESP = 3
         const val ID_GETLIST_REQ = 4
@@ -93,6 +100,7 @@ class RpmService(
         } else {
             moduleId = null
             vconnOpen = false
+            wakeSent = false
         }
     }
 
@@ -111,6 +119,7 @@ class RpmService(
         deviceManager.onModuleAvailability = null
         moduleId = null
         vconnOpen = false
+        wakeSent = false
         pendingRequest = null
     }
 
@@ -161,15 +170,26 @@ class RpmService(
 
     /**
      * 发送请求。module 就绪(VConn 已打开)时立即发送返回 true;
-     * 未就绪时缓存请求并返回 false(待 VConn 打开后补发)。
+     * 未就绪时发送一次唤醒包并返回 false(调用方缓存请求,待 VConn 打开后补发)。
      */
     private fun send(
         packetId: Int,
         json: String,
     ): Boolean {
-        val mid = moduleId ?: return false
+        val mid = moduleId
+        if (mid == null) {
+            wakeModuleIfNeeded()
+            return false
+        }
         sendData(packetId, json)
         return true
+    }
+
+    /** module 未上线时发 Cmd_LaunchSth(launch_type=service) 唤醒电视端 appstore——原 App 开启模块流程第 1 步。 */
+    private fun wakeModuleIfNeeded() {
+        if (wakeSent) return
+        wakeSent = true
+        deviceManager.connection?.send(CmdLaunchSth(launchType = 1, action = WAKE_ACTION))
     }
 
     private fun sendData(
@@ -210,7 +230,8 @@ class RpmService(
         }
     }
 
-    private fun parseAppArray(arr: String): List<TvApp> {
+    // internal(非 private)以便 desktopTest 直接回归单对象/数组双分支;属测试可见性放宽,非公共 API。
+    internal fun parseAppArray(arr: String): List<TvApp> {
         // apps is a JSON array of objects; extract each object block and flat-parse it
         val out = mutableListOf<TvApp>()
         val body = arr.removePrefix("[").removeSuffix("]")
