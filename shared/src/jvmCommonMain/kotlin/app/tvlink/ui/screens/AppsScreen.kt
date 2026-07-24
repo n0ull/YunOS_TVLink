@@ -1,21 +1,34 @@
+// Compose 约定可组合函数为 PascalCase，本文件含多个可组合函数，统一文件级抑制
+@file:Suppress("FunctionNaming", "ktlint:standard:function-naming")
+
 package app.tvlink.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,12 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.tvlink.device.RpmService
 import app.tvlink.ui.AppViewModel
-import app.tvlink.ui.theme.TvColors
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppsScreen(vm: AppViewModel) {
     var installUrl by remember { mutableStateOf("") }
@@ -40,105 +53,155 @@ fun AppsScreen(vm: AppViewModel) {
     // 进屏即拉列表:module 未就绪时该请求同时触发 R2 唤醒,模块上线后经挂起补发回填
     LaunchedEffect(Unit) { vm.refreshApps() }
 
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { vm.navBack() }) { Text("‹ 返回") }
-            Spacer(Modifier.weight(1f))
-            Text("应用管理", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { vm.refreshApps() }) { Text("刷新") }
-        }
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("应用管理") },
+            navigationIcon = {
+                IconButton(onClick = { vm.navBack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+            },
+            actions = {
+                IconButton(onClick = { vm.refreshApps() }) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                }
+                IconButton(onClick = { showInstall = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "按 URL 安装")
+                }
+            },
+        )
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("共 ${vm.tvApps.size} 个应用", color = TvColors.TextSecondary)
-            TextButton(onClick = { showInstall = true }) { Text("按 URL 安装") }
-        }
+        Text(
+            "共 ${vm.tvApps.size} 个应用",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
 
         if (vm.tvApps.isEmpty()) {
             Text(
                 "列表为空——电视的应用管理模块(com.yunos.idc.appstore)未就绪；部分固件不提供该模块。",
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = TvColors.TextSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(vm.tvApps, key = { it.packageName }) { app ->
-                Card(shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(app.appName.ifEmpty { app.packageName }, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "${app.packageName}  ${app.versionName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TvColors.TextSecondary,
-                            )
-                        }
-                        TextButton(onClick = { vm.rpm.openApp(app.packageName) }) { Text("打开") }
-                        TextButton(onClick = { uninstallTarget = app }) { Text("卸载", color = TvColors.Red) }
-                    }
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(app.appName.ifEmpty { app.packageName })
+                        },
+                        supportingContent = {
+                            Text("${app.packageName}  ${app.versionName}")
+                        },
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { vm.rpm.openApp(app.packageName) }) {
+                                    Icon(Icons.Filled.OpenInNew, contentDescription = "打开")
+                                }
+                                IconButton(onClick = { uninstallTarget = app }) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "卸载",
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
     }
 
     if (showInstall) {
-        AlertDialog(
-            onDismissRequest = { showInstall = false },
-            title = { Text("按 URL 安装应用") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = installPkg,
-                        onValueChange = { installPkg = it },
-                        label = { Text("包名") },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = installUrl,
-                        onValueChange = { installUrl = it },
-                        label = { Text("APK 下载地址 (http/https)") },
-                        singleLine = true,
-                    )
-                    Text(
-                        "电视将自行下载并安装该 APK",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TvColors.TextSecondary,
-                    )
+        InstallDialog(
+            pkg = installPkg,
+            url = installUrl,
+            onPkgChange = { installPkg = it },
+            onUrlChange = { installUrl = it },
+            onInstall = {
+                if (installPkg.isNotBlank() && installUrl.isNotBlank()) {
+                    vm.rpm.installByUrl(installPkg.trim(), installUrl.trim())
                 }
+                showInstall = false
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (installPkg.isNotBlank() && installUrl.isNotBlank()) {
-                            vm.rpm.installByUrl(installPkg.trim(), installUrl.trim())
-                        }
-                        showInstall = false
-                    },
-                ) { Text("安装") }
-            },
-            dismissButton = { TextButton(onClick = { showInstall = false }) { Text("取消") } },
+            onDismiss = { showInstall = false },
         )
     }
 
     uninstallTarget?.let { app ->
-        AlertDialog(
-            onDismissRequest = { uninstallTarget = null },
-            title = { Text("卸载应用") },
-            text = { Text("确定从电视上卸载 ${app.appName.ifEmpty { app.packageName }} 吗？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.rpm.uninstall(app.packageName)
-                        uninstallTarget = null
-                    },
-                ) { Text("卸载", color = TvColors.Red) }
+        UninstallDialog(
+            app = app,
+            onConfirm = {
+                vm.rpm.uninstall(app.packageName)
+                uninstallTarget = null
             },
-            dismissButton = { TextButton(onClick = { uninstallTarget = null }) { Text("取消") } },
+            onDismiss = { uninstallTarget = null },
         )
     }
+}
+
+@Composable
+private fun InstallDialog(
+    pkg: String,
+    url: String,
+    onPkgChange: (String) -> Unit,
+    onUrlChange: (String) -> Unit,
+    onInstall: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("按 URL 安装应用") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = pkg,
+                    onValueChange = onPkgChange,
+                    label = { Text("包名") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = onUrlChange,
+                    label = { Text("APK 下载地址 (http/https)") },
+                    singleLine = true,
+                )
+                Text(
+                    "电视将自行下载并安装该 APK",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onInstall) { Text("安装") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+@Composable
+private fun UninstallDialog(
+    app: RpmService.TvApp,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("卸载应用") },
+        text = { Text("确定从电视上卸载 ${app.appName.ifEmpty { app.packageName }} 吗？") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("卸载", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

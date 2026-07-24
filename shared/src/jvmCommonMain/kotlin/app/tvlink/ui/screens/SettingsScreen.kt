@@ -1,69 +1,100 @@
+// Compose 约定可组合函数为 PascalCase，本文件含多个可组合函数，统一文件级抑制
+@file:Suppress("FunctionNaming", "ktlint:standard:function-naming")
+
 package app.tvlink.ui.screens
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
-import app.tvlink.ui.theme.TvColors
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { vm.navBack() }) { Text("‹ 返回") }
-            Spacer(Modifier.weight(1f))
-            Text("设置", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.padding(24.dp))
-        }
-
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.padding(16.dp)) {
-                Text("当前连接", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.padding(4.dp))
-                Text("设备: ${vm.connectedName}")
-                Text("IP: ${vm.connectedIp}", color = TvColors.TextSecondary)
-                Text(
-                    "IB 版本: ${vm.connectedIbVer.ifEmpty { "未探测（手动连接）" }}",
-                    color = TvColors.TextSecondary,
-                )
-                Text(
-                    "IB sid: ${vm.connectedIbSid.ifEmpty { "未探测（手动连接）" }}",
-                    color = TvColors.TextSecondary,
-                )
-                Text("媒体服务: ${vm.mediaServerUrl.ifEmpty { "未启动" }}", color = TvColors.TextSecondary)
-                Text(
-                    "IB 快速通道: ${if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）"}",
-                    color = TvColors.TextSecondary,
-                )
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("设置") },
+            navigationIcon = {
+                IconButton(onClick = { vm.navBack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+            },
+        )
+        Column(Modifier.fillMaxSize().padding(20.dp)) {
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column {
+                    GroupHeader("当前连接")
+                    SettingItem(Icons.Filled.Tv, "设备", vm.connectedName)
+                    SettingItem(Icons.Filled.Wifi, "IP", vm.connectedIp)
+                    SettingItem(Icons.Filled.Memory, "IB 版本", vm.connectedIbVer.ifEmpty { "未探测（手动连接）" })
+                    SettingItem(Icons.Filled.Link, "IB sid", vm.connectedIbSid.ifEmpty { "未探测（手动连接）" })
+                    SettingItem(Icons.Filled.Wifi, "媒体服务", vm.mediaServerUrl.ifEmpty { "未启动" })
+                    SettingItem(
+                        Icons.Filled.Link,
+                        "IB 快速通道",
+                        if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）",
+                    )
+                }
             }
-        }
 
-        Spacer(Modifier.padding(10.dp))
+            Spacer(Modifier.height(12.dp))
 
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.padding(16.dp)) {
-                Text("关于", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.padding(4.dp))
-                Text("TVLink 1.0")
-                Text(
-                    "开源的 YunOS 电视局域网控制客户端（发现/遥控/投屏/截屏/应用管理/语音转发）",
-                    color = TvColors.TextSecondary,
-                )
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column {
+                    GroupHeader("关于")
+                    SettingItem(Icons.Filled.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun GroupHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun SettingItem(
+    icon: ImageVector,
+    label: String,
+    value: String,
+) {
+    ListItem(
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = { Text(label) },
+        supportingContent = { Text(value) },
+        leadingContent = {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+    )
 }
