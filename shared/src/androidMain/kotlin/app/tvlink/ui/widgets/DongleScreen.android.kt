@@ -17,13 +17,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -39,11 +45,11 @@ import androidx.compose.ui.unit.dp
 import app.tvlink.dongle.DongleBlePairer
 import app.tvlink.dongle.currentSsid
 import app.tvlink.ui.AppViewModel
-import app.tvlink.ui.theme.TvColors
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
 // BLUETOOTH_CONNECT/SCAN 已在进入本页时经 permLauncher 请求，设备列表仅在授权后扫描填充，d.name 调用安全
 @SuppressLint("MissingPermission")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 actual fun DongleScreen(vm: AppViewModel) {
     val context = LocalContext.current
@@ -82,76 +88,80 @@ actual fun DongleScreen(vm: AppViewModel) {
         onDispose { pairer.close() }
     }
 
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { vm.navBack() }) { Text("‹ 返回") }
-            Spacer(Modifier.weight(1f))
-            Text("魔投配网", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.weight(1f))
-            TextButton(
-                onClick = {
-                    devices.clear()
-                    pairer.startScan()
-                },
-            ) { Text("扫描") }
-        }
-
-        Text(
-            phaseMsg,
-            color =
-                when (phase) {
-                    DongleBlePairer.Phase.FAILED -> TvColors.Red
-                    DongleBlePairer.Phase.SUCCESS -> TvColors.Green
-                    else -> TvColors.TextSecondary
-                },
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("魔投配网") },
+            navigationIcon = {
+                IconButton(onClick = { vm.navBack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+            },
+            actions = {
+                IconButton(
+                    onClick = {
+                        devices.clear()
+                        pairer.startScan()
+                    },
+                ) { Icon(Icons.Filled.Refresh, contentDescription = "扫描") }
+            },
         )
-        Spacer(Modifier.height(8.dp))
 
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(devices, key = { it.address }) { d ->
-                val isSelected = selected?.address == d.address
-                Card(
-                    Modifier.fillMaxWidth().clickable { selected = d },
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (isSelected) "◉" else "○",
-                            color = if (isSelected) TvColors.AccentStart else TvColors.TextSecondary,
-                        )
-                        Spacer(Modifier.padding(6.dp))
-                        Column {
-                            Text(d.name ?: "未知设备", style = MaterialTheme.typography.titleSmall)
-                            Text(d.address, style = MaterialTheme.typography.bodySmall, color = TvColors.TextSecondary)
+        Column(Modifier.fillMaxSize().padding(20.dp)) {
+            Text(
+                phaseMsg,
+                color =
+                    when (phase) {
+                        DongleBlePairer.Phase.FAILED -> MaterialTheme.colorScheme.error
+                        DongleBlePairer.Phase.SUCCESS -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
+            Spacer(Modifier.height(8.dp))
+
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(devices, key = { it.address }) { d ->
+                    val isSelected = selected?.address == d.address
+                    ElevatedCard(Modifier.fillMaxWidth().clickable { selected = d }) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = isSelected, onClick = null)
+                            Spacer(Modifier.padding(6.dp))
+                            Column {
+                                Text(d.name ?: "未知设备", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    d.address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        OutlinedTextField(
-            value = ssid,
-            onValueChange = { ssid = it },
-            label = { Text("Wi-Fi 名称 (SSID)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Wi-Fi 密码") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = { selected?.let { pairer.pair(it, ssid.trim(), password) } },
-            enabled = selected != null && ssid.isNotBlank() && phase != DongleBlePairer.Phase.WRITING,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (phase == DongleBlePairer.Phase.WRITING) "配网中…" else "开始配网")
+            OutlinedTextField(
+                value = ssid,
+                onValueChange = { ssid = it },
+                label = { Text("Wi-Fi 名称 (SSID)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Wi-Fi 密码") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { selected?.let { pairer.pair(it, ssid.trim(), password) } },
+                enabled = selected != null && ssid.isNotBlank() && phase != DongleBlePairer.Phase.WRITING,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (phase == DongleBlePairer.Phase.WRITING) "配网中…" else "开始配网")
+            }
+            Spacer(Modifier.height(12.dp))
         }
-        Spacer(Modifier.height(12.dp))
     }
 }
