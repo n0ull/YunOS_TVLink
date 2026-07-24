@@ -4,7 +4,6 @@
 package app.tvlink.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -20,13 +19,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,14 +42,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.tvlink.proto.ib.IbConst
 import app.tvlink.proto.ib.RcKey
 import app.tvlink.ui.AppViewModel
-import app.tvlink.ui.theme.TvColors
+import app.tvlink.ui.theme.Brand
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -73,37 +81,25 @@ private class SendThrottle(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemoteScreen(vm: AppViewModel) {
     var mode by remember { mutableStateOf(RcMode.KEYPAD) }
     var powerConfirm by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().background(TvColors.RcDark).padding(16.dp)) {
-        // header
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { vm.navBack() }) { Text("‹ 返回", color = TvColors.TextOnDark) }
-            Spacer(Modifier.weight(1f))
-            Text(vm.connectedName, color = TvColors.TextOnDarkSecondary, style = MaterialTheme.typography.bodySmall)
-        }
-
-        // mode switcher
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcMode.entries.forEach { m ->
-                val sel = m == mode
-                Text(
-                    m.label,
-                    color = if (sel) TvColors.AccentStart else TvColors.TextOnDarkSecondary,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier =
-                        Modifier
-                            .background(
-                                if (sel) Color(0x3337E8FF) else Color.Transparent,
-                                RoundedCornerShape(16.dp),
-                            ).clickable {
-                                mode = m
-                                vm.rc.setMode(m.ibMode)
-                            }.padding(horizontal = 14.dp, vertical = 6.dp),
-                )
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            RcMode.entries.forEachIndexed { i, m ->
+                SegmentedButton(
+                    selected = m == mode,
+                    onClick = {
+                        mode = m
+                        vm.rc.setMode(m.ibMode)
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index = i, count = RcMode.entries.size),
+                ) {
+                    Text(m.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
 
@@ -122,10 +118,11 @@ fun RemoteScreen(vm: AppViewModel) {
             }
         }
 
-        // bottom voice bar
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            app.tvlink.ui.widgets
-                .VoiceButton(onText = { vm.voiceText(it) })
+        BottomAppBar {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                app.tvlink.ui.widgets
+                    .VoiceButton(onText = { vm.voiceText(it) })
+            }
         }
     }
 
@@ -171,11 +168,16 @@ private fun RcButton(
     size: Int = 64,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier.size(size.dp).background(Color(0xFF34343A), CircleShape).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(size.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 2.dp,
     ) {
-        Text(label, color = TvColors.TextOnDark, style = MaterialTheme.typography.titleMedium)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+        }
     }
 }
 
@@ -228,7 +230,7 @@ private fun TouchpadPanel(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .background(Color(0xFF2E2E34), RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
@@ -243,7 +245,7 @@ private fun TouchpadPanel(
                 Modifier
                     .size(18.dp)
                     .offset { IntOffset(cursor.x.roundToInt() - 9, cursor.y.roundToInt() - 9) }
-                    .background(TvColors.AccentStart, CircleShape),
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -267,7 +269,7 @@ private fun Stick(
     Box(
         modifier
             .size(140.dp)
-            .background(Color(0xFF2E2E34), CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
@@ -299,7 +301,7 @@ private fun Stick(
             Modifier
                 .size(52.dp)
                 .offset { IntOffset(knob.x.roundToInt(), knob.y.roundToInt()) }
-                .background(TvColors.accentBrush, CircleShape),
+                .background(Brand.accentBrush, CircleShape),
         )
     }
 }
@@ -369,11 +371,11 @@ private fun WheelPanel(vm: AppViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceEvenly,
     ) {
-        Text("拖动方向盘区域控制光标，单击为确认", color = TvColors.TextOnDarkSecondary)
+        Text("拖动方向盘区域控制光标，单击为确认", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box(
             Modifier
                 .size(220.dp)
-                .background(Color(0xFF2E2E34), CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
@@ -384,7 +386,7 @@ private fun WheelPanel(vm: AppViewModel) {
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.size(80.dp).background(TvColors.accentBrush, CircleShape))
+            Box(Modifier.size(80.dp).background(Brand.accentBrush, CircleShape))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             RcButton("返回") { vm.keyClick(RcKey.BACK) }
@@ -402,7 +404,7 @@ private fun MotionPanel(vm: AppViewModel) {
             app.tvlink.ui.widgets
                 .MotionSensor()
         }
-    androidx.compose.runtime.DisposableEffect(Unit) {
+    DisposableEffect(Unit) {
         sensor.start(
             onAccel = { x, y, z -> vm.rc.accel(x, y, z) },
             onGyro = { x, y, z -> vm.rc.gyro(x, y, z) },
@@ -414,16 +416,21 @@ private fun MotionPanel(vm: AppViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("🎯", style = MaterialTheme.typography.displayMedium)
+        Icon(
+            Icons.Filled.SportsEsports,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(64.dp),
+        )
         Spacer(Modifier.height(12.dp))
-        Text("体感遥控", style = MaterialTheme.typography.titleLarge, color = TvColors.TextOnDark)
+        Text("体感遥控", style = MaterialTheme.typography.titleLarge)
         Text(
             if (app.tvlink.ui.widgets.platformName == "android") {
                 "传感器数据正实时发送到电视"
             } else {
                 "桌面端无传感器，体感模式仅 Android 可用"
             },
-            color = TvColors.TextOnDarkSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
