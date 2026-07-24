@@ -20,3 +20,6 @@ apktool_out/
 
 # local test media (not for VCS)
 media/
+
+# local tool
+tools/
