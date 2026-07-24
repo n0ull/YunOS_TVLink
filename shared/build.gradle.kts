@@ -44,6 +44,8 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                // 图标库独立发布线,最新即 1.7.3(不随 CMP 1.8.0 重发,官方确认兼容)
+                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
             }
         }
         getByName("androidMain").apply {
