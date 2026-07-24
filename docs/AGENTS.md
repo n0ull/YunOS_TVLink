@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-24 -->
 
 # docs
 
@@ -14,12 +14,14 @@ and device behavior when implementing or debugging the protocol stack in `shared
 | File | Description |
 |------|-------------|
 | `REPORT.md` | Master reverse-engineering report — overview of all protocols and findings |
+| `field-test-2026-07-15.md` | 真机实测逆向报告(2026-07-21 自旧研究目录抢救入库;mDNS 无响应 → TCP 3988 兜底探测等实测结论) |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
 | `re/` | Per-module protocol analysis (see `re/AGENTS.md`) |
+| `superpowers/` | AI 会话工作文档 — plans/specs (see `superpowers/AGENTS.md`) |
 
 ## For AI Agents
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-22 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-22 | Updated: 2026-07-24 -->
 
 # proto (desktopTest)
 
@@ -19,6 +19,7 @@ real TV or network required.
 | `CastControllerTest.kt`        | 回环假 TV:`play()` 后轮询 `GET /playback-info` 驱动 onEvent(state/duration/position) |
 | `MdnsTest.kt`                  | mDNS 响应包解析(PTR/TXT)与查询包格式校验(捕获字节数组为夹具)                 |
 | `MediaHttpServerTest.kt`       | 内嵌 HTTP 服务器:完整文件服务 + Range 请求(206 分段)、Content-Length           |
+| `RpmFixTest.kt`                | RPM 修复回归 R1–R4:模块名常量 / LaunchSth 唤醒帧 / ModuleAvailability JSON m_name 分支 / apps 单对象兼容 |
 
 ## For AI Agents
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-24 -->
 
 # shared
 
@@ -23,7 +23,7 @@ Kotlin Multiplatform library containing the entire protocol stack and shared Com
 | `src/jvmCommonMain/` | JVM-shared code: protocol impls, device services, Compose UI (both targets) |
 | `src/androidMain/`   | Android `actual` implementations (BLE, sensors, SAF, voice)                 |
 | `src/desktopMain/`   | Desktop `actual` implementations (AWT dialogs, file save)                   |
-| `src/desktopTest/`   | Unit tests (IDC framing, mDNS parsing, HTTP server)                         |
+| `src/desktopTest/`   | Unit tests (IDC framing, mDNS parsing, HTTP server, RPM 回归)               |
 
 ## For AI Agents
 

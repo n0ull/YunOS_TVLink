@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-22 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-22 | Updated: 2026-07-24 -->
 
 # tools
 
@@ -13,6 +13,6 @@
 
 | Directory | Purpose |
 |-----------|---------|
-| `tvhelper_tool/` | Python 纯标准库遥控/投屏/IDC 验证工具(源码在姊妹研究目录,详见 `tvhelper_tool/AGENTS.md`) |
+| `tvhelper_tool/` | Python 纯标准库遥控/投屏/IDC 验证工具(源码已入库,详见 `tvhelper_tool/AGENTS.md`) |
 
 <!-- MANUAL: -->

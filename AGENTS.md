@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-24 -->
 
 # TVLink
 
@@ -18,7 +18,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 | `.editorconfig` | ktlint_official code style (line width 120, import layout); `[**/build/**]` 段排除生成代码 |
 | `detekt.yml` | detekt static analysis rules (complexity, naming, coroutines, exceptions) |
 | `local.properties` | Android SDK path (machine-specific, gitignored) |
-| `.gitignore` | Ignores build/, .gradle/, .idea/, .omc/, local.properties, 反编译参考物(jadx_out/, apktool_out/, *.apk), media/ |
+| `.gitignore` | Ignores build/, .gradle/, .idea/, .omc/, local.properties, 反编译参考物(jadx_out/, apktool_out/, *.apk), media/, tools/(本地工具,仅 AGENTS.md 锚点入库) |
 | `README.md` | Feature matrix, build instructions, protocol summary (Chinese) |
 | `TODO.md` | 真机验证档案 + 待办清单:P0/3988 探测已归档;P1 首项为 RPM 修复计划 R1–R4(2026-07-21 反编译复核定位模块名/唤醒/解析三缺陷,证据见 `docs/re/05` §3) |
 
@@ -31,7 +31,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 | `desktopApp/` | Compose Desktop application shell (see `desktopApp/AGENTS.md`) |
 | `docs/` | Reverse-engineering reports and protocol specs (see `docs/AGENTS.md`) |
 | `.github/` | GitHub Actions CI — Build & Test 工作流 (see `.github/AGENTS.md`) |
-| `tools/` | 外部参考验证工具(Python,不参与 Gradle 构建;see `tools/AGENTS.md`) |
+| `tools/` | 本地参考验证工具(Python;gitignored 不入库,仅 AGENTS.md 锚点被强制跟踪;see `tools/AGENTS.md`) |
 | `gradle/` | Gradle wrapper JAR and properties |
 | `apktool_out/` | Decompiled APK resources (reference only, not compiled) |
 | `jadx_out/` | Decompiled APK Java source (reference only, not compiled) |

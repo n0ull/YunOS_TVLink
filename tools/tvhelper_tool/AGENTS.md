@@ -1,21 +1,19 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-22 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-22 | Updated: 2026-07-24 -->
 
 # tvhelper_tool
 
 ## Purpose
 
-**参考工具(REFERENCE TOOLING)——不被本仓库 Gradle 构建编译**。源码亦不在本目录,
-位于姊妹研究目录 `D:\n0ull\Desktop\1\Java\tvhelper\tvhelper_tool`(旧逆向仓库,
-见根 `TODO.md`「工具」一节);本仓库此处仅为文档锚点。
+**参考工具(REFERENCE TOOLING)——不被本仓库 Gradle 构建编译,亦不入库**:整个 `tools/`
+被 `.gitignore` 排除("# local tool"),仅本文件与 `tools/AGENTS.md` 被强制跟踪为文档锚点;
+Python 源码只存在于本地工作副本(2026-07 自旧研究目录迁入,旧目录已清理)。
 
 逆向自 `阿里TV助手_5.2.2.apk` 的纯 Python 标准库实现(socket / struct / json / uuid,
 零第三方依赖),局域网直连 YunOS 电视:遥控按键、鼠标/触摸板、手柄摇杆、投屏
 均已真机实测可用,是 TVLink Kotlin 协议实现的行为对照基准。
 
 ## Key Files
-
-以下文件均位于 `D:\n0ull\Desktop\1\Java\tvhelper\tvhelper_tool\`:
 
 | File | Description |
 |------|-------------|
