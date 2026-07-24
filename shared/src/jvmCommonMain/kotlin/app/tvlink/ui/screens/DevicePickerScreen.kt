@@ -1,3 +1,6 @@
+// Compose 约定可组合函数为 PascalCase，本文件含多个可组合函数，统一文件级抑制
+@file:Suppress("FunctionNaming", "ktlint:standard:function-naming")
+
 package app.tvlink.ui.screens
 
 import androidx.compose.animation.core.LinearEasing
@@ -22,11 +25,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -39,14 +48,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.tvlink.device.DeviceManager
 import app.tvlink.ui.AppViewModel
-import app.tvlink.ui.theme.TvColors
+import app.tvlink.ui.theme.Brand
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 fun DevicePickerScreen(vm: AppViewModel) {
     var manualIp by remember { mutableStateOf("") }
@@ -54,50 +63,52 @@ fun DevicePickerScreen(vm: AppViewModel) {
     val searching = vm.connState == DeviceManager.ConnState.SEARCHING
 
     Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(48.dp))
-        Text("TVLink", style = MaterialTheme.typography.headlineLarge)
-        Text("用手机玩电视", style = MaterialTheme.typography.bodyMedium, color = TvColors.TextSecondary)
         Spacer(Modifier.height(32.dp))
-
-        SearchPulse(active = searching)
-
+        BrandMark(active = searching)
+        Spacer(Modifier.height(16.dp))
+        Text("TVLink", style = MaterialTheme.typography.headlineLarge)
+        Text(
+            "用手机玩电视",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(24.dp))
+
         when (vm.connState) {
             DeviceManager.ConnState.SEARCHING ->
-                Text(
-                    "正在搜索同一 Wi-Fi 下的电视设备…",
-                    color = TvColors.TextSecondary,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("正在搜索同一 Wi-Fi 下的电视设备…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
 
-            DeviceManager.ConnState.CONNECTING -> Text("正在连接…", color = TvColors.TextSecondary)
-            DeviceManager.ConnState.FAILED -> Text("连接失败，请确认设备在线后重试", color = TvColors.Red)
+            DeviceManager.ConnState.CONNECTING ->
+                Text("正在连接…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            DeviceManager.ConnState.FAILED ->
+                Text("连接失败，请确认设备在线后重试", color = MaterialTheme.colorScheme.error)
+
             else ->
                 Text(
                     if (vm.foundDevices.isEmpty()) "点击下方按钮搜索设备" else "发现 ${vm.foundDevices.size} 个设备",
-                    color = TvColors.TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         }
 
         Spacer(Modifier.height(16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(vm.foundDevices, key = { it.ip }) { d ->
-                Card(
-                    Modifier.fillMaxWidth().clickable { vm.connectTo(d) },
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(40.dp).background(TvColors.accentBrush, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) { Text("TV", color = androidx.compose.ui.graphics.Color.White) }
-                        Spacer(Modifier.width(12.dp))
-                        Column {
+                ElevatedCard(Modifier.fillMaxWidth().clickable { vm.connectTo(d) }) {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
                             Text(
                                 d.name.ifEmpty {
                                     if (d.source == "ib-scan") "电视 (IB 通道)" else "未命名设备"
                                 },
-                                style = MaterialTheme.typography.titleMedium,
                             )
+                        },
+                        supportingContent = {
                             Text(
                                 listOfNotNull(
                                     d.ip,
@@ -106,11 +117,18 @@ fun DevicePickerScreen(vm: AppViewModel) {
                                     d.ibVer.takeIf { it.isNotEmpty() }?.let { "IB v$it" },
                                     d.ibSid.takeIf { it.isNotEmpty() }?.let { "sid=$it" },
                                 ).joinToString("  ·  "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TvColors.TextSecondary,
                             )
-                        }
-                    }
+                        },
+                        leadingContent = {
+                            Box(
+                                Modifier.size(40.dp).background(Brand.accentBrush, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.Tv, contentDescription = null, tint = Color.White) }
+                        },
+                        trailingContent = {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                        },
+                    )
                 }
             }
         }
@@ -141,9 +159,9 @@ fun DevicePickerScreen(vm: AppViewModel) {
     }
 }
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
+/** 品牌时刻：渐变圆 logo；搜索中脉冲呼吸。 */
 @Composable
-private fun SearchPulse(active: Boolean) {
+private fun BrandMark(active: Boolean) {
     val transition = rememberInfiniteTransition(label = "pulse")
     val a by transition.animateFloat(
         initialValue = 0.3f,
@@ -154,10 +172,15 @@ private fun SearchPulse(active: Boolean) {
     Box(
         Modifier
             .size(72.dp)
-            .alpha(if (active) a else 0.25f)
-            .background(TvColors.accentBrush, CircleShape),
+            .alpha(if (active) a else 1f)
+            .background(Brand.accentBrush, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text("搜", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.titleLarge)
+        Icon(
+            Icons.Filled.Tv,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(36.dp),
+        )
     }
 }
