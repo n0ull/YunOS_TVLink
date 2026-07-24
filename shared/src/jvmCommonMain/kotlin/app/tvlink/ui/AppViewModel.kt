@@ -35,30 +35,35 @@ class AppViewModel : ViewModel() {
     sealed interface Screen {
         data object DevicePicker : Screen
 
-        data object Home : Screen
-
-        data object Remote : Screen
-
-        data object Cast : Screen
-
-        data object Screenshot : Screen
-
-        data object Apps : Screen
-
-        data object Settings : Screen
-
-        data object Dongle : Screen
+        data class Main(
+            val tab: MainTab = MainTab.REMOTE,
+            val moreSub: MoreSub? = null,
+        ) : Screen
     }
+
+    enum class MainTab { REMOTE, CAST, MORE }
+
+    enum class MoreSub { SCREENSHOT, APPS, SETTINGS, DONGLE }
 
     var screen by mutableStateOf<Screen>(Screen.DevicePicker)
         private set
 
-    fun nav(to: Screen) {
-        screen = to
+    fun navTab(tab: MainTab) {
+        screen = (screen as? Screen.Main)?.copy(tab = tab, moreSub = null) ?: screen
+    }
+
+    fun navMore(sub: MoreSub) {
+        screen = (screen as? Screen.Main)?.copy(moreSub = sub) ?: screen
     }
 
     fun navBack() {
-        screen = if (deviceManager.connected.value != null) Screen.Home else Screen.DevicePicker
+        val s = screen as? Screen.Main ?: return
+        screen =
+            when {
+                s.moreSub != null -> s.copy(moreSub = null)
+                s.tab != MainTab.REMOTE -> s.copy(tab = MainTab.REMOTE)
+                else -> s
+            }
     }
 
     // ---- services ----
@@ -111,7 +116,7 @@ class AppViewModel : ViewModel() {
                     connectedIbVer = c?.ibVer ?: ""
                     connectedIbSid = c?.ibSid ?: ""
                     onConnected()
-                    screen = Screen.Home
+                    screen = Screen.Main()
                 } else if (s == DeviceManager.ConnState.IDLE) {
                     connectedName = ""
                     connectedIbVer = ""
@@ -255,6 +260,10 @@ class AppViewModel : ViewModel() {
             val ok = cc.setMedia(type, url, title)
             if (ok) cc.play() else notice = "投屏失败"
         }
+    }
+
+    fun castSeek(ms: Long) {
+        viewModelScope.launch(Dispatchers.IO) { cast?.seek(ms) }
     }
 
     fun voiceText(text: String) = asr.sendText(text)

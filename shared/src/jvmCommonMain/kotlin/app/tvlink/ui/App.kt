@@ -1,6 +1,7 @@
 package app.tvlink.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,16 +19,9 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import app.tvlink.ui.screens.AppsScreen
-import app.tvlink.ui.screens.CastScreen
 import app.tvlink.ui.screens.DevicePickerScreen
-import app.tvlink.ui.screens.HomeScreen
-import app.tvlink.ui.screens.RemoteScreen
-import app.tvlink.ui.screens.ScreenshotScreen
-import app.tvlink.ui.screens.SettingsScreen
 import app.tvlink.ui.theme.TvTheme
 import app.tvlink.ui.widgets.BackHandler
-import app.tvlink.ui.widgets.DongleScreen
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
@@ -44,10 +38,15 @@ fun App() {
     }
     CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
         val vm: AppViewModel = viewModel { AppViewModel() }
-        TvTheme(dark = vm.screen == AppViewModel.Screen.Remote) {
-            // 拦截系统返回键：已连接时回退到 Home，未连接回退到 DevicePicker，
-            // DevicePicker 不禁用则 Activity.finish() 正常退出。
-            BackHandler(enabled = vm.screen != AppViewModel.Screen.DevicePicker) { vm.navBack() }
+        val screen = vm.screen
+        // 遥控 tab 恒深（品类惯例）；其余跟随系统
+        val remoteActive = screen is AppViewModel.Screen.Main && screen.tab == AppViewModel.MainTab.REMOTE
+        TvTheme(dark = remoteActive || isSystemInDarkTheme()) {
+            // Main 根（遥控 tab）不拦截返回键，交系统默认（退出/最小化）
+            val canBack =
+                screen is AppViewModel.Screen.Main &&
+                    (screen.moreSub != null || screen.tab != AppViewModel.MainTab.REMOTE)
+            BackHandler(enabled = canBack) { vm.navBack() }
             val snackbar = remember { SnackbarHostState() }
             LaunchedEffect(vm.notice) {
                 if (vm.notice.isNotEmpty()) {
@@ -64,15 +63,9 @@ fun App() {
                         .background(MaterialTheme.colorScheme.background)
                         .padding(padding),
                 ) {
-                    when (vm.screen) {
+                    when (screen) {
                         AppViewModel.Screen.DevicePicker -> DevicePickerScreen(vm)
-                        AppViewModel.Screen.Home -> HomeScreen(vm)
-                        AppViewModel.Screen.Remote -> RemoteScreen(vm)
-                        AppViewModel.Screen.Cast -> CastScreen(vm)
-                        AppViewModel.Screen.Screenshot -> ScreenshotScreen(vm)
-                        AppViewModel.Screen.Apps -> AppsScreen(vm)
-                        AppViewModel.Screen.Settings -> SettingsScreen(vm)
-                        AppViewModel.Screen.Dongle -> DongleScreen(vm)
+                        is AppViewModel.Screen.Main -> MainShell(vm, screen)
                     }
                 }
             }
