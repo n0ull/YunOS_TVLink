@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import app.tvlink.dongle.DongleBlePairer
 import app.tvlink.dongle.currentSsid
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.icons.AppIcons
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
 // BLUETOOTH_CONNECT/SCAN 已在进入本页时经 permLauncher 请求，设备列表仅在授权后扫描填充，d.name 调用安全
@@ -93,7 +91,7 @@ actual fun DongleScreen(vm: AppViewModel) {
             title = { Text("魔投配网") },
             navigationIcon = {
                 IconButton(onClick = { vm.navBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(AppIcons.ArrowBack, contentDescription = "返回")
                 }
             },
             actions = {
@@ -102,7 +100,7 @@ actual fun DongleScreen(vm: AppViewModel) {
                         devices.clear()
                         pairer.startScan()
                     },
-                ) { Icon(Icons.Filled.Refresh, contentDescription = "扫描") }
+                ) { Icon(AppIcons.Refresh, contentDescription = "扫描") }
             },
         )
 

@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.screens.AppsScreen
 import app.tvlink.ui.screens.CastScreen
 import app.tvlink.ui.screens.MoreScreen
@@ -39,9 +36,9 @@ private data class TabDest(
 
 private val tabs =
     listOf(
-        TabDest(AppViewModel.MainTab.REMOTE, "遥控", Icons.Filled.SportsEsports),
-        TabDest(AppViewModel.MainTab.CAST, "投屏", Icons.Filled.Cast),
-        TabDest(AppViewModel.MainTab.MORE, "更多", Icons.Filled.MoreHoriz),
+        TabDest(AppViewModel.MainTab.REMOTE, "遥控", AppIcons.SportsEsports),
+        TabDest(AppViewModel.MainTab.CAST, "投屏", AppIcons.Cast),
+        TabDest(AppViewModel.MainTab.MORE, "更多", AppIcons.MoreHoriz),
     )
 
 @Composable

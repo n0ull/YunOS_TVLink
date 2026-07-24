@@ -27,9 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -54,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.tvlink.device.DeviceManager
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.theme.Brand
 
 @Composable
@@ -123,10 +121,10 @@ fun DevicePickerScreen(vm: AppViewModel) {
                             Box(
                                 Modifier.size(40.dp).background(Brand.accentBrush, CircleShape),
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.Tv, contentDescription = null, tint = Color.White) }
+                            ) { Icon(AppIcons.Tv, contentDescription = null, tint = Color.White) }
                         },
                         trailingContent = {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                            Icon(AppIcons.KeyboardArrowRight, contentDescription = null)
                         },
                     )
                 }
@@ -177,7 +175,7 @@ private fun BrandMark(active: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.Tv,
+            AppIcons.Tv,
             contentDescription = null,
             tint = Color.White,
             modifier = Modifier.size(36.dp),

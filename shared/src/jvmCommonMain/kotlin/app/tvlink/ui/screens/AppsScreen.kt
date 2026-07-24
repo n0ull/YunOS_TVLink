@@ -11,12 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.tvlink.device.RpmService
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.icons.AppIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,15 +53,15 @@ fun AppsScreen(vm: AppViewModel) {
             title = { Text("应用管理") },
             navigationIcon = {
                 IconButton(onClick = { vm.navBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(AppIcons.ArrowBack, contentDescription = "返回")
                 }
             },
             actions = {
                 IconButton(onClick = { vm.refreshApps() }) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                    Icon(AppIcons.Refresh, contentDescription = "刷新")
                 }
                 IconButton(onClick = { showInstall = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "按 URL 安装")
+                    Icon(AppIcons.Add, contentDescription = "按 URL 安装")
                 }
             },
         )
@@ -104,11 +99,11 @@ fun AppsScreen(vm: AppViewModel) {
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = { vm.rpm.openApp(app.packageName) }) {
-                                    Icon(Icons.Filled.OpenInNew, contentDescription = "打开")
+                                    Icon(AppIcons.OpenInNew, contentDescription = "打开")
                                 }
                                 IconButton(onClick = { uninstallTarget = app }) {
                                     Icon(
-                                        Icons.Filled.Delete,
+                                        AppIcons.Delete,
                                         contentDescription = "卸载",
                                         tint = MaterialTheme.colorScheme.error,
                                     )

@@ -9,13 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.icons.AppIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +34,7 @@ fun SettingsScreen(vm: AppViewModel) {
             title = { Text("设置") },
             navigationIcon = {
                 IconButton(onClick = { vm.navBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(AppIcons.ArrowBack, contentDescription = "返回")
                 }
             },
         )
@@ -48,13 +42,13 @@ fun SettingsScreen(vm: AppViewModel) {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column {
                     GroupHeader("当前连接")
-                    SettingItem(Icons.Filled.Tv, "设备", vm.connectedName)
-                    SettingItem(Icons.Filled.Wifi, "IP", vm.connectedIp)
-                    SettingItem(Icons.Filled.Memory, "IB 版本", vm.connectedIbVer.ifEmpty { "未探测（手动连接）" })
-                    SettingItem(Icons.Filled.Link, "IB sid", vm.connectedIbSid.ifEmpty { "未探测（手动连接）" })
-                    SettingItem(Icons.Filled.Wifi, "媒体服务", vm.mediaServerUrl.ifEmpty { "未启动" })
+                    SettingItem(AppIcons.Tv, "设备", vm.connectedName)
+                    SettingItem(AppIcons.Wifi, "IP", vm.connectedIp)
+                    SettingItem(AppIcons.Memory, "IB 版本", vm.connectedIbVer.ifEmpty { "未探测（手动连接）" })
+                    SettingItem(AppIcons.Link, "IB sid", vm.connectedIbSid.ifEmpty { "未探测（手动连接）" })
+                    SettingItem(AppIcons.Wifi, "媒体服务", vm.mediaServerUrl.ifEmpty { "未启动" })
                     SettingItem(
-                        Icons.Filled.Link,
+                        AppIcons.Link,
                         "IB 快速通道",
                         if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）",
                     )
@@ -66,7 +60,7 @@ fun SettingsScreen(vm: AppViewModel) {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column {
                     GroupHeader("关于")
-                    SettingItem(Icons.Filled.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
+                    SettingItem(AppIcons.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
                 }
             }
         }

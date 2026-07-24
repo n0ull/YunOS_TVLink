@@ -11,14 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Photo
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
@@ -40,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.tvlink.proto.cast.CastController
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.widgets.pickMediaFile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,9 +44,9 @@ fun CastScreen(vm: AppViewModel) {
         TopAppBar(title = { Text("本地投屏") })
         Column(Modifier.padding(20.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                MediaTypeCard("照片", Icons.Filled.Photo) { pendingType = "image" }
-                MediaTypeCard("视频", Icons.Filled.Movie) { pendingType = "video" }
-                MediaTypeCard("音乐", Icons.Filled.MusicNote) { pendingType = "audio" }
+                MediaTypeCard("照片", AppIcons.Photo) { pendingType = "image" }
+                MediaTypeCard("视频", AppIcons.Movie) { pendingType = "video" }
+                MediaTypeCard("音乐", AppIcons.MusicNote) { pendingType = "audio" }
             }
 
             pendingType?.let { type ->
@@ -89,19 +82,19 @@ fun CastScreen(vm: AppViewModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (vm.castState == CastController.PlayState.PLAYING) {
                             Button(onClick = { vm.cast?.pause() }) {
-                                Icon(Icons.Filled.Pause, contentDescription = null)
+                                Icon(AppIcons.Pause, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("暂停")
                             }
                         } else {
                             Button(onClick = { vm.cast?.play() }) {
-                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                                Icon(AppIcons.PlayArrow, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("播放")
                             }
                         }
                         OutlinedButton(onClick = { vm.cast?.stop() }) {
-                            Icon(Icons.Filled.Stop, contentDescription = null)
+                            Icon(AppIcons.Stop, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("退出")
                         }
@@ -110,7 +103,7 @@ fun CastScreen(vm: AppViewModel) {
                     Spacer(Modifier.padding(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Filled.VolumeUp,
+                            AppIcons.VolumeUp,
                             contentDescription = "音量",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import app.tvlink.proto.ib.IbConst
 import app.tvlink.proto.ib.RcKey
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.theme.Brand
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -417,7 +416,7 @@ private fun MotionPanel(vm: AppViewModel) {
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
-            Icons.Filled.SportsEsports,
+            AppIcons.SportsEsports,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(64.dp),
