@@ -22,6 +22,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,11 +73,6 @@ fun CastScreen(vm: AppViewModel) {
 
                     Spacer(Modifier.padding(8.dp))
                     SeekBar(vm)
-                    Text(
-                        "${fmtMs(vm.castPosition)} / ${fmtMs(vm.castDuration)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
 
                     Spacer(Modifier.padding(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -156,25 +152,49 @@ private fun MediaTypeCard(
     }
 }
 
-/** 可拖动进度条：拖动中显示本地值，松手 seek。 */
+/**
+ * 进度条：拖动中显示目标预览;松手后短暂保持目标值等待轮询确认(≤2.5s),
+ * TV 实际进度到位(±3s)则交还轮询,超时未到位则回退到实际进度。
+ */
 @Composable
 private fun SeekBar(vm: AppViewModel) {
     var dragging by remember { mutableStateOf(false) }
-    var dragPos by remember { mutableStateOf(0f) }
+    var pending by remember { mutableStateOf(false) }
+    var override by remember { mutableStateOf(0f) }
     val duration = vm.castDuration.toFloat().coerceAtLeast(1f)
+    val showOverride = dragging || pending
+
+    LaunchedEffect(pending, override) {
+        if (!pending) return@LaunchedEffect
+        val targetMs = override.toLong()
+        var waited = 0L
+        while (waited < 2500L) {
+            if (kotlin.math.abs(vm.castPosition - targetMs) <= 3000L) break
+            kotlinx.coroutines.delay(200)
+            waited += 200
+        }
+        pending = false
+    }
+
     Slider(
-        value = if (dragging) dragPos else vm.castPosition.toFloat().coerceIn(0f, duration),
+        value = if (showOverride) override else vm.castPosition.toFloat().coerceIn(0f, duration),
         onValueChange = {
             dragging = true
-            dragPos = it
+            override = it
         },
         onValueChangeFinished = {
             dragging = false
-            vm.castSeek(dragPos.toLong())
+            pending = true
+            vm.castSeek(override.toLong())
         },
         valueRange = 0f..duration,
         enabled = vm.castDuration > 0,
         modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        "${fmtMs((if (showOverride) override.toLong() else vm.castPosition))} / ${fmtMs(vm.castDuration)}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
