@@ -12,6 +12,8 @@
 - IDC `mVer=2121108324`(≥2100200600 → LaunchSth 可用 activity_new)
 - 截图:无加密 + 正确 connKey + 正确帧格式即成功(「加密墙」证伪,229090B JPEG)
 - 投屏:固件(server_vers 3.2.0)不推 POST /event,状态/时长/进度轮询 `GET /playback-info`
+- LaunchSth:lt=2+标准 action+extra_str(data URI 语义)可触发 TV intent 解析(弹选择框);
+  `ACTION_DIAGNOSTIC` 无对应 activity;直拉酷喵三轮 scheme/包名均失败(详见 P2-1)
 - OpCmd_Key(IDC 按键回退):有效(VOL_UP 音量 OSD 实测)
 - 该 PC mDNS 创建失败(WinError 10065)→ 子网扫描兜底是必需路径,非可选项
 - 桌面端已验证:连接/按键/触控板/手柄/截图/投屏视频(状态/总时长/进度)
@@ -33,7 +35,12 @@
       证实,见真机档案),**本机不可验证**。代码侧 R1–R4 已就绪(`RpmFixTest` 5/5);
       若获得提供 `com.yunos.idc.appstore` 模块的设备:列表(4)→打开(14)→卸载(11)→URL 推装(7;
       `result==2` 下载开始、`appStatus=18` 完成)。注:卸载/列表/打开在原 App v5.2.2 无 UI
-      调用点,电视端实现属推断,该轮验证即首次实证
+      调用点,电视端实现属推断,该轮验证即首次实证。
+      **反编译复核(2026-07-25,判死替代路径)**:RPM 全部 12 操作唯一通道 = appstore VConn
+      (`RPM.java` 全走 `mRpmModule.sendVConnPacket`),无第二路径;本机第三模块
+      `immersive/yingshi.boutique` = 沉浸式影视播放器(`ImmersivePublic`),与应用管理无关;
+      `LaunchSth` 仅 intent action 拉起(诊断页/唤醒 service),无任意包名拉起语义,不能替
+      「打开应用」;全 jadx 无已知包名字典可复用。**此设备应用管理结构性不可行**
 - [x] 图片投屏——**真机已验证(2026-07-25)**:`/setmedia` image 类型主路成功(本地
       MediaHttpServer 供片),备选 `PUT /image` 未启用
 - [ ] 远程文字输入——**设备能力缺失,挂起(2026-07-25 双实证)**:①原 App(加密会话 ver=1,
@@ -63,11 +70,18 @@
 > CmdReqBase 家族(SysProp/PackageInfo/PathInfo)body 为两段 LPString
 > (`LPString({"cmdReqID":N})` + `LPString({参数})`);LaunchSth 例外,单段 LPString 直发。
 
-1. `Cmd_LaunchSth`(20400):实现最简单。反编译实见 action:
+1. `Cmd_LaunchSth`(20400):**真机语义实证(2026-07-25,`tvhelper/tvhelper_tool/launch_probe.py`)**:
+   lt=2(activity_new)+标准 action+extra_str 可触发 TV intent 解析——**extra_str 被当
+   intent data URI**(非包名/组件):VIEW/MAIN+裸包名或 URI 弹「以什么应用打开」选择框
+   (VIEW+任意 data 仅泰坦桌面应答;MAIN+data 匹配一堆应用)。`ACTION_DIAGNOSTIC` 在
+   M638_ALI 无对应 activity(07-22 空转复证);直拉酷喵(com.youku.taitan.tv)失败——
+   `youkutv://`/`youku://`/`http://v.youku.com/` 均无导出 handler,无 manifest 不续猜。
+   service 型+非法 action 会致 TV 断连(WinError 10053)。
+   **结论:协议存活但实用价值止于弹选择框**;设置屏「TV 诊断页」入口保留
+   (`launchTvDiagnostics`,版本门 mVer≥2100200600,有能力固件上有效)。
+   反编译实见 action:
    `com.yunos.tv.intent.RemoteControlServer.ACTION_DIAGNOSTIC`(activity_new)、
-   `yunos.appstore.startprocessservice`(service)。<2100200600 直接不发包。
-   注:应用管理页「打开」已走 AppStore(14) 覆盖常规拉起,LaunchSth 的增量价值
-   是诊断页与自定义 service。
+   `yunos.appstore.startprocessservice`(service,RPM R2 已在用)。<2100200600 直接不发包。
 2. `Cmd_SysProp`(21100/21200):读写 TV 系统属性。**真机已验证(2026-07-25)**:设置屏查询
    `ro.product.model` 回 `M638_ALI`。实现:`SysPropReq/Resp`(`IdcPackets.kt`,对齐反编译
    `IdcPacket_Cmd_SysProp_Req/Resp.java`,Resp 无 dummy 段)+ `SysPropService`(按 prop_key

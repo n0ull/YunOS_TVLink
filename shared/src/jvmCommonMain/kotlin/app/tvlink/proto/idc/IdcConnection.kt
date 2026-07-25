@@ -33,6 +33,7 @@ class IdcConnection(
 
     data class DeviceInfo(
         val ip: String,
+        val ver: Int = 0,
         val name: String = "",
         val model: String = "",
         val uuid: String = "",
@@ -147,6 +148,7 @@ class IdcConnection(
         deviceInfo =
             DeviceInfo(
                 ip = host,
+                ver = p.ver,
                 name = p.devName,
                 model = p.devModel,
                 uuid = p.devUuid,

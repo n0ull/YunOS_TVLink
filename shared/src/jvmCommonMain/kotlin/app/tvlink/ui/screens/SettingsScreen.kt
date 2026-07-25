@@ -3,6 +3,7 @@
 
 package app.tvlink.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,6 +64,19 @@ fun SettingsScreen(vm: AppViewModel) {
                         AppIcons.Link,
                         "IB 快速通道",
                         if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）",
+                    )
+                    ListItem(
+                        modifier = Modifier.clickable { vm.launchTvDiagnostics() },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = { Text("TV 诊断页") },
+                        supportingContent = { Text("在电视上打开诊断页（Cmd_LaunchSth)") },
+                        leadingContent = {
+                            Icon(
+                                AppIcons.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
                     )
                 }
             }

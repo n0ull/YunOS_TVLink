@@ -427,6 +427,9 @@ class ImeAction(
  * Cmd_LaunchSth(20400) — 唤醒电视端模块/服务。launchType 取枚举 ordinal:
  * 0=activity, 1=service, 2=activity_new(IdcPacket_Cmd_LaunchSth.java:17-21)。
  * body 为单段 LPString JSON(CmdReqBase 家族的双 LPString 格式不适用,LaunchSth 是例外)。
+ * 真机实证(2026-07-25,launch_probe):extra_str 被 TV 侧当 **intent data URI**(Uri.parse)
+ * 而非包名/组件——lt=2 + VIEW/MAIN + URI 弹「以什么应用打开」选择框;
+ * ACTION_DIAGNOSTIC 在 M638_ALI 固件无对应 activity(空操作)。
  */
 class CmdLaunchSth(
     var launchType: Int = 1,
