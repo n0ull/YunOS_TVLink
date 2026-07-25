@@ -33,7 +33,9 @@ class CastController(
     @Volatile
     var state = State.DISCONNECTED
         private set
-    var onEvent: ((PlayState, duration: Long, position: Long) -> Unit)? = null
+
+    /** (state, durationMs, positionMs, volume);事件推送无音量时 volume=-1(调用方保持旧值)。 */
+    var onEvent: ((PlayState, duration: Long, position: Long, volume: Int) -> Unit)? = null
     var onStateChanged: ((State) -> Unit)? = null
 
     private val sessionId: String = UUID.randomUUID().toString()
@@ -290,6 +292,7 @@ class CastController(
             st,
             params["duration"]?.toLongOrNull() ?: 0,
             params["position"]?.toLongOrNull() ?: 0,
+            params["volume"]?.toIntOrNull() ?: -1,
         )
         ackEvent()
     }
@@ -323,6 +326,7 @@ class CastController(
                                 playStateByName[info.state] ?: PlayState.UNKNOWN,
                                 info.duration,
                                 info.position,
+                                info.volume,
                             )
                         }
                         try {

@@ -81,19 +81,19 @@ fun CastScreen(vm: AppViewModel) {
                     Spacer(Modifier.padding(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (vm.castState == CastController.PlayState.PLAYING) {
-                            Button(onClick = { vm.cast?.pause() }) {
+                            Button(onClick = { vm.castPause() }) {
                                 Icon(AppIcons.Pause, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("暂停")
                             }
                         } else {
-                            Button(onClick = { vm.cast?.play() }) {
+                            Button(onClick = { vm.castPlay() }) {
                                 Icon(AppIcons.PlayArrow, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("播放")
                             }
                         }
-                        OutlinedButton(onClick = { vm.cast?.stop() }) {
+                        OutlinedButton(onClick = { vm.castStop() }) {
                             Icon(AppIcons.Stop, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("退出")
@@ -108,12 +108,28 @@ fun CastScreen(vm: AppViewModel) {
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.width(8.dp))
-                        var vol by remember { mutableStateOf(10f) }
+                        // 值随轮询同步 TV 音量;拖动中显示本地值,松手下发
+                        var dragging by remember { mutableStateOf(false) }
+                        var dragVol by remember { mutableStateOf(0f) }
                         Slider(
-                            value = vol,
-                            onValueChange = { vol = it },
-                            onValueChangeFinished = { vm.cast?.volume(vol.toInt()) },
+                            value = if (dragging) dragVol else vm.castVolume.toFloat(),
+                            onValueChange = {
+                                dragging = true
+                                dragVol = it
+                            },
+                            onValueChangeFinished = {
+                                dragging = false
+                                vm.castVolumeTo(dragVol.toInt())
+                            },
                             valueRange = 0f..30f,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        // 拖动中预览目标音量,平时显示 TV 当前音量
+                        Text(
+                            "${if (dragging) dragVol.toInt() else vm.castVolume}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

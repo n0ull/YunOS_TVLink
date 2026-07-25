@@ -89,6 +89,12 @@ PROTO_MULTITOUCH(原 App 也无 UI 调用方)。
 
 ## 已归档(完成)
 
+- [x] 投屏播放控制修复+真机验证(2026-07-25):播放/暂停/退出曾在 Android 主线程直调阻塞
+      socket → NetworkOnMainThreadException(message 为 null,日志 `request failed: null` 曾
+      误判协议问题),收进 VM 走 IO;`onConnected` 重复触发不释放旧 CastController 曾致双
+      13521 控制会话(TV 会话归属错乱),`connectCast` 先断后建+onResume 单独补建;音量轮询
+      同步+当前值/拖动预览(此前 slider 固定 10f 不取 TV 值)
+
 - [x] IDC OpCmd_Key 兜底验证(2026-07-20,VOL_UP 音量 OSD)
 - [x] 截图:帧格式修正(`547a8bd`)+ 无加密出图(2026-07-20 探针;2026-07-21 桌面端复测)
 - [x] 投屏状态/总时长/进度(2026-07-21 桌面端复测,`4679231`)

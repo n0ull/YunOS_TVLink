@@ -87,8 +87,15 @@ class AppViewModel : ViewModel() {
      */
     fun onResume() {
         val d = lastDevice ?: return
-        if (connState == DeviceManager.ConnState.CONNECTED || connState == DeviceManager.ConnState.CONNECTING) return
-        deviceManager.connect(d.ip, d.projectionPort, d.ibVer, d.ibSid)
+        if (connState == DeviceManager.ConnState.CONNECTING) return
+        if (connState != DeviceManager.ConnState.CONNECTED) {
+            deviceManager.connect(d.ip, d.projectionPort, d.ibVer, d.ibSid)
+            return
+        }
+        // IDC 在线但投屏控制通道死亡(后台被杀/请求异常)——单独补建
+        if (cast?.state != app.tvlink.proto.cast.CastController.State.CONNECTED) {
+            connectCast(d.ip, if (d.projectionPort != 0) d.projectionPort else DEFAULT_CAST_PORT)
+        }
     }
 
     var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
@@ -114,6 +121,7 @@ class AppViewModel : ViewModel() {
     var castState by mutableStateOf(CastController.PlayState.UNKNOWN)
     var castDuration by mutableStateOf(0L)
     var castPosition by mutableStateOf(0L)
+    var castVolume by mutableStateOf(0)
     var castTitle by mutableStateOf("")
     var mediaServerUrl by mutableStateOf("")
 
@@ -185,14 +193,27 @@ class AppViewModel : ViewModel() {
         rc.attach()
         rpm.attach()
         val c = deviceManager.connected.value ?: return
-        val port = if (c.projectionPort != 0) c.projectionPort else DEFAULT_CAST_PORT
+        connectCast(c.ip, if (c.projectionPort != 0) c.projectionPort else DEFAULT_CAST_PORT)
+    }
+
+    /**
+     * 投屏控制通道(13521)建立。先断旧通道再建新——2026-07-25 真机实证:重复 onConnected
+     * 不断旧通道会残留双控制会话,TV 侧会话归属错乱致播放/暂停/退出/音量全部失效。
+     */
+    private fun connectCast(
+        ip: String,
+        port: Int,
+    ) {
+        cast?.disconnect()
+        cast = null
         viewModelScope.launch(Dispatchers.IO) {
-            val cc = CastController(c.ip, port)
-            cc.onEvent = { st, dur, pos ->
+            val cc = CastController(ip, port)
+            cc.onEvent = { st, dur, pos, vol ->
                 viewModelScope.launch(Dispatchers.Default) {
                     castState = st
                     if (dur > 0) castDuration = dur
                     castPosition = pos
+                    if (vol >= 0) castVolume = vol
                 }
             }
             if (cc.connect()) cast = cc
@@ -283,6 +304,27 @@ class AppViewModel : ViewModel() {
 
     fun castSeek(ms: Long) {
         viewModelScope.launch(Dispatchers.IO) { cast?.seek(ms) }
+    }
+
+    // 播放控制必须经 IO 线程:CastController 是阻塞 socket,Android 主线程直调
+    // 会抛 NetworkOnMainThreadException(message 为 null,曾误判为协议失败)。
+
+    fun castPlay() {
+        viewModelScope.launch(Dispatchers.IO) { cast?.play() }
+    }
+
+    fun castPause() {
+        viewModelScope.launch(Dispatchers.IO) { cast?.pause() }
+    }
+
+    fun castStop() {
+        viewModelScope.launch(Dispatchers.IO) { cast?.stop() }
+    }
+
+    /** 调 TV 音量并乐观更新本地值(轮询随后校准)。 */
+    fun castVolumeTo(v: Int) {
+        castVolume = v
+        viewModelScope.launch(Dispatchers.IO) { cast?.volume(v) }
     }
 
     fun voiceText(text: String) = asr.sendText(text)
