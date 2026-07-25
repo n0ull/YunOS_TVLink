@@ -45,7 +45,9 @@
       **会话帧必须完整**:`record_start`→`asr_streaming(finish)`→`record_stop`(间隔 150ms)——
       只发 finish 包指令照执行但「聆听中」卡片卡死(裸 record_stop 无效;ESC 键可兜底关卡片);
       导航类指令(返回桌面)NLU 不执行属技能侧限制。原 App `ASR.sendText` 全 APK 零调用点(死代码)。
-      **Android 系统语音识别路径(VoiceButton.android)未单测,剩余桌面 App 点击链路待随手复测**
+      **设备侧 STT 已放弃(2026-07-25 决策)**:测试机识别服务为 GoogleRecognitionService,
+      无网/缺语言包/AppOps 报 error 9+12,枚举 getVoiceDetailsIntent 返回 null;移动端与桌面
+      统一为 ⌨ 文字输入(协议相同)。备选存档:sherpa-onnx 离线(+25MB)/讯飞在线(需账号)
 - [ ] 方向盘模式(= 鼠标移动同路,低风险)/ 体感模式(仅 Android)
 - [ ] BLE 魔投配网(需魔投硬件;无硬件则挂起)
 
