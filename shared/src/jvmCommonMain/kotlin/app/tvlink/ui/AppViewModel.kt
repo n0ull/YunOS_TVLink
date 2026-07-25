@@ -16,7 +16,6 @@ import app.tvlink.device.SysPropService
 import app.tvlink.proto.cast.CastController
 import app.tvlink.proto.cast.MediaHttpServer
 import app.tvlink.proto.ib.RcKey
-import app.tvlink.proto.idc.CmdLaunchSth
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.ImeAction
 import app.tvlink.proto.idc.ImeFinishInput
@@ -31,8 +30,6 @@ import kotlinx.coroutines.launch
 class AppViewModel : ViewModel() {
     companion object {
         private const val DEFAULT_CAST_PORT = 13520
-        private const val MIN_IDC_VER_LAUNCH_STH = 2100200600
-        private const val TV_DIAG_ACTION = "com.yunos.tv.intent.RemoteControlServer.ACTION_DIAGNOSTIC"
     }
 
     // ---- navigation ----
@@ -301,18 +298,6 @@ class AppViewModel : ViewModel() {
             kotlinx.coroutines.delay(10_000)
             sysPropBusy = false
         }
-    }
-
-    /** Cmd_LaunchSth(activity_new) 打开 TV 诊断页;mVer < 2100200600 直接不发(原版版本门)。 */
-    fun launchTvDiagnostics() {
-        val conn = deviceManager.connection ?: return
-        val ver = conn.deviceInfo?.ver ?: 0
-        if (ver < MIN_IDC_VER_LAUNCH_STH) {
-            notice = "IDC 版本过低($ver),不支持打开诊断页"
-            return
-        }
-        conn.send(CmdLaunchSth(launchType = 2, action = TV_DIAG_ACTION)) // 2 = activity_new
-        notice = "已请求打开 TV 诊断页"
     }
 
     fun refreshApps() = rpm.getAppList()

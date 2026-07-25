@@ -18,7 +18,7 @@ state and renders UI — no business logic lives here.
 | `MoreScreen.kt`         | "更多" tab — ListItem 菜单:截屏/应用/(Android)魔投配网/设置,进入 MoreSub 子屏                  |
 | `ScreenshotScreen.kt`   | TV screenshot capture and display/save                                                       |
 | `AppsScreen.kt`         | TV app management — 刷新触发 VConn 自动打开 + 挂起请求补发,列表/打开/卸载/推装                  |
-| `SettingsScreen.kt`     | 连接信息(含 IB 版本 + IB sid + TV 诊断页入口)/系统属性查询(SysProp)/关于                       |
+| `SettingsScreen.kt`     | 连接信息(含 IB 版本 + IB sid)/系统属性查询(SysProp)/关于                                       |
 
 ## For AI Agents
 

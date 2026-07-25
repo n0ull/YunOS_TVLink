@@ -77,8 +77,9 @@
    M638_ALI 无对应 activity(07-22 空转复证);直拉酷喵(com.youku.taitan.tv)失败——
    `youkutv://`/`youku://`/`http://v.youku.com/` 均无导出 handler,无 manifest 不续猜。
    service 型+非法 action 会致 TV 断连(WinError 10053)。
-   **结论:协议存活但实用价值止于弹选择框**;设置屏「TV 诊断页」入口保留
-   (`launchTvDiagnostics`,版本门 mVer≥2100200600,有能力固件上有效)。
+   **结论:协议存活但实用价值止于弹选择框**;曾实现的设置屏「TV 诊断页」入口已按
+   ponytail 清理(唯一可测设备实证空操作,「有能力固件上有效」属推测需求=死 UI;
+   需要时语义见本条与 `CmdLaunchSth` 注释,一行可恢复)。
    反编译实见 action:
    `com.yunos.tv.intent.RemoteControlServer.ACTION_DIAGNOSTIC`(activity_new)、
    `yunos.appstore.startprocessservice`(service,RPM R2 已在用)。<2100200600 直接不发包。
