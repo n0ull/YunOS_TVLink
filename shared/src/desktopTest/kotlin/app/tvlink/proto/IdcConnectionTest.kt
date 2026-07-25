@@ -3,6 +3,7 @@ package app.tvlink.proto
 import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.idc.ImeAction
+import app.tvlink.proto.idc.ImeStartInput
 import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.OpCmdKey
 import app.tvlink.proto.idc.ScreenShotReq
@@ -168,5 +169,32 @@ class IdcConnectionTest {
         resp.decodeBody(body)
         assertEquals("ro.product.model", resp.propKey)
         assertEquals("M638_ALI", resp.propVal)
+    }
+
+    /**
+     * ImeStartInput(IdcRawPacket_Ime_StartInput): int inputType|options|actionId
+     * + LPString actionLabel|hintText|existedText。旧实现按 LPString 开头解析,
+     * inputType(如 0x20001)被当长度必抛异常、杀整条连接——本测试钉死真实布局。
+     */
+    @Test
+    fun imeStartInputDecodeMatchesDecompiledFormat() {
+        val label = "搜索"
+        val hint = "输入片名"
+        val existed = "优酷"
+        val body = ByteBuffer.allocate(12 + lpStringSize(label) + lpStringSize(hint) + lpStringSize(existed))
+        body.putInt(0x20001) // inputType
+        body.putInt(0) // options
+        body.putInt(6) // actionId
+        body.putLPString(label)
+        body.putLPString(hint)
+        body.putLPString(existed)
+        body.flip()
+
+        val p = ImeStartInput()
+        p.decodeBody(body)
+        assertEquals(0x20001, p.inputType)
+        assertEquals(hint, p.hint)
+        assertEquals(existed, p.initText)
+        assertEquals(0, body.remaining())
     }
 }

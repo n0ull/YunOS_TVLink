@@ -385,13 +385,15 @@ class ImeStartInput(
 ) : IdcPacket(IdcConst.ID_IME_START_INPUT) {
     override fun encodeBody() = ByteArray(0)
 
+    // IdcRawPacket_Ime_StartInput: int inputType | int options | int actionId |
+    // LPString actionLabel | LPString hintText | LPString existedText
     override fun decodeBody(buf: ByteBuffer) {
-        // fields per IdcRawPacket_Ime_StartInput: best-effort parse
-        if (buf.remaining() >= 4) {
-            hint = buf.getLPString()
-            if (buf.remaining() >= 4) inputType = buf.int
-            if (buf.remaining() >= 4) initText = buf.getLPString()
-        }
+        inputType = buf.int
+        buf.int // options
+        buf.int // actionId
+        buf.getLPString() // actionLabel
+        hint = buf.getLPString()
+        initText = buf.getLPString()
     }
 }
 

@@ -279,7 +279,10 @@ class IdcConnection(
 
             is VConnData -> onVConnData?.invoke(p.moduleId, p.payload)
             is DevNameUpdate -> deviceInfo = deviceInfo?.copy(name = p.devName)
-            else -> onPacket?.invoke(p)
+            else -> {
+                System.err.println("IdcConnection: unhandled packet id=${p.packetId} (${p.javaClass.simpleName})")
+                onPacket?.invoke(p)
+            }
         }
     }
 

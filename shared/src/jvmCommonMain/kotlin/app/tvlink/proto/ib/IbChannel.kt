@@ -214,6 +214,12 @@ class IbChannel(
                                 ?.groupValues
                                 ?.get(1)
                         if (app != null) onCurrentApp?.invoke(app)
+                    } else if (f.first != (IbConst.RSP_MASK or IbConst.REQ_KEEPALIVE)) {
+                        // 诊断:TV 主动下推的非预期帧(IME 排查 2026-07-25);keepalive 应答不记
+                        System.err.println(
+                            "IbChannel: unhandled frame type=${f.first} body=" +
+                                String(f.second, Charsets.UTF_8).take(96),
+                        )
                     }
                 }
                 if (state != State.DISCONNECTED) disconnect()

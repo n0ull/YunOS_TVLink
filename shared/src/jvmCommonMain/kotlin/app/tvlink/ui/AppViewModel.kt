@@ -110,6 +110,7 @@ class AppViewModel : ViewModel() {
     // ---- IME (remote text input) ----
     var imeActive by mutableStateOf(false)
     var imeText by mutableStateOf("")
+    var imeHint by mutableStateOf("")
 
     // ---- screenshot ----
     var lastShot by mutableStateOf<ByteArray?>(null)
@@ -243,6 +244,7 @@ class AppViewModel : ViewModel() {
             is ImeStartInput ->
                 viewModelScope.launch(Dispatchers.Default) {
                     imeText = p.initText
+                    imeHint = p.hint
                     imeActive = true
                 }
 

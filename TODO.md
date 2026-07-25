@@ -36,7 +36,13 @@
       调用点,电视端实现属推断,该轮验证即首次实证
 - [x] 图片投屏——**真机已验证(2026-07-25)**:`/setmedia` image 类型主路成功(本地
       MediaHttpServer 供片),备选 `PUT /image` 未启用
-- [ ] 远程文字输入(电视端触发 IME,如进入搜索框,手机应弹输入窗)
+- [ ] 远程文字输入——**设备能力缺失,挂起(2026-07-25 双实证)**:①原 App(加密会话 ver=1,
+      排除「明文门」变量)同 TV 同搜索框不弹输入窗 → TV 不推 `Ime_StartInput`(10600);
+      ②明文会话探针 `tvhelper/tvhelper_tool/ime_probe.py` 直发 `Ime_TextChange` 未上屏 →
+      TV 侧无远程输入状态机。根因 = 固件能力缺失(同 RPM appstore 一类)。代码侧已就绪:
+      修复 `ImeStartInput.decodeBody` 布局错误(旧实现把 inputType int 当 LPString 长度读、
+      必抛异常杀整条连接——在有能力设备上进搜索框即断连)+ hint/预填利用 +
+      钉桩 `imeStartInputDecodeMatchesDecompiledFormat`;待提供 IME 推送的设备验证
 - [x] 语音指令(桌面文本输入 → `asr_streaming`)——**真机已验证(2026-07-25,TV 192.168.1.105)**:
       探针 `tvhelper/tvhelper_tool/asr_probe.py` 按修复后线协议逐字节发包,截图实证 TV 弹出语音 UI
       回显「打开优酷」且优酷进入前台(前置广告 com.yunos.advert.service 属正常流程);

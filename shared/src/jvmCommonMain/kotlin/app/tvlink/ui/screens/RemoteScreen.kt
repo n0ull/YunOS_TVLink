@@ -150,7 +150,7 @@ fun RemoteScreen(vm: AppViewModel) {
                 OutlinedTextField(
                     value = vm.imeText,
                     onValueChange = { vm.imeChanged(it) },
-                    label = { Text("在手机上输入，实时同步到电视") },
+                    label = { Text(vm.imeHint.ifEmpty { "在手机上输入，实时同步到电视" }) },
                 )
             },
             confirmButton = { TextButton(onClick = { vm.imeCommit() }) { Text("完成") } },
