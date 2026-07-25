@@ -76,6 +76,21 @@ class AppViewModel : ViewModel() {
     var cast: CastController? = null
         private set
 
+    // ---- auto-reconnect ----
+
+    /** 最近一次成功连接的设备(显式 disconnect 时清空);后台→前台掉线时按需自动重连。 */
+    private var lastDevice: DeviceManager.ConnectedDevice? = null
+
+    /**
+     * 前台恢复时按需重连。后台期间 socket 会被 TV 空闲超时/WiFi 省电/ROM 冻结等机制杀死
+     * (connState 落 IDLE 后操作静默无效),此处是唯一恢复点;用户显式断开后(lastDevice=null)不重连。
+     */
+    fun onResume() {
+        val d = lastDevice ?: return
+        if (connState == DeviceManager.ConnState.CONNECTED || connState == DeviceManager.ConnState.CONNECTING) return
+        deviceManager.connect(d.ip, d.projectionPort, d.ibVer, d.ibSid)
+    }
+
     var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
     var connectedName by mutableStateOf("")
     var connectedIp by mutableStateOf("")
@@ -115,12 +130,15 @@ class AppViewModel : ViewModel() {
                     connectedIp = c?.ip ?: ""
                     connectedIbVer = c?.ibVer ?: ""
                     connectedIbSid = c?.ibSid ?: ""
+                    lastDevice = c
                     onConnected()
                     screen = Screen.Main()
                 } else if (s == DeviceManager.ConnState.IDLE) {
                     connectedName = ""
+                    connectedIp = ""
                     connectedIbVer = ""
                     connectedIbSid = ""
+                    mediaServerUrl = ""
                     cast?.disconnect()
                     cast = null
                     mediaServer.stop()
@@ -207,6 +225,7 @@ class AppViewModel : ViewModel() {
     fun connectToIp(ip: String) = deviceManager.connect(ip)
 
     fun disconnect() {
+        lastDevice = null
         rc.detach()
         rpm.detach()
         deviceManager.disconnect()

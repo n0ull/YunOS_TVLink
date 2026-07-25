@@ -15,6 +15,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -38,6 +41,16 @@ fun App() {
     }
     CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
         val vm: AppViewModel = viewModel { AppViewModel() }
+        // 后台→前台掉线自动重连(见 AppViewModel.onResume)
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner, vm) {
+            val observer =
+                LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) vm.onResume()
+                }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
         val screen = vm.screen
         // 遥控 tab 恒深（品类惯例）；其余跟随系统
         val remoteActive = screen is AppViewModel.Screen.Main && screen.tab == AppViewModel.MainTab.REMOTE
