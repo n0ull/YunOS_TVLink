@@ -12,6 +12,7 @@ import app.tvlink.device.Discovery
 import app.tvlink.device.RcController
 import app.tvlink.device.RpmService
 import app.tvlink.device.ScreenshotService
+import app.tvlink.device.SysPropService
 import app.tvlink.proto.cast.CastController
 import app.tvlink.proto.cast.MediaHttpServer
 import app.tvlink.proto.ib.RcKey
@@ -72,6 +73,7 @@ class AppViewModel : ViewModel() {
     val rpm = RpmService(deviceManager)
     val asr = AsrTextService(deviceManager)
     val screenshot = ScreenshotService(deviceManager)
+    val sysprop = SysPropService(deviceManager)
     val mediaServer = MediaHttpServer()
     var cast: CastController? = null
         private set
@@ -112,6 +114,10 @@ class AppViewModel : ViewModel() {
     // ---- screenshot ----
     var lastShot by mutableStateOf<ByteArray?>(null)
     var shotBusy by mutableStateOf(false)
+
+    // ---- sysprop ----
+    var sysPropResult by mutableStateOf("")
+    var sysPropBusy by mutableStateOf(false)
 
     // ---- TV apps ----
     val tvApps = mutableStateListOf<RpmService.TvApp>()
@@ -184,6 +190,12 @@ class AppViewModel : ViewModel() {
                 shotBusy = false
             }
         }
+        sysprop.onSysProp = { key, value ->
+            viewModelScope.launch(Dispatchers.Default) {
+                sysPropBusy = false
+                sysPropResult = "$key = ${value.ifEmpty { "(空)" }}"
+            }
+        }
         rc.onCurrentApp = { app ->
             viewModelScope.launch(Dispatchers.Default) { notice = "电视当前应用: $app" }
         }
@@ -226,6 +238,7 @@ class AppViewModel : ViewModel() {
 
     private fun handlePacket(p: IdcPacket) {
         screenshot.handlePacket(p)
+        sysprop.handlePacket(p)
         when (p) {
             is ImeStartInput ->
                 viewModelScope.launch(Dispatchers.Default) {
@@ -271,6 +284,17 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) {
             kotlinx.coroutines.delay(10_000)
             shotBusy = false
+        }
+    }
+
+    fun querySysProp(key: String) {
+        val k = key.trim()
+        if (k.isEmpty() || !sysprop.getProp(k)) return
+        sysPropBusy = true
+        sysPropResult = ""
+        viewModelScope.launch(Dispatchers.Default) {
+            kotlinx.coroutines.delay(10_000)
+            sysPropBusy = false
         }
     }
 

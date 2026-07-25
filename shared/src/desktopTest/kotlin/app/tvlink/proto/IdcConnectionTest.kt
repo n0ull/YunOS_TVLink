@@ -7,6 +7,8 @@ import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.OpCmdKey
 import app.tvlink.proto.idc.ScreenShotReq
 import app.tvlink.proto.idc.ScreenShotResp
+import app.tvlink.proto.idc.SysPropReq
+import app.tvlink.proto.idc.SysPropResp
 import app.tvlink.proto.idc.getLPString
 import app.tvlink.proto.idc.lpBytesSize
 import app.tvlink.proto.idc.lpStringSize
@@ -133,5 +135,38 @@ class IdcConnectionTest {
         val resp = ScreenShotResp()
         resp.decodeBody(body)
         assertTrue(jpeg.contentEquals(resp.imgData))
+    }
+
+    /** SysProp: req = LPString({"cmdReqID":N}) + LPString({is_get_prop,prop_key,prop_val}); resp 无 dummy 段。 */
+    @Test
+    fun sysPropCmdFramingMatchesDecompiledFormat() {
+        val req = SysPropReq(isGetProp = true, propKey = "ro.product.model", cmdReqId = 9)
+        val frame = req.encode()
+        frame.position(IdcConst.HEADER_LEN)
+        assertEquals("""{"cmdReqID":9}""", frame.getLPString())
+        val params = frame.getLPString()
+        assertTrue(params.contains(""""is_get_prop":true"""))
+        assertTrue(params.contains(""""prop_key":"ro.product.model""""))
+        assertEquals(0, frame.remaining())
+
+        val setReq = SysPropReq(isGetProp = false, propKey = "k", propVal = "v")
+        val setFrame = setReq.encode()
+        setFrame.position(IdcConst.HEADER_LEN)
+        setFrame.getLPString() // cmdReqID
+        val setParams = setFrame.getLPString()
+        assertTrue(setParams.contains(""""is_get_prop":false"""))
+        assertTrue(setParams.contains(""""prop_val":"v""""))
+
+        // IdcPacket_CmdRespBase(cmdReqID) + SysProp_Resp: LPString({"prop_key":K,"prop_val":V}) — 无 dummy
+        val cmdJson = """{"cmdReqID":9}"""
+        val props = """{"prop_key":"ro.product.model","prop_val":"M638_ALI"}"""
+        val body = ByteBuffer.allocate(lpStringSize(cmdJson) + lpStringSize(props))
+        body.putLPString(cmdJson)
+        body.putLPString(props)
+        body.flip()
+        val resp = SysPropResp()
+        resp.decodeBody(body)
+        assertEquals("ro.product.model", resp.propKey)
+        assertEquals("M638_ALI", resp.propVal)
     }
 }

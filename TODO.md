@@ -34,7 +34,8 @@
       若获得提供 `com.yunos.idc.appstore` 模块的设备:列表(4)→打开(14)→卸载(11)→URL 推装(7;
       `result==2` 下载开始、`appStatus=18` 完成)。注:卸载/列表/打开在原 App v5.2.2 无 UI
       调用点,电视端实现属推断,该轮验证即首次实证
-- [ ] 图片投屏(`/setmedia` image 类型;失败则换「备选」的 `PUT /image`)
+- [x] 图片投屏——**真机已验证(2026-07-25)**:`/setmedia` image 类型主路成功(本地
+      MediaHttpServer 供片),备选 `PUT /image` 未启用
 - [ ] 远程文字输入(电视端触发 IME,如进入搜索框,手机应弹输入窗)
 - [x] 语音指令(桌面文本输入 → `asr_streaming`)——**真机已验证(2026-07-25,TV 192.168.1.105)**:
       探针 `tvhelper/tvhelper_tool/asr_probe.py` 按修复后线协议逐字节发包,截图实证 TV 弹出语音 UI
@@ -61,7 +62,11 @@
    `yunos.appstore.startprocessservice`(service)。<2100200600 直接不发包。
    注:应用管理页「打开」已走 AppStore(14) 覆盖常规拉起,LaunchSth 的增量价值
    是诊断页与自定义 service。
-2. `Cmd_SysProp`(21100/21200):读写 TV 系统属性。
+2. `Cmd_SysProp`(21100/21200):读写 TV 系统属性。**真机已验证(2026-07-25)**:设置屏查询
+   `ro.product.model` 回 `M638_ALI`。实现:`SysPropReq/Resp`(`IdcPackets.kt`,对齐反编译
+   `IdcPacket_Cmd_SysProp_Req/Resp.java`,Resp 无 dummy 段)+ `SysPropService`(按 prop_key
+   配对应答);UI 仅暴露读,写 `setProp` 留服务层。钉桩
+   `sysPropCmdFramingMatchesDecompiledFormat` 通过。
 3. AppStore 增量:UpdateRequest(20)、ContinueDownload、GetListCancel(26)、
    GetAppInfo(2/3)。⚠ packetId **21 撞号(已证实)**:`ContinueDownloadRequest`
    `super(21)`(`IdcPacket_ContinueDownloadRequest.java:7,17`)与 `ID_UPDATE_RESPONSE`=21

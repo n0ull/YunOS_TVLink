@@ -178,6 +178,8 @@ abstract class IdcPacket(
             when (id) {
                 IdcConst.ID_CMD_SCREENSHOT_REQ -> ScreenShotReq()
                 IdcConst.ID_CMD_SCREENSHOT_RESP -> ScreenShotResp()
+                IdcConst.ID_CMD_SYSPROP_REQ -> SysPropReq()
+                IdcConst.ID_CMD_SYSPROP_RESP -> SysPropResp()
                 else -> null
             }
     }
@@ -468,6 +470,43 @@ class ScreenShotResp(
         buf.getLPString() // {"cmdReqID":N}
         buf.getLPString() // {"dummy":0}
         imgData = buf.getLPBytes()
+    }
+}
+
+/**
+ * Cmd_SysProp(21100/21200) — 读写 TV 系统属性(IdcPacket_Cmd_SysProp_Req/Resp.java)。
+ * is_get_prop=true 读、false 写;Resp 无 dummy 段(CmdRespBase 仅 cmdReqID,dummy 是 ScreenShot 私有)。
+ */
+class SysPropReq(
+    var isGetProp: Boolean = true,
+    var propKey: String = "",
+    var propVal: String = "",
+    var cmdReqId: Int = 1,
+) : IdcPacket(IdcConst.ID_CMD_SYSPROP_REQ) {
+    // CmdReqBase: LPString({"cmdReqID":N}) + LPString({"is_get_prop":B,"prop_key":K,"prop_val":V})
+    override fun encodeBody(): ByteArray {
+        val req = """{"cmdReqID":$cmdReqId}"""
+        val s =
+            """{"is_get_prop":$isGetProp,"prop_key":"${jsonEscape(propKey)}",""" +
+                """"prop_val":"${jsonEscape(propVal)}"}"""
+        val b = ByteBuffer.allocate(lpStringSize(req) + lpStringSize(s))
+        b.putLPString(req)
+        b.putLPString(s)
+        return b.array()
+    }
+}
+
+class SysPropResp(
+    var propKey: String = "",
+    var propVal: String = "",
+) : IdcPacket(IdcConst.ID_CMD_SYSPROP_RESP) {
+    override fun encodeBody() = ByteArray(0)
+
+    override fun decodeBody(buf: ByteBuffer) {
+        buf.getLPString() // {"cmdReqID":N}
+        val j = parseJsonObject(buf.getLPString())
+        propKey = j.str("prop_key")
+        propVal = j.str("prop_val")
     }
 }
 
