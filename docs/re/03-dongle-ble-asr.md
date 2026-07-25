@@ -57,13 +57,13 @@ BLE 仅一次性配网。之后：
 控制参数（ASR.java:113-116）：自动停录开、无声停滞上限 10s、最短录音 1500ms、静音阈值 400。状态机 `IDLE→WILL_START_RECORD→RECORDING→WILL_STOP_RECORD→RECOGNIZING`。UI 为按住说话：`ui/rc/asr/AsrView.java:168-190`（按下 startRecord/松开 stopRecord）。
 
 ### 结果下发：手机不执行指令，实时转发电视
-IDC 虚拟连接模块 **`com.yunos.tv.asr:etao`**，包 `{"asr_name":"ASR_COMMAND","asr_data":{"pk_type":...,"pk_content":...}}`（`biz/AsrDef.java`、`packet/BaseAsrPacket.java:41-96`）：
+IDC 虚拟连接模块 **`com.yunos.tv.asr:etao`**，包 `{"asr_name":<随方向>,"asr_data":{"pk_type":...,"pk_content":...}}`（`biz/AsrDef.java`、`packet/BaseAsrPacket.java:41-96`）——**手机→电视 `asr_name` 为模块全名**（`pre_encode` 用 `ASR_MODULE_NAME`），**电视→手机为 `"ASR_COMMAND"`**（`decode` 的校验值），两个方向不可混用：
 - 手机→电视：
   - `asr_streaming`（IDST）：每次中间/最终结果即转，字段 `result_code/question(从 asr_out JSON 取 "result")/finish/手机型号`（`packet/AsrPacket_out_asrStreaming.java:26-51`）——边说边推流式文本；
   - `recognize_result`（老模式）：整条 `RecogResult`（`asr_out/ds_out/nlp_out/results`）；
-  - `start_record/stop_record/volume(0-100)`：录音状态/音量同步电视 UI。
+  - `record_start`/`record_stop`/`volume(0-100)`：录音状态/音量同步电视 UI（pk_type 字面值经 `AsrPacket_out_startRecord.java` 等类 `super(...)` 核实，**不是** `start_record`）。
 - 电视→手机：`asr_language`（仅 mandarin，其他语言拒绝启动 ASR.java:146）、`asr_mode`。
-- 键盘输入复用：`ASR.sendText` 伪造 `{"finish":1,"result":"...","status":1,"version":"4.0"}` 的 asr_streaming 包发电视（ASR.java:176-196）。
+- 键盘输入复用：`ASR.sendText` 伪造 `{"finish":1,"result":"...","status":1,"version":"4.0"}` 的 asr_streaming 包发电视（ASR.java:176-196）。**注意：该方法在全 APK 零调用点（v5.2.2 死代码），lone-streaming 行为无原生参照**。2026-07-25 真机实证：只发 finish 包指令会执行但电视「聆听中」卡片**卡死不收**（裸 `record_stop` 无前导 `record_start` 无效，卡片不响应）；**正确做法 = 完整会话帧 `record_start` → `asr_streaming(finish)` → `record_stop`（间隔 ~150ms），卡片即开即收**；已卡卡片可按 ESC（IB 键）兜底关闭。导航类指令（如「返回桌面」）NLU 不执行——技能侧限制，非协议问题。
 
 ### 指令映射
 **手机端无 NLU/slot 解析、无映射表。** 文本经 IDC 交电视端 `com.yunos.tv.asr` 服务做语义理解并执行搜索/遥控；手机拿到最终结果仅做 UT 埋点 `ASR_RESULT`+复位按钮（`AsrView.java:130-135`）。老模式云端 `nlp_out/results` 亦原样转发。**"指令→电视操作"映射在电视固件侧，APK 内不存在。**

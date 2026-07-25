@@ -17,7 +17,7 @@ lifecycle from discovery through connected sessions.
 | `RcController.kt`      | Routes key events — IB preferred (needIb313 keys additionally require server ver≥313), IDC OpCmd_Key fallback(真机已验证有效) |
 | `RpmService.kt`        | Remote package management (list/install/uninstall apps); 自动 openVConn(module 在线时) + 挂起请求补发              |
 | `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图)                                       |
-| `AsrTextService.kt`    | Voice/text command forwarding via `com.yunos.tv.asr` VConn module — sends finished `asr_streaming` packets; NLU runs on the TV |
+| `AsrTextService.kt`    | Voice/text command forwarding via `com.yunos.tv.asr:etao` VConn module — 首包前自动 VConn SYN; sends finished `asr_streaming` packets; NLU runs on the TV |
 
 ## For AI Agents
 

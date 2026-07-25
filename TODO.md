@@ -36,7 +36,16 @@
       调用点,电视端实现属推断,该轮验证即首次实证
 - [ ] 图片投屏(`/setmedia` image 类型;失败则换「备选」的 `PUT /image`)
 - [ ] 远程文字输入(电视端触发 IME,如进入搜索框,手机应弹输入窗)
-- [ ] 语音指令(Android 系统语音识别 / 桌面文本输入 → `asr_streaming`)
+- [x] 语音指令(桌面文本输入 → `asr_streaming`)——**真机已验证(2026-07-25,TV 192.168.1.105)**:
+      探针 `tvhelper/tvhelper_tool/asr_probe.py` 按修复后线协议逐字节发包,截图实证 TV 弹出语音 UI
+      回显「打开优酷」且优酷进入前台(前置广告 com.yunos.advert.service 属正常流程);
+      修复要点:模块名 `com.yunos.tv.asr:etao`(裸名曾致静默丢弃,=原根因)、首包前 VConn SYN、
+      `asr_name`=模块全名、`finish:"true"`、`result_code:0`;钉桩 `AsrTextServiceTest` 4/4。
+      注:TV 应答推 `asr_language`(stringified JSON,`asr_name` 电视→手机方向才是 "ASR_COMMAND")。
+      **会话帧必须完整**:`record_start`→`asr_streaming(finish)`→`record_stop`(间隔 150ms)——
+      只发 finish 包指令照执行但「聆听中」卡片卡死(裸 record_stop 无效;ESC 键可兜底关卡片);
+      导航类指令(返回桌面)NLU 不执行属技能侧限制。原 App `ASR.sendText` 全 APK 零调用点(死代码)。
+      **Android 系统语音识别路径(VoiceButton.android)未单测,剩余桌面 App 点击链路待随手复测**
 - [ ] 方向盘模式(= 鼠标移动同路,低风险)/ 体感模式(仅 Android)
 - [ ] BLE 魔投配网(需魔投硬件;无硬件则挂起)
 
