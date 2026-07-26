@@ -221,15 +221,23 @@ class RpmService(
                 onAppList?.invoke(apps)
             }
 
+            // GetAppInfoResponse(3): {"appIsExist":B,"packageName":"…",存在时内联 AppInfo}。
+            ID_GETAPPINFO_RESP -> {
+                val existed = j.bool("appIsExist")
+                if (existed) onSystemInfo?.invoke(j.toMap())
+            }
+
             ID_SYSTEMINFO -> onSystemInfo?.invoke(j.toMap())
             ID_INSTALL_STATUS ->
                 onInstallProgress?.invoke(
+                    // AppStatus(9) 推送用 "appStatus"(AbsIdcDataPacket.KEY_STATUS="appStatus"),与列表 "status" 不同。
                     InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus")),
                 )
 
-            ID_INSTALL_RESP -> onOpResult?.invoke("install", j.str("packageName"), j.int("errorCode"))
-            ID_UNINSTALL_RESP -> onOpResult?.invoke("uninstall", j.str("packageName"), j.int("errorCode"))
-            ID_OPENAPP_RESP -> onOpResult?.invoke("open", j.str("packageName"), j.int("errorCode"))
+            // Install/Uninstall/OpenApp/Update Response 统一用 "result"(KEY_RESULT="result"),非 "errorCode"。
+            ID_INSTALL_RESP -> onOpResult?.invoke("install", j.str("packageName"), j.int("result"))
+            ID_UNINSTALL_RESP -> onOpResult?.invoke("uninstall", j.str("packageName"), j.int("result"))
+            ID_OPENAPP_RESP -> onOpResult?.invoke("open", j.str("packageName"), j.int("result"))
         }
     }
 
@@ -258,7 +266,8 @@ class RpmService(
                                 versionName = o.str("versionName"),
                                 versionCode = o.str("versionCode").toLongOrNull() ?: 0,
                                 iconUrl = o.str("iconUrl"),
-                                status = o.str("appStatus"),
+                                // AppInfo 列表项用 "status"(AppInfo.KEY_STATUS="status"),非 "appStatus"。
+                                status = o.str("status"),
                             ),
                         )
                     }

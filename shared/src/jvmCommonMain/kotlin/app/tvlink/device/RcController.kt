@@ -71,22 +71,19 @@ class RcController(
         }
     }
 
+    // 原 IbRc.java:66-73 语义:IB 走 down/up 双边沿;IDC 回退仅在 down 边沿发 click(op=0),
+    // up 边沿不发(IDC 无长按语义)。曾误发 op=1/2,以反编译为准修正。
     fun keyDown(key: RcKey) {
         val chan = ibFor(key)
         if (chan != null) {
             chan.keyEvent(key, true)
         } else if (key.androidVal != 0) {
-            deviceManager.connection?.send(OpCmdKey(key.androidVal, 1))
+            deviceManager.connection?.send(OpCmdKey(key.androidVal, 0))
         }
     }
 
     fun keyUp(key: RcKey) {
-        val chan = ibFor(key)
-        if (chan != null) {
-            chan.keyEvent(key, false)
-        } else if (key.androidVal != 0) {
-            deviceManager.connection?.send(OpCmdKey(key.androidVal, 2))
-        }
+        ibFor(key)?.keyEvent(key, false)
     }
 
     fun mouseMove(

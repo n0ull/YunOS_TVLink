@@ -97,6 +97,57 @@
 **明确不做**:Racct 账号/支付、弹幕 MTOP、TV 搜索(依赖已停服云端);
 PROTO_MULTITOUCH(原 App 也无 UI 调用方)。
 
+## 反编译协议核对(2026-07-26,基准:`jadx_out/sources/com/tmalltv/tv/lib/ali_tvidclib/packet/`)
+
+> 以反编译源码为基准,文档仅作辅助。核对范围:`IdcPackets.kt` 全帧 + `RpmService`/`AsrService` 逻辑。
+
+### 已修正
+
+- [x] **DevNameUpdate(11000)帧格式Bug**: 反编译 `IdcRawPacket_DevInfoUpdate_DevName.java` 的 body 是
+  `LPString(JSON {"dev_name":"…"})`,原实现读 raw LPString → devName 被赋值为原始 JSON 串。
+  已改为 `parseJsonObject(...).str("dev_name")` 解析;同步补 `encodeBody()` 用于发送。
+- [x] **ImeStartInput(10600)缺字段**: 反编译 `IdcRawPacket_Ime_StartInput.java` 有 6 字段
+  (inputType/options/actionId/actionLabel/hintText/existedText),原实现丢弃 options/actionId/actionLabel。
+  已补 `options`/`actionId`/`actionLabel` 字段(保留,待消费)。
+- [x] **LoginEncryptionResp(10090)缺字段**: 反编译含 `encryptionAlgorithmVer`(int) + detail;
+  原实现仅 detail。已补字段(该路径不可达,保留以备 ver≠0 会话)。
+- [x] **新增包类(反编译存在、项目缺失)**:
+  - `DevInfoUpdateDdhParam`(11100): `LPString({"ddhparamkey":K}) + LPBytes(param)`,保留 key/param,不接入 DeviceInfo。
+  - `OpCmdMouseClick`(10400): 已废弃,空包。
+  - `OpCmdMultitouch`(11200): `LPString({"evts":[{x_scale,y_scale,id,act}]})`,无 UI 调用方。
+  - `CmdPackageInfoReq/Resp`(20500/20600): CmdReqBase 双 LPString,Resp 用 `"appIsExist"`(非 `"existed"`)。
+  - `CmdPathInfoReq/Resp`(20700/20800): CmdReqBase 双 LPString,Resp 回显 path。
+  - 全部已在 `IdcPacketFactory.create()` 注册。
+- [x] **RPM JSON 键名修正**(反编译 `AbsIdcDataPacket`/`AppInfo` 为基准):
+  - `parseAppArray`: 列表项 `TvApp.status` 改用 `"status"`(`AppInfo.KEY_STATUS`),原 `"appStatus"` 恒空。
+    `"appStatus"` 仅用于 `ID_INSTALL_STATUS`(9)AppStatus 推送(已保留正确)。
+  - `ID_INSTALL_RESP/UNINSTALL_RESP/OPENAPP_RESP`: 改用 `"result"`(`KEY_RESULT`),原 `"errorCode"` 恒 0。
+  - 新增 `ID_GETAPPINFO_RESP`(3) 分支: 读 `"appIsExist"`,存在时内联 AppInfo → `onSystemInfo`。
+- [x] **VConnFin(20300)下发线**:`IdcConnection.dispatch` 新增 `VConnFin` 分支 → `modules.remove` +
+  `onModuleChanged(...,online=false)`。原 App 双路径下线(ModuleAvailability + VConnFin),本项目原缺此路
+  → TV 拆 VConn 后模块永 online,RPM/ASR 服务会用死通道。
+
+### 未消费字段(已保留,待后续实现消费)
+
+- `ImeStartInput.options`/`actionId`/`actionLabel`: 原 App 用于 IME 动作按钮渲染,本项目 UI 未接。
+- `DevInfoUpdateDdhParam.ddhKey`/`param`: TV→phone DDH 参数推送,本项目 `DeviceInfo.ddhParams` 未动态更新。
+- `CmdPackageInfoResp.existed`: 阳性对照语义(20600),本项目 UI 未暴露包查询。
+- `RpmService`:`ID_GETLIST_RESP` 含 `isFinished`/`isInterrupt`(列表分页结束标志)、`requestId`
+  (SparseArray 回调配对);本项目仅取 `apps` 数组,分页/回调 ID 未用。
+- `RpmService`:`ID_INSTALL_STATUS`(9)含 `appStatus`(18=安装完成)/`packageName`/`progress`;
+  本项目 `InstallProgress` 已映射 `progress`+`packageName`+`appStatus`,但 `appStatus==18`
+  完成通知未触发 UI 刷新(依赖 TV 推送,本机无 appstore 模块不可验)。
+
+### 帧格式备注(已确认对齐)
+
+- `CmdReqBase` 家族(SysProp/PackageInfo/PathInfo):双 LPString,已对齐。
+- `LaunchSth`(20400): 单 LPString(例外,非 CmdReqBase 子类),已对齐。
+- `ScreenShot_Resp`: LPString(cmdReqID) + LPString({"dummy":0}) + LPBytes(jpeg),已对齐。
+- `SysProp_Resp`: LPString(cmdReqID) + LPString(属性),无 dummy 段,已对齐。
+- `VConnData`: LPString({"mid":N}) + raw bytes,已对齐。
+- `asr_streaming`: 反编译 `AsrPacket_out_asrStreaming.java` 用 `Build.MODEL`(设备型号),
+  本项目硬编码 `"TVLink"`(标识客户端);`question` 字段反编译从 `mResult.asr_out` JSON 的 `"result"` 子字段提取,本项目直送原文本。真机已验证当前格式可用(2026-07-25),差异不阻塞。
+
 ## 备选方案(条件触发)
 
 - 图片投屏失败 → `PUT /image` 直传 JPEG(`yunos-assetkey` + `yunos-assetaction:

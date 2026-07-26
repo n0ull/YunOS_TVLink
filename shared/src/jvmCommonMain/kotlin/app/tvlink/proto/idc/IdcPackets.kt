@@ -143,7 +143,8 @@ abstract class IdcPacket(
             return p
         }
 
-        fun create(id: Int): IdcPacket? = sessionPacket(id) ?: modulePacket(id) ?: inputPacket(id) ?: commandPacket(id)
+        fun create(id: Int): IdcPacket? =
+            sessionPacket(id) ?: modulePacket(id) ?: inputPacket(id) ?: commandPacket(id) ?: miscPacket(id)
 
         private fun sessionPacket(id: Int): IdcPacket? =
             when (id) {
@@ -152,6 +153,7 @@ abstract class IdcPacket(
                 IdcConst.ID_LOGIN_RESP -> LoginResp()
                 IdcConst.ID_HEARTBEAT -> HeartBeat()
                 IdcConst.ID_DEVINFO_UPDATE_NAME -> DevNameUpdate()
+                IdcConst.ID_DEVINFO_UPDATE_DDH -> DevInfoUpdateDdhParam()
                 else -> null
             }
 
@@ -167,6 +169,8 @@ abstract class IdcPacket(
         private fun inputPacket(id: Int): IdcPacket? =
             when (id) {
                 IdcConst.ID_OPCMD_KEY -> OpCmdKey()
+                IdcConst.ID_OPCMD_MOUSE_CLICK -> OpCmdMouseClick()
+                IdcConst.ID_OPCMD_MULTITOUCH -> OpCmdMultitouch()
                 IdcConst.ID_IME_START_INPUT -> ImeStartInput()
                 IdcConst.ID_IME_FINISH_INPUT -> ImeFinishInput()
                 IdcConst.ID_IME_TEXT_CHANGE -> ImeTextChange()
@@ -176,12 +180,18 @@ abstract class IdcPacket(
 
         private fun commandPacket(id: Int): IdcPacket? =
             when (id) {
+                IdcConst.ID_CMD_PACKAGE_INFO_REQ -> CmdPackageInfoReq()
+                IdcConst.ID_CMD_PACKAGE_INFO_RESP -> CmdPackageInfoResp()
+                IdcConst.ID_CMD_PATH_INFO_REQ -> CmdPathInfoReq()
+                IdcConst.ID_CMD_PATH_INFO_RESP -> CmdPathInfoResp()
                 IdcConst.ID_CMD_SCREENSHOT_REQ -> ScreenShotReq()
                 IdcConst.ID_CMD_SCREENSHOT_RESP -> ScreenShotResp()
                 IdcConst.ID_CMD_SYSPROP_REQ -> SysPropReq()
                 IdcConst.ID_CMD_SYSPROP_RESP -> SysPropResp()
                 else -> null
             }
+
+        private fun miscPacket(id: Int): IdcPacket? = if (id == IdcConst.ID_CMD_LAUNCH_STH) CmdLaunchSth() else null
     }
 }
 
@@ -239,12 +249,18 @@ class LoginReq(
 }
 
 class LoginEncryptionResp(
+    // IdcPacket_LoginEncryptionResp: JSON {"encryption_algorithm_ver":N,"encryption_algorithm_detail":"…"}。
+    // 该路径当前不可达(协商 ver=0 明文),保留字段以备 ver≠0 会话。
+    var encryptionAlgorithmVer: Int = 0,
     var encryptionAlgorithmDetail: String = "",
 ) : IdcPacket(IdcConst.ID_LOGIN_ENCRYPTION_RESP) {
     override fun encodeBody() = ByteArray(0)
 
     override fun decodeBody(buf: ByteBuffer) {
-        if (buf.hasRemaining()) encryptionAlgorithmDetail = buf.getLPString()
+        if (!buf.hasRemaining()) return
+        val j = parseJsonObject(buf.getLPString())
+        encryptionAlgorithmVer = j.int("encryption_algorithm_ver")
+        encryptionAlgorithmDetail = j.str("encryption_algorithm_detail")
     }
 }
 
@@ -382,6 +398,12 @@ class ImeStartInput(
     var hint: String = "",
     var inputType: Int = 0,
     var initText: String = "",
+    /** EditorInfo.imeOptions(EditorInfo 位掩码)。原 App 用 IME 动作按钮渲染,本项目暂未消费。 */
+    var options: Int = 0,
+    /** EditorInfo.actionId(IME 动作按钮 ID)。暂未消费。 */
+    var actionId: Int = -1,
+    /** EditorInfo.actionLabel(IME 动作按钮文案)。暂未消费。 */
+    var actionLabel: String = "",
 ) : IdcPacket(IdcConst.ID_IME_START_INPUT) {
     override fun encodeBody() = ByteArray(0)
 
@@ -389,9 +411,9 @@ class ImeStartInput(
     // LPString actionLabel | LPString hintText | LPString existedText
     override fun decodeBody(buf: ByteBuffer) {
         inputType = buf.int
-        buf.int // options
-        buf.int // actionId
-        buf.getLPString() // actionLabel
+        options = buf.int
+        actionId = buf.int
+        actionLabel = buf.getLPString()
         hint = buf.getLPString()
         initText = buf.getLPString()
     }
@@ -442,6 +464,110 @@ class CmdLaunchSth(
         val b = ByteBuffer.allocate(lpStringSize(s))
         b.putLPString(s)
         return b.array()
+    }
+}
+
+// ---- 反编译存在但本项目未消费的命令(保留结构,无调用方) ----
+
+/** OpCmd_MouseClick(10400) — 已废弃(IdcRawPacket_OpCmd_MouseClick.java:param_length=0,"deprecated")。 */
+class OpCmdMouseClick : IdcPacket(IdcConst.ID_OPCMD_MOUSE_CLICK) {
+    override fun encodeBody() = ByteArray(0)
+}
+
+/**
+ * OpCmd_Multitouch(11200) — 多点触控(IdcRawPacket_OpCmd_Multitouch.java)。
+ * body = LPString(JSON {"evts":[{x_scale,y_scale,id,act}]}),act∈[0,2]。本项目无 UI 调用方(原 App 同)。
+ */
+class OpCmdMultitouch(
+    var touchEvts: List<TouchEvt> = emptyList(),
+) : IdcPacket(IdcConst.ID_OPCMD_MULTITOUCH) {
+    data class TouchEvt(
+        val xScale: Int = 0,
+        val yScale: Int = 0,
+        val id: Int = 0,
+        val act: Int = 0,
+    )
+
+    override fun encodeBody(): ByteArray {
+        val evts =
+            touchEvts.joinToString(",", "[", "]") {
+                """{"x_scale":${it.xScale},"y_scale":${it.yScale},"id":${it.id},"act":${it.act}}"""
+            }
+        val s = """{"evts":$evts}"""
+        val b = ByteBuffer.allocate(lpStringSize(s))
+        b.putLPString(s)
+        return b.array()
+    }
+
+    override fun decodeBody(buf: ByteBuffer) {
+        // 结构保留;完整解析待消费时补充。
+    }
+}
+
+/**
+ * Cmd_PackageInfo(20500/20600) — 查询包信息(IdcPacket_Cmd_PackageInfo_Req.java,CmdReqBase 家族双 LPString)。
+ * 阳性对照有效(2026-07-22,com.youku.taitan.tv→existed=True)。本项目 UI 未暴露。
+ */
+class CmdPackageInfoReq(
+    var packageName: String = "",
+    var cmdReqId: Int = 1,
+) : IdcPacket(IdcConst.ID_CMD_PACKAGE_INFO_REQ) {
+    override fun encodeBody(): ByteArray {
+        val req = """{"cmdReqID":$cmdReqId}"""
+        val s = """{"pkg":"${jsonEscape(packageName)}"}"""
+        val b = ByteBuffer.allocate(lpStringSize(req) + lpStringSize(s))
+        b.putLPString(req)
+        b.putLPString(s)
+        return b.array()
+    }
+}
+
+class CmdPackageInfoResp(
+    var packageName: String = "",
+    // IdcPacket_GetAppInfoResponse 用 "appIsExist"(KEY_APPISEXIST),非 "existed"。
+    var appIsExist: Boolean = false,
+    var cmdReqId: Int = 0,
+) : IdcPacket(IdcConst.ID_CMD_PACKAGE_INFO_RESP) {
+    override fun encodeBody() = ByteArray(0)
+
+    override fun decodeBody(buf: ByteBuffer) {
+        val req = parseJsonObject(buf.getLPString())
+        cmdReqId = req.int("cmdReqID")
+        val j = parseJsonObject(buf.getLPString())
+        packageName = j.str("packageName")
+        appIsExist = j.bool("appIsExist")
+    }
+}
+
+/**
+ * Cmd_PathInfo(20700/20800) — 查询路径信息(IdcPacket_Cmd_PathInfo_Req.java,CmdReqBase 家族双 LPString)。
+ * 本项目 UI 未暴露。
+ */
+class CmdPathInfoReq(
+    var path: String = "",
+    var cmdReqId: Int = 1,
+) : IdcPacket(IdcConst.ID_CMD_PATH_INFO_REQ) {
+    override fun encodeBody(): ByteArray {
+        val req = """{"cmdReqID":$cmdReqId}"""
+        val s = """{"path":"${jsonEscape(path)}"}"""
+        val b = ByteBuffer.allocate(lpStringSize(req) + lpStringSize(s))
+        b.putLPString(req)
+        b.putLPString(s)
+        return b.array()
+    }
+}
+
+class CmdPathInfoResp(
+    var path: String = "",
+    var cmdReqId: Int = 0,
+) : IdcPacket(IdcConst.ID_CMD_PATH_INFO_RESP) {
+    override fun encodeBody() = ByteArray(0)
+
+    override fun decodeBody(buf: ByteBuffer) {
+        val req = parseJsonObject(buf.getLPString())
+        cmdReqId = req.int("cmdReqID")
+        val j = parseJsonObject(buf.getLPString())
+        path = j.str("path")
     }
 }
 
@@ -518,10 +644,43 @@ class SysPropResp(
 class DevNameUpdate(
     var devName: String = "",
 ) : IdcPacket(IdcConst.ID_DEVINFO_UPDATE_NAME) {
-    override fun encodeBody() = ByteArray(0)
+    // IdcRawPacket_DevInfoUpdate_DevName: body = LPString(JSON {"dev_name":"…"})
+    override fun encodeBody(): ByteArray {
+        val s = """{"dev_name":"${jsonEscape(devName)}"}"""
+        val b = ByteBuffer.allocate(lpStringSize(s))
+        b.putLPString(s)
+        return b.array()
+    }
 
     override fun decodeBody(buf: ByteBuffer) {
-        if (buf.hasRemaining()) devName = buf.getLPString()
+        if (!buf.hasRemaining()) return
+        val j = parseJsonObject(buf.getLPString())
+        devName = j.str("dev_name")
+    }
+}
+
+/**
+ * DevInfoUpdate_DdhParam(11100) — TV 侧 DDH 参数更新(IdcRawPacket_DevInfoUpdate_DdhParam.java)。
+ * body = LPString(JSON {"ddhparamkey":K}) + LPBytes(param)。
+ * 当前仅解析保留 key/param,不接入 DeviceInfo.ddhParams(无消费路径)。
+ */
+class DevInfoUpdateDdhParam(
+    var ddhKey: String = "",
+    var param: ByteArray = ByteArray(0),
+) : IdcPacket(IdcConst.ID_DEVINFO_UPDATE_DDH) {
+    override fun encodeBody(): ByteArray {
+        val s = """{"ddhparamkey":"${jsonEscape(ddhKey)}"}"""
+        val b = ByteBuffer.allocate(lpStringSize(s) + param.size)
+        b.putLPString(s)
+        b.put(param)
+        return b.array()
+    }
+
+    override fun decodeBody(buf: ByteBuffer) {
+        if (!buf.hasRemaining()) return
+        val j = parseJsonObject(buf.getLPString())
+        ddhKey = j.str("ddhparamkey")
+        param = buf.getLPBytes()
     }
 }
 

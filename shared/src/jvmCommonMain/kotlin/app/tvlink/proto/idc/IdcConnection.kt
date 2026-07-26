@@ -277,6 +277,16 @@ class IdcConnection(
             is VConnSyn -> { // TV-initiated vconn: accept implicitly
             }
 
+            is VConnFin -> {
+                // TV 拆除 VConn → 模块下线(= ModuleAvailability.online=false 通道)。
+                // 原 App 双路径下线:ModuleAvailability + VConnFin,本项目原缺此路→模块永 online。
+                val existing = modules.remove(p.moduleId)
+                if (existing != null) {
+                    onModulesChanged?.invoke()
+                    onModuleChanged?.invoke(p.moduleId, existing.name, false)
+                }
+            }
+
             is VConnData -> onVConnData?.invoke(p.moduleId, p.payload)
             is DevNameUpdate -> deviceInfo = deviceInfo?.copy(name = p.devName)
             else -> {
