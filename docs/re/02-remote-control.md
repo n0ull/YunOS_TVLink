@@ -21,7 +21,7 @@
 - 连接成功即发 `IbPacket(type=1 REQ_HELLO)`；回 `RSP_HELLO(0x10000001)`，body JSON `{"ver":"x.xx","sid":n}`，版本×100 得整数版本号（如 313）。
 - 随后发 `REQ_MODULEINFO(8)` 与 `REQ_CHANGETYPE(280)`，body `[%d]`（DEFAULT=32, MOTIONPAD=0, JOYSTICK=1）。
 - 保活：hello 后 10s 首发，之后**每 15s** 发 `REQ_KEEPALIVE(0)`，回包 `0x10000000`。
-- 断线 1s 后启动重连任务，每 5s 重试。
+- 断线(`onError`)1s 后启动重连任务(`:71-73`:`removeCallbacks`→`start()`→`postDelayed(1000L)`),每 5s 重试(`RetryConnectTask.run()`内 `postDelayed(this, 5000L)`);初始连接失败(`onConnect-failure`,`:40`)仅 `start()` 设标志、不自动重调度,需外部再 `connect()`。
 - 电视端主动推 `PROTO_CURRENTAPP(274)`，body `{"cur_app":"..."}`。
 
 ### 2.2 二进制帧格式（`packet/IbPacket.java`）
@@ -41,7 +41,7 @@
 | type | 名称 | body 格式 | 说明 |
 |---|---|---|---|
 | 263 | PROTO_MOUSE | `[evType,code,dx,dy,pressed]` | 按键与鼠标共用 |
-| 272 | PROTO_MULTITOUCH | `{"mt_pc":n,"mt_dt":[[x,y,id,act],...]}` | 多点触控（**无 UI 调用方**，预留 API） |
+| 272 | PROTO_MULTITOUCH | `{"mt_pc":n,"mt_dt":[[x,y,id,act],...]}` | 多点触控（**无 UI 调用方**，预留 API）。**272 同时被用作鼠标左键码 BTN_LEFT**（见下方鼠标点击） |
 | 296 | PROTO_JOYSTICK | `[{"axis":a,"value":v},...]` | 摇杆轴 |
 | 257 | PROTO_G_SENSOR | `[x,y,z]` | 加速度计 |
 | 260 | PROTO_GYRO_SENSOR | `[x,y,z]` | 陀螺仪 |
@@ -100,14 +100,14 @@
 
 1. **电视发起**：电视 IME 激活下发 `Ime_StartInput`(ID **10600**)，带输入框属性；手机震动弹 `RinputActivity`（`RinputMgr.java:40`）。
 2. **手机→电视**：文本每次变化即发 `Ime_TextChange`(ID **10800**)：`String mText(长度前缀UTF)` + `int mCursorPos`——全量文本非增量（`RinputFragment.java:67-72`）。
-3. **完成**：发 `Ime_Action`(ID **10900**, actionId=-1) 关页面。
+3. **完成**：发 `Ime_Action`(ID **10900**, actionId=-1) 通知 TV,同时**本地 `finish()` 关闭页面**(`RinputFragment.java:36-38`:`sendPacket(...)` 后立即 `activity().finish()`)。
 4. 收到 `Ime_FinishInput`(**10700**) 或 IDC 断开 → 关闭。
 
-IDC 帧（`ali_tvidclib/packet/BaseIdcPacket.java`）：16 字节大端头 `[magic=130311(0x1FD07)][key][packetID][length]` + 参数体；key>0 时 body 加密（算法在 idc lib，未展开）。按键回退包 `OpCmd_Key`(ID **10500**)：`int keyCode(Android码) + int op(0=click,1=down,2=up)`，App 只用 click。**注意：该 IDC 回退路径在 2026-07-15 真机实测中未命中（疑旧版/未启用），按键主通道是 IB 3988。**
+IDC 帧（`ali_tvidclib/packet/BaseIdcPacket.java`）：16 字节大端头 `[magic=130311(0x1FD07)][key][packetID][length]` + 参数体；**key>0（已分配 AES 密钥，握手种子交换后）时 body 加密：算法 `AES/CBC/PKCS5Padding`，key=IV=派生 16 字节密钥**（见 `ali_tvsharelib/all/utils/CipherUtils.java:23-53`）。密钥派生：`IdcConnection.assignSeed()` → `IdcEncryptionHelper.getAesSecret(clientSeed, serverSeed)`，固定种子 `a31c5c871c597d133cb15cd68fefdc1a`（16 字节）→ 覆盖前 4 字节(little-endian) = `(clientSeed ^ 0x0313332C ^ serverSeed)` → `HmacSHA256(全量, 全量)` 取前 16 字节为 AES-128 密钥。握手明文包仅放行 packetID `10000/10090/10100`（种子交换），之后所有包须带已分配 key。按键回退包 `OpCmd_Key`(ID **10500**)：`int keyCode(Android码) + int op(0=click,1=down,2=up)`，App 只用 click。**注意：该 IDC 回退路径在 2026-07-15 真机实测中未命中（疑旧版/未启用），按键主通道是 IB 3988。**
 
 ## 6. 语音输入 ASR
 
-独立子协议：`asr/biz/main/ASR.java` + `AsrVConn.java`。手机 `AudioRecord` 采 16kHz 单声道 PCM，发 `out_startRecord / out_asrStreaming(音频流) / out_volume / out_stopRecord / out_recognizeResult`；`BaseAsrPacket extends IIdcVConnPacket.Stub`——复用 IDC 链路上的**虚拟连接(VConn)**，`mMsgType` 字符串标识的 JSON 风格消息。UI 入口 `ui/rc/asr/AsrView.java:67-82`（按住说话）。VConn 分帧细节未展开，标注不确定。
+独立子协议：`asr/biz/main/ASR.java` + `AsrVConn.java`。音频采集由 JNI 层 `asr/biz/main/jni/AudioRecorderImp.java` 通过 `AudioRecord` 完成(单声道 16-bit PCM 已确认:`new AudioRecord(1, sRate, 2=CHANNEL_IN_MONO, 2=ENCODING_PCM_16BIT, bufSize)`);**16kHz 采样率由 native 经构造参数传入,Java 源码不可见,未确认**。发 `out_startRecord / out_asrStreaming(流式识别结果,编码 question/result_code/finish,非裸音频) / out_volume / out_stopRecord / out_recognizeResult`；`BaseAsrPacket extends IIdcVConnPacket.Stub`——复用 IDC 链路上的**虚拟连接(VConn)**，`mMsgType` 字符串标识的 JSON 风格消息。UI 入口 `ui/rc/asr/AsrView.java:67-82`（按住说话）。**VConn 分帧格式已可推导**（见 `AsrVConn.java` / `BaseAsrPacket.java` / `AsrPacketFactory.java`）：外层经 `mAsrModule.sendVConnPacket` 在单条 IDC 连接上以 module 名多路复用；内层 JSON 信封 `{"asr_name":ASR_MODULE_NAME,"asr_data":{"pk_type":mMsgType,"pk_content":…}}`，`decode()` 按 `pk_type` 还原，`onRecvPacket` → `AsrPacketFactory.createRecvPacket(mMsgType)` 分派到具体包（`asr_language`→`AsrPacket_in_asrLanguage`、`asr_mode`→`AsrPacket_in_asrMode`）。
 
 ## 7. 关键文件索引（均在 `jadx_out/sources/` 下）
 
@@ -118,13 +118,13 @@ IDC 帧（`ali_tvidclib/packet/BaseIdcPacket.java`）：16 字节大端头 `[mag
 - UI→发送桥：`ui/rc/main/{RcUtil.java, RcCommon.java}`
 - 触摸板/方向盘/摇杆：`ui/rc/main/rcpad/{TouchpadView,SteeringwheelView,JoystickView}.java` + `ui/rc/main/view/RcStickView.java`
 - 远程输入：`ui/rc/rinput/{RinputMgr,RinputFragment}.java`
-- IDC 包：`com/tmalltv/tv/lib/ali_tvidclib/packet/{BaseIdcPacket,IdcRawPacket_OpCmd_Key,IdcRawPacket_Ime_*,IdcPacketFactory}.java`；端口 `IdcConst.java:5`
+- IDC 包：`com/tmalltv/tv/lib/ali_tvidclib/packet/{BaseIdcPacket,IdcRawPacket_OpCmd_Key,IdcRawPacket_Ime_*,IdcPacketFactory}.java`；端口 `com/tmalltv/tv/lib/ali_tvidclib/IdcConst.java:5-6`
 - 语音：`com/yunos/tvhelper/asr/biz/main/{ASR,AsrVConn}.java`
 
 ## 8. 不确定点
 
-1. IB 手柄键码 LB/RB/SELECT/START 与标准 Linux 码有出入，需抓包验证。
-2. IB 通道无加密/鉴权（hello 即建立）；IDC key>0 时 body 加密，算法未追踪。
-3. ASR VConn 分帧/多路复用格式未展开。
-4. `sendMultitouchEventIf`(272) 与 `IB_TOUCH_SCALE=10000` 无 UI 调用方，为预留 API；触摸归一化仅能推测为 0~10000 定标。
-5. IbObserver 的 isAvailable 判定细节（MODULEINFO 回包 264 解析）未读取。
+1. ~~IB 手柄键码 LB/RB/SELECT/START 与标准 Linux 码有出入，需抓包验证。~~ （已确认：码值取自 `SecExceptionCode` 混淆常量 A=306/B=305/LT=310/RT=311/START=312，且与真机实测一致，非标准 Linux 码）
+2. IB 通道无加密/鉴权（hello 即建立，`IbPacket.encode()` 仅拼 20 字节头+原始 body，无 crypto）；IDC key>0 时 body 加密，**算法已追踪**：`AES/CBC/PKCS5Padding`，key=IV=派生 16 字节密钥（固定种子 `a31c5c871c597d133cb15cd68fefdc1a` + `(clientSeed^0x0313332C^serverSeed)` 覆盖前 4 字节 + `HmacSHA256` 取前 16 字节；见 `CipherUtils.java` / `IdcEncryptionHelper.java` / `IdcConnection.java`）。
+3. ASR VConn 分帧/多路复用格式**已可推导**（非未知项）：外层走 IDC VConn（module 名复用），内层 JSON 信封 `{asr_name, asr_data:{pk_type, pk_content}}`，`pk_type` 经 `AsrPacketFactory` 分派（见 `BaseAsrPacket.java` / `AsrVConn.java`）。
+4. `sendMultitouchEventIf`(272) 与 `IB_TOUCH_SCALE=10000` 无 UI 调用方,为预留 API（全仓 grep 仅 `IbRc.java`/`IbPublic.java` 定义与声明，无调用方）。**10000px/s 速度阈值已确认**:`TouchpadView.java:351` 快速滑动时 `iAbs<10000` 发 1 次 keyClick,`≥10000` 发 2 次(双发连射)。注：`272` 为 IB 包类型 `PROTO_MULTITOUCH`，`IB_TOUCH_SCALE=10000` 为坐标缩放常量，二者为独立概念。
+5. ~~IbObserver 的 isAvailable 判定细节（MODULEINFO 回包 264 解析）未读取。~~ （已确认：`IbType.RSP_MODULEINFO=264`，`IB.java:201-223` 解析 `cur_app` 字段）

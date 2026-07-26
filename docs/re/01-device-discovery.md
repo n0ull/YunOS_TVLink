@@ -6,7 +6,7 @@
 
 ### 通道 A：mDNS 组播发现（标准 Bonjour，自实现报文解析）
 
-- 组播地址 `224.0.0.251`，端口 **UDP 5353**（`MDNSConstants.java:9-10`）
+- 组播地址 `224.0.0.251`（`MDNSConstants.java:9`）；端口 **UDP 5353** 为硬编码字面量（`MDNSManager.java:53,113`），并非 `MDNSConstants` 常量
 - 服务名：`_alitv_remote_control._tcp.local`
 - 查询报文：标准 DNS 报文（12 字节头 + 1 个 ANY 类型 Question），发 1 次（`MDNSManager.SearchThread`，`MDNSManager.java:103-138`）
 - 响应解析（`DNSMessage.parse`，`DNSMessage.java:70-131`），逐条 Answer 提取：
@@ -20,13 +20,13 @@
 ### 通道 B：/24 网段 TCP 遍历探测（IdcTraversal）
 
 - 取本机 IPv4 的 /24 前缀，从"自己 IP±10"起环形枚举 1~254（跳过 .0/.255/自己），每 **50ms** 一台，对每台 **TCP 13511** 发起 `IdcDetector.detect()`（`IdcTraversal.java:127-202`）
-- 探测 = 一次完整的 TCP 连接 + `DETECT` 类型登录握手，收到 LoginResp 即判定为设备，随后断开（`IdcDetector.java:132-182`）
+- 探测 = 一次完整的 TCP 连接 + `DETECT` 类型登录握手，收到 LoginResp 即判定为设备，随后断开。完整调用链：`detect():132`（建连 `onConnect`）→ `loginToServer():177`（发 DETECT LoginReq）→ `handlePacket_loginResp():95`（存 LoginResp）→ `handleDetectResult():167`（回调 `mListener.onDetectResult` 判定为设备并断开）（`idc/biz/detect/IdcDetector.java`）
 
 ### 触发时机与历史设备
 
 - 设备选择页 `DevpickerFragment.java:64`、自动连接 `DevAutoConnector.java:72,88` 调 `search()`
 - WiFi 恢复、亮屏、回前台 → 按**当前 SSID** 查历史记录直接重连（`DevmgrBizBu.java:49-71`、`HistoryDevMgr.getLastConnectDevBySSID`，`HistoryDevMgr.java:40-55`），历史存 SP 的 JSON 数组
-- 断线自动重连：15s 间隔、最多 2 次（`DevmgrBizBu.java:213-242`）
+- 断线自动重连：首次 **5s**（`retryConnect():522-523` 同时 `postDelayed(5000L)` 与 `RETRY_CONNECT_TIME`），之后每 **15s** 重投（`mReConnectRunnable:240`），最多 **2 次**（上限检查 `MAX_RETRY_CONNECT_COUNT`，`:213-242`）（`DevmgrBizBu.java:213-242,511-525`）
 
 ## 2. 连接建立（私有 TCP 二进制协议 IDC）
 
@@ -54,13 +54,13 @@
    - `encryption_algorithm_ver`=1、`encryption_algorithm_detail`=阿里安全组件加密后的 `{seed, digest}`（客户端随机种子，`IdcUtils.java:17-27`）
 3. 收 **LoginEncryptionResp (10090)**：服务端回自己的 seed（同样加密传输）；双方 seed 经 `IdcEncryptionHelper.getAesSecret(clientSeed, serverSeed)` 派生 16 字节 AES 密钥——把内置初始密钥 `a31c5c871c597d133cb15cd68fefdc1a` 的前 4 字节（小端）替换为 `clientSeed ^ 51550860 ^ serverSeed` 后做 HmacSHA256 自哈希取前 16 字节（`IdcEncryptionHelper.java:45-60`）；之后报文体走 AES
 4. 收 **LoginResp (10100)**：`ver`、`connKey`（后续包头 key 字段）、`udpPort`、JSON（`dev_name/dev_model/dev_uuid/dev_os/dev_os_ver`）、ddhParams（`IdcPacket_LoginResp.java:81-108`）→ 连接 established
-5. 心跳：每 **20s** 发 HeartBeat，回包 (10200) seq 必须匹配，否则断开（`IdcComm.java:28,134-154`）
+5. 心跳：每 **20s** 发 HeartBeat（间隔常量 `CFG_HEARTBEAT_INTERVAL=20000`，`IdcComm.java:28`；发送 `sendHeartbeat():346-351`），回包 (10200) seq 必须匹配，否则断开（seq 校验 `mRuntimeListener:134-154`）
 6. 运行时 TV 可推 11000 更新设备名
 
 ### 配对方式
 
 - **局域网 NORMAL**：发现后自动/点选连接（`DevmgrBizBu.connect`，`DevmgrBizBu.java:418-433`）
-- **二维码 QRCODE**：扫电视屏上二维码 `tvhelper://IDC_DIAG/<base64>`（`QrcodeProcessorMgr.java:12,53,74-101`）得到 IP+magic number，带 magic 走 QRCODE 登录（`DevmgrBizBu.java:443-460`）
+- **二维码 QRCODE**：`QrcodeProcessorMgr` 仅解析 `tvhelper://IDC_DIAG/<base64>` 信封并 base64 解码（`QrcodeProcessorMgr.java:12,53,74-101`）；解码后在 `IdcdiagFragment.addDevToDevmgr` 提取 IP（`IdcdiagFragment.java:78`）、mac（`:79`）、magic（`IdcdiagInfo.getInst().diagDo().magic`，`:82`），带 magic 走 QRCODE 登录（`DevmgrBizBu.java:443-460`）
 - 连接建立后业务多路复用同一条 TCP：VConn 虚拟连接（`IdcPacket_VConnSyn/Data/Fin`）+ Cmd 请求响应（`IdcPacket_CmdReqBase/RespBase`，见 `IdcPublic.IIdcRemoteModule`）
 
 ## 3. 设备信息数据模型
@@ -71,7 +71,7 @@
 |---|---|---|
 | `ip` / `name` | IP / 设备名 | LoginResp |
 | `mac` | MAC | mDNS TXT `deviceid` |
-| `uuid` | 设备唯一 ID | LoginResp `dev_uuid`；缺失时用 `name+mac` 拼（`handworkUuid=true`，不自动连，`DevmgrBizBu.java:532-545`） |
+| `uuid` | 设备唯一 ID | LoginResp `dev_uuid`；缺失时用 `name+mac` 拼并置 `handworkUuid=true`（不自动连）。置位发生在监听器 `mIdcTraversalListener`（`DevmgrBizBu.java:111`）与 `mIdcDetetorListener`（`:259`），而非 `transIDCDevToDevMgrDev:532-545` |
 | `deviceModel` | 型号 | LoginResp `dev_model` |
 | `projectionPort` | 投屏端口 | mDNS TXT |
 | `loginMagicNumber` | 二维码配对魔数 | 扫码 |
@@ -81,12 +81,12 @@
 
 ## 4. 关键类与证据（均在 jadx_out/sources/ 下）
 
-- `com/yunos/tvhelper/devmgr/biz/DevmgrBizBu.java` — 发现编排、自动连接、重连（:377, :418, :443, :559）
-- `com/yunos/tvhelper/devmgr/biz/mnds/MDNSManager.java` — mDNS 收发（:50-62 建组播 socket，:103-138 查询，:140-171 接收）
-- `com/yunos/tvhelper/devmgr/biz/mnds/MDNSConstants.java:9-10`、`DNSMessage.java:70-131`
+- `com/yunos/tvhelper/devmgr/biz/DevmgrBizBu.java` — 发现编排、自动连接、重连（:377, :418, :443, :459, :559；:511-525 重连 `retryConnect():522-523` 首次 5s、:213-242 上限 2 次；:111 `mIdcTraversalListener` 置 `handworkUuid`；:259 `mIdcDetetorListener` 置 `handworkUuid`）
+- `com/yunos/tvhelper/devmgr/biz/mnds/MDNSManager.java` — mDNS 收发（:50-62 建组播 socket，:53/:113 硬编码端口 5353，:103-138 查询，:140-171 接收）
+- `com/yunos/tvhelper/devmgr/biz/mnds/MDNSConstants.java:9`（组播地址 `224.0.0.251`）、`DNSMessage.java:70-131`
 - `com/yunos/tvhelper/idc/biz/traverse/IdcTraversal.java:127-202` — /24 遍历
-- `com/yunos/tvhelper/idc/biz/detect/IdcDetector.java:132-182` — 单台探测（DETECT 登录）
-- `com/yunos/tvhelper/idc/biz/comm/IdcComm.java:239-365` — 正式连接、握手、心跳
+- `com/yunos/tvhelper/idc/biz/detect/IdcDetector.java` — 单台探测（DETECT 登录）：`detect():132` → `loginToServer():177` → `handlePacket_loginResp():95` → `handleDetectResult():167`（回调 `mListener.onDetectResult`）
+- `com/yunos/tvhelper/idc/biz/comm/IdcComm.java` — 正式连接、握手、心跳（`:28` 常量 `CFG_HEARTBEAT_INTERVAL=20000`，`sendHeartbeat():346-351` 发送，`mRuntimeListener:134-154` seq 校验；`:239-365` 建连/握手）
 - `com/tmalltv/tv/lib/ali_tvidclib/IdcConst.java:5-6` — 端口 13510/13511
 - `com/tmalltv/tv/lib/ali_tvidclib/packet/BaseIdcPacket.java:13-16`、`IdcPacketHeader.java:13-30` — 报文头
 - `com/tmalltv/tv/lib/ali_tvidclib/packet/IdcPacket_LoginReq.java:38-54`、`IdcPacket_LoginResp.java:81-108`、`IdcPacket_LoginEncryptionResp.java`
@@ -97,7 +97,8 @@
 
 - **seed/digest 的加密组件**：`staticSafeEncrypt/staticSafeDecrypt` 是阿里安全保镖（SecurityGuard）SDK，算法在 native/闭源组件中，Java 层无法还原；复刻客户端时 TV 端若不校验该字段则可直接置 `encryption_algorithm_ver=0` 跳过加密（代码显示 ver=0 走 "no encryption" 明文分支，`IdcComm.java:98-100`）
 - **13510 与 13511 的分工**是从用法推断（连接用 13510、探测用 13511）；TV 端是否两端口都接受正式连接无法确认
-- **LoginResp 的 `udpPort`**：Java 层未见消费方，推测供语音/其他 UDP 业务使用，未确认
+- **LoginResp 的 `udpPort`（字段 `mUdpPort`）**：已验证 Java 层无消费方——仅在 `IdcPacket_LoginResp` 内用于编解码（`param_decode:84`/`param_encode:72`）与调试日志（`param_toString:112`）；业务路径 `IdcDevInfoInner.setLoginResp` 与 `IdcComm`/`IdcDetector.handlePacket_loginResp` 均未读取，未进入设备信息对象
+- 用途推测：字段名暗示为 UDP 端口号，由 TV 下发、客户端不消费，可能预留给语音/其他 UDP 业务，但本 APK 无对应实现，未确认
 - mDNS 过滤阈值"包长 ≥180"为经验值（`MDNSManager.java:156`），非协议要求
 - **shake（摇一摇）与发现协议无关**：`utils/shake/ShakeBiz.java` 只是淘宝 ShakeSensor 的封装，摇动后给 Weex 页面发 `ON_SHAKE` 事件（`_WeexFragment_evt.java:100-107,160-167`），具体动作由前端 JS 决定，不直接触发 `search()`
 - `WAN` 类型（云端中继连接）在 `IdcComm.connect` 中被 assert 禁用（`IdcComm.java:254-256`），本版本实际只走 LAN
