@@ -1,5 +1,6 @@
 package app.tvlink.proto.cast
 
+import app.tvlink.proto.idc.jsonEscape
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStream
@@ -69,9 +70,9 @@ class CastController(
     ): Boolean {
         val body =
             buildString {
-                append("{\"content_url\":\"").append(url.jsonEsc()).append("\",")
-                append("\"content_name\":\"").append(title.jsonEsc()).append("\",")
-                if (thumbnail != null) append("\"thumbnail_url\":\"").append(thumbnail.jsonEsc()).append("\",")
+                append("{\"content_url\":\"").append(jsonEscape(url)).append("\",")
+                append("\"content_name\":\"").append(jsonEscape(title)).append("\",")
+                if (thumbnail != null) append("\"thumbnail_url\":\"").append(jsonEscape(thumbnail)).append("\",")
                 append("\"exclusive\":true,\"start_position\":").append(startPosition).append("}")
             }
         return request("POST", "/setmedia", body, extraHeaders = mapOf("yunos-mediatype" to type))
@@ -87,17 +88,7 @@ class CastController(
 
     fun volume(v: Int) = request("POST", "/volume?value=$v")
 
-    fun rate(r: Float) = request("POST", "/rate?value=$r")
-
-    fun zoom(
-        scale: Float,
-        cx: Float,
-        cy: Float,
-    ) = request("POST", "/zoom?scale=$scale&cx=$cx&cy=$cy")
-
-    fun preload(url: String) = request("POST", "/preload", "{\"content_url\":\"${url.jsonEsc()}\"}")
-
-    fun playbackInfo(): PlaybackInfo? {
+    private fun playbackInfo(): PlaybackInfo? {
         val resp = requestRaw("GET", "/playback-info", null)
         if (resp == null || !resp.first.startsWith("200")) return null
         val j = resp.second
@@ -363,6 +354,4 @@ class CastController(
         out = null
         setState(State.DISCONNECTED)
     }
-
-    private fun String.jsonEsc() = replace("\\", "\\\\").replace("\"", "\\\"")
 }

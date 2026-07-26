@@ -2,7 +2,6 @@ package app.tvlink.proto
 
 import app.tvlink.proto.idc.HeartBeat
 import app.tvlink.proto.idc.IdcConst
-import app.tvlink.proto.idc.IdcCrypto
 import app.tvlink.proto.idc.IdcLoginType
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.LoginReq
@@ -72,21 +71,6 @@ class IdcProtocolTest {
         val decoded = IdcPacket.decode(frame) as VConnData
         assertEquals(5, decoded.moduleId)
         assertTrue(payload.contentEquals(decoded.payload))
-    }
-
-    @Test
-    fun aesRoundTripAndDerivation() {
-        val key = IdcCrypto.deriveAesSecret(123456, 654321)
-        assertEquals(16, key.size)
-        val data = "hello-idc".toByteArray()
-        val enc = IdcCrypto.aesEncrypt(data, key)
-        assertTrue(enc.size % 16 == 0)
-        val dec = IdcCrypto.aesDecrypt(enc, key)
-        assertTrue(data.contentEquals(dec))
-        // digest is hex of 32-byte HMAC
-        assertEquals(64, IdcCrypto.seedDigest(123456).length)
-        // derivation is deterministic
-        assertTrue(key.contentEquals(IdcCrypto.deriveAesSecret(123456, 654321)))
     }
 
     @Test

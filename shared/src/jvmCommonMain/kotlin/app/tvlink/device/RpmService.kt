@@ -135,8 +135,6 @@ class RpmService(
 
     fun getSystemInfo() = send(ID_GET_SYSTEMINFO, "{}")
 
-    fun getAppInfo(packageName: String) = send(ID_GETAPPINFO_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
-
     fun openApp(packageName: String) = send(ID_OPENAPP_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
 
     fun uninstall(packageName: String) = send(ID_UNINSTALL_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
@@ -168,8 +166,6 @@ class RpmService(
             )
         }","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""",
     )
-
-    fun cancelInstall(packageName: String) = send(ID_INSTALL_CANCEL, """{"packageName":"${jsonEscape(packageName)}"}""")
 
     /**
      * 发送请求。module 就绪(VConn 已打开)时立即发送返回 true;

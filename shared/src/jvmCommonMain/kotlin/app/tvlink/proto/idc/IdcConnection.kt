@@ -50,10 +50,6 @@ class IdcConnection(
     var deviceInfo: DeviceInfo? = null
         private set
 
-    @Volatile
-    var sessionKey: ByteArray? = null
-        private set
-
     /** module id -> info, as reported by the TV. Concurrent because reader thread writes and UI threads read. */
     val modules = java.util.concurrent.ConcurrentHashMap<Int, ModuleInfo>()
 
@@ -143,7 +139,6 @@ class IdcConnection(
 
     private fun applyLoginResp(p: LoginResp) {
         connKey = p.connKey
-        sessionKey = null // ver=0: plain session
         deviceInfo =
             DeviceInfo(
                 ip = host,
@@ -192,7 +187,7 @@ class IdcConnection(
 
     private fun sendRaw(packet: IdcPacket) {
         val o = out ?: return
-        val buf = packet.encode(sessionKey)
+        val buf = packet.encode()
         synchronized(sendLock) {
             val arr = ByteArray(buf.remaining())
             buf.get(arr)
@@ -315,7 +310,7 @@ class IdcConnection(
             frame.put(header)
             frame.put(body)
             frame.flip()
-            IdcPacket.decode(frame, sessionKey)
+            IdcPacket.decode(frame)
         } catch (e: Exception) {
             System.err.println("IdcConnection: read failed: ${e.message}")
             null
@@ -347,7 +342,6 @@ class IdcConnection(
         socket = null
         out = null
         modules.clear()
-        sessionKey = null
         connKey = IdcConst.UNASSIGNED_KEY
         setState(State.DISCONNECTED)
     }

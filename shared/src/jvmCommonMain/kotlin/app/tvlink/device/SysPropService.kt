@@ -27,11 +27,6 @@ class SysPropService(
 
     fun getProp(key: String): Boolean = send(isGet = true, key = key, value = "")
 
-    fun setProp(
-        key: String,
-        value: String,
-    ): Boolean = send(isGet = false, key = key, value = value)
-
     private fun send(
         isGet: Boolean,
         key: String,

@@ -97,18 +97,10 @@ abstract class IdcPacket(
 
     open fun decodeBody(buf: ByteBuffer) {}
 
-    /** Full wire frame; [sessionKey] non-null encrypts the body (AES/CBC, key=IV). */
-    fun encode(sessionKey: ByteArray? = null): ByteBuffer {
+    // ponytail: 加密路径不可达(真机全 ver=0 明文),移除 AES 分支。
+    fun encode(): ByteBuffer {
         val body = encodeBody()
-        val payload: ByteArray =
-            if (sessionKey == null) {
-                body
-            } else {
-                val enc = if (body.isNotEmpty()) IdcCrypto.aesEncrypt(body, sessionKey) else ByteArray(0)
-                val buf = ByteBuffer.allocate(4 + enc.size)
-                buf.putLPBytes(enc)
-                buf.array()
-            }
+        val payload: ByteArray = body
         val total = IdcConst.HEADER_LEN + payload.size
         val out = ByteBuffer.allocate(total)
         out.putInt(IdcConst.MAGIC)
@@ -122,21 +114,14 @@ abstract class IdcPacket(
 
     companion object {
         /** Parse one frame from [buf] positioned at frame start. Returns null on unknown id. */
-        fun decode(
-            frame: ByteBuffer,
-            sessionKey: ByteArray? = null,
-        ): IdcPacket? {
+        fun decode(frame: ByteBuffer): IdcPacket? {
             val magic = frame.int
             if (magic != IdcConst.MAGIC) return null
             val key = frame.int
             val id = frame.int
             val total = frame.int
             if (total < IdcConst.HEADER_LEN || total > frame.capacity()) return null
-            var body = frame.slice()
-            if (sessionKey != null) {
-                val enc = body.getLPBytes()
-                body = ByteBuffer.wrap(if (enc.isNotEmpty()) IdcCrypto.aesDecrypt(enc, sessionKey) else ByteArray(0))
-            }
+            val body = frame.slice()
             val p = create(id) ?: RawIdcPacket(id)
             p.key = key
             p.decodeBody(body)
