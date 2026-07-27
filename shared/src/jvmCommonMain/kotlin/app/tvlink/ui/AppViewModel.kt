@@ -103,6 +103,8 @@ class AppViewModel : ViewModel() {
     var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
     var connectedName by mutableStateOf("")
     var connectedIp by mutableStateOf("")
+    var connectedModel by mutableStateOf("")
+    var connectedMac by mutableStateOf("")
     var connectedIbVer by mutableStateOf("")
     var connectedIbSid by mutableStateOf("")
     val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
@@ -142,6 +144,8 @@ class AppViewModel : ViewModel() {
                     val c = deviceManager.connected.value
                     connectedName = c?.name ?: ""
                     connectedIp = c?.ip ?: ""
+                    connectedModel = c?.model ?: ""
+                    connectedMac = c?.mac ?: ""
                     connectedIbVer = c?.ibVer ?: ""
                     connectedIbSid = c?.ibSid ?: ""
                     lastDevice = c
@@ -150,6 +154,8 @@ class AppViewModel : ViewModel() {
                 } else if (s == DeviceManager.ConnState.IDLE) {
                     connectedName = ""
                     connectedIp = ""
+                    connectedModel = ""
+                    connectedMac = ""
                     connectedIbVer = ""
                     connectedIbSid = ""
                     mediaServerUrl = ""

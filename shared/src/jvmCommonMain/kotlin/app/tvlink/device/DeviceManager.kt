@@ -47,6 +47,8 @@ class DeviceManager {
         val name: String,
         val model: String,
         val uuid: String,
+        /** MAC 来自 mDNS TXT deviceid;扫描/手输 IP 路径无来源,为空。 */
+        val mac: String = "",
         val projectionPort: Int,
         /** IB 服务器版本(如 "3.29"),由 3988 探测产出;手动输入 IP 连接时为空。 */
         val ibVer: String = "",
@@ -107,7 +109,7 @@ class DeviceManager {
     fun stopDiscovery() = discovery.stop()
 
     fun connect(device: Discovery.FoundDevice) {
-        connect(device.ip, device.projectionPort, device.ibVer, device.ibSid)
+        connect(device.ip, device.projectionPort, device.ibVer, device.ibSid, device.mac)
     }
 
     fun connect(
@@ -115,6 +117,7 @@ class DeviceManager {
         projectionPort: Int = 0,
         ibVer: String = "",
         ibSid: String = "",
+        mac: String = "",
     ) {
         if (projectionPort != 0) discoveredProjectionPort = projectionPort
         explicitDisconnect = false
@@ -142,6 +145,7 @@ class DeviceManager {
                         name = di?.name ?: ip,
                         model = di?.model ?: "",
                         uuid = di?.uuid ?: "",
+                        mac = mac,
                         projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
                         ibVer = ibVer,
                         ibSid = ibSid,
@@ -165,6 +169,7 @@ class DeviceManager {
         history.putString("last.name", d.name)
         history.putString("last.model", d.model)
         history.putString("last.uuid", d.uuid)
+        history.putString("last.mac", d.mac)
         history.putString("last.projectionPort", d.projectionPort.toString())
     }
 
@@ -176,6 +181,7 @@ class DeviceManager {
             name = history.getString("last.name") ?: ip,
             model = history.getString("last.model") ?: "",
             uuid = history.getString("last.uuid") ?: "",
+            mac = history.getString("last.mac") ?: "",
             projectionPort = history.getString("last.projectionPort")?.toIntOrNull() ?: 0,
         )
     }
@@ -192,7 +198,9 @@ class DeviceManager {
         reconnectJob =
             scope.launch {
                 delay(if (retries == 1) FIRST_RETRY_MS else RETRY_INTERVAL_MS)
-                if (!explicitDisconnect) connect(target.ip, target.projectionPort, target.ibVer, target.ibSid)
+                if (!explicitDisconnect) {
+                    connect(target.ip, target.projectionPort, target.ibVer, target.ibSid, target.mac)
+                }
             }
     }
 

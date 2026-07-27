@@ -55,7 +55,9 @@ fun SettingsScreen(vm: AppViewModel) {
                 Column {
                     GroupHeader("当前连接")
                     SettingItem(AppIcons.Tv, "设备", vm.connectedName)
+                    SettingItem(AppIcons.Memory, "型号", vm.connectedModel.ifEmpty { "未知" })
                     SettingItem(AppIcons.Wifi, "IP", vm.connectedIp)
+                    SettingItem(AppIcons.Link, "MAC", vm.connectedMac.ifEmpty { "未获取（仅 mDNS 发现携带）" })
                     SettingItem(AppIcons.Memory, "IB 版本", vm.connectedIbVer.ifEmpty { "未探测（手动连接）" })
                     SettingItem(AppIcons.Link, "IB sid", vm.connectedIbSid.ifEmpty { "未探测（手动连接）" })
                     SettingItem(AppIcons.Wifi, "媒体服务", vm.mediaServerUrl.ifEmpty { "未启动" })
