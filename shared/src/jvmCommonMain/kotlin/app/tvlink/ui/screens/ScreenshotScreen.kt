@@ -67,6 +67,9 @@ fun ScreenshotScreen(vm: AppViewModel) {
                 FilledTonalButton(onClick = { vm.takeScreenshot() }, enabled = !vm.shotBusy) {
                     Text(if (vm.shotBusy) "截取中…" else "截屏")
                 }
+                FilledTonalButton(onClick = { vm.takeScreenshotBurst() }, enabled = !vm.shotBusy) {
+                    Text("连拍 ×5")
+                }
                 if (vm.lastShot != null) {
                     Button(
                         onClick = {

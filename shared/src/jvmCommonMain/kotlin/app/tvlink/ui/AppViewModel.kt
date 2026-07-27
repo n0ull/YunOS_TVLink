@@ -403,6 +403,11 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) { cast?.rate(r) }
     }
 
+    fun takeScreenshotBurst() {
+        shotBusy = true
+        screenshot.captureBurst()
+    }
+
     fun voiceText(text: String) = asr.sendText(text)
 
     override fun onCleared() {
