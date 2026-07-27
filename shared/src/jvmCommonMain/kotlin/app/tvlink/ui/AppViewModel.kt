@@ -122,7 +122,6 @@ class AppViewModel : ViewModel() {
 
     // ---- TV apps ----
     val tvApps = mutableStateListOf<RpmService.TvApp>()
-    var tvSystemInfo by mutableStateOf<Map<String, String>>(emptyMap())
 
     // ---- casting ----
     var castState by mutableStateOf(CastController.PlayState.UNKNOWN)
@@ -172,9 +171,6 @@ class AppViewModel : ViewModel() {
                 tvApps.clear()
                 tvApps.addAll(apps)
             }
-        }
-        rpm.onSystemInfo = { info ->
-            viewModelScope.launch(Dispatchers.Default) { tvSystemInfo = info }
         }
         rpm.onInstallProgress = { pr ->
             viewModelScope.launch(Dispatchers.Default) { notice = "安装 ${pr.packageName}: ${pr.progress}%" }
