@@ -3,6 +3,9 @@
 
 package app.tvlink.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -23,6 +29,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -112,6 +119,11 @@ fun SettingsScreen(vm: AppViewModel) {
 
             Spacer(Modifier.height(12.dp))
 
+            if (vm.dongleOnline) {
+                DongleSettingsCard(vm)
+                Spacer(Modifier.height(12.dp))
+            }
+
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column {
                     GroupHeader("关于")
@@ -120,6 +132,104 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
     }
+}
+
+/**
+ * 魔投设置卡（仅当 dongle 设置模块在线时出现，docs/re/03 §B.3）：系统信息 + 分辨率切换
+ * （列表下标即分辨率 id）+ 重启/恢复出厂（二次确认）/网络诊断/重新连网。
+ */
+@Composable
+private fun DongleSettingsCard(vm: AppViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<String?>(null) }
+    val info = vm.dongleInfo
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column {
+            GroupHeader("魔投设置")
+            SettingItem(AppIcons.Memory, "固件版本", fieldValue(info?.firmware, "获取中…"))
+            SettingItem(AppIcons.Wifi, "IP", fieldValue(info?.ip))
+            SettingItem(AppIcons.Link, "MAC", fieldValue(info?.mac))
+            SettingItem(AppIcons.Info, "SN", fieldValue(info?.sn))
+            SettingItem(AppIcons.Tv, "UUID", fieldValue(info?.uuid))
+            Box {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text("分辨率") },
+                    supportingContent = {
+                        Text(fieldValue(info?.current, if (info == null) "获取中…" else "未知"))
+                    },
+                    modifier = Modifier.clickable(enabled = info != null) { expanded = true },
+                )
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    info?.resolutions?.forEachIndexed { i, des ->
+                        DropdownMenuItem(
+                            text = { Text(des) },
+                            onClick = {
+                                expanded = false
+                                val sent = vm.dongleSettings.adjustResolution(i)
+                                vm.notice = if (sent) "已发送分辨率切换: $des" else "模块不在线"
+                            },
+                        )
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = { confirm = "reboot" }, Modifier.weight(1f)) { Text("重启") }
+                TextButton(onClick = { confirm = "reset" }, Modifier.weight(1f)) { Text("恢复出厂") }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        vm.notice = if (vm.dongleSettings.netDiagnosis()) "已发送网络诊断指令" else "模块不在线"
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("网络诊断") }
+                TextButton(
+                    onClick = {
+                        vm.notice = if (vm.dongleSettings.reconnect()) "已发送重新连网指令" else "模块不在线"
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("重新连网") }
+            }
+        }
+    }
+    confirm?.let { action -> DongleConfirmDialog(vm, action) { confirm = null } }
+}
+
+/** 空/未获取字段的占位显示。 */
+private fun fieldValue(
+    v: String?,
+    fallback: String = "—",
+): String = v?.takeIf { it.isNotEmpty() } ?: fallback
+
+@Composable
+private fun DongleConfirmDialog(
+    vm: AppViewModel,
+    action: String,
+    onDismiss: () -> Unit,
+) {
+    val isReboot = action == "reboot"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isReboot) "重启魔投" else "恢复出厂设置") },
+        text = { Text(if (isReboot) "确定重启已连接的魔投设备？" else "确定恢复出厂设置？设备配置将被清空。") },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDismiss()
+                    val sent = if (isReboot) vm.dongleSettings.reboot() else vm.dongleSettings.factoryReset()
+                    vm.notice = if (sent) "指令已发送" else "模块不在线"
+                },
+            ) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable

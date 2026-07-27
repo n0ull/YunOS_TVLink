@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import app.tvlink.device.AsrTextService
 import app.tvlink.device.DeviceManager
 import app.tvlink.device.Discovery
+import app.tvlink.device.DongleSettingService
 import app.tvlink.device.RcController
 import app.tvlink.device.RpmService
 import app.tvlink.device.ScreenshotService
@@ -79,6 +80,7 @@ class AppViewModel : ViewModel() {
     val asr = AsrTextService(deviceManager)
     val screenshot = ScreenshotService(deviceManager)
     val sysprop = SysPropService(deviceManager)
+    val dongleSettings = DongleSettingService(deviceManager)
     val mediaServer = MediaHttpServer()
     var cast: CastController? = null
         private set
@@ -131,6 +133,10 @@ class AppViewModel : ViewModel() {
 
     // ---- TV apps ----
     val tvApps = mutableStateListOf<RpmService.TvApp>()
+
+    // ---- dongle settings (module com.ali.ott.dongle.setting) ----
+    var dongleOnline by mutableStateOf(false)
+    var dongleInfo by mutableStateOf<DongleSettingService.SysInfo?>(null)
 
     // ---- casting ----
     var castState by mutableStateOf(CastController.PlayState.UNKNOWN)
@@ -209,6 +215,15 @@ class AppViewModel : ViewModel() {
         rc.onCurrentApp = { app ->
             viewModelScope.launch(Dispatchers.Default) { notice = "电视当前应用: $app" }
         }
+        dongleSettings.onModuleState = { online ->
+            viewModelScope.launch(Dispatchers.Default) {
+                dongleOnline = online
+                if (!online) dongleInfo = null
+            }
+        }
+        dongleSettings.onSysInfo = { info ->
+            viewModelScope.launch(Dispatchers.Default) { dongleInfo = info }
+        }
 
         // 冷启动直连历史设备（原 App 亮屏/回前台按 SSID 历史直连，docs/re/01 §1；本项目全局一条）
         deviceManager.lastDevice()?.let { d -> deviceManager.connect(d.ip, d.projectionPort) }
@@ -217,6 +232,7 @@ class AppViewModel : ViewModel() {
     private fun onConnected() {
         rc.attach()
         rpm.attach()
+        dongleSettings.attach()
         val c = deviceManager.connected.value ?: return
         connectCast(c.ip, if (c.projectionPort != 0) c.projectionPort else DEFAULT_CAST_PORT)
     }
@@ -276,6 +292,7 @@ class AppViewModel : ViewModel() {
         lastDevice = null
         rc.detach()
         rpm.detach()
+        dongleSettings.detach()
         deviceManager.disconnect()
         screen = Screen.DevicePicker
     }
