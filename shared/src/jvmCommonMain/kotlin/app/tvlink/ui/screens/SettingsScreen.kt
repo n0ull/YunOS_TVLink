@@ -66,6 +66,11 @@ fun SettingsScreen(vm: AppViewModel) {
                         "IB 快速通道",
                         if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）",
                     )
+                    // 断开 = 结束本次会话；历史直连记录保留（原 App 语义），冷启动仍自动直连
+                    FilledTonalButton(
+                        onClick = { vm.disconnect() },
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    ) { Text("断开当前设备") }
                 }
             }
 
