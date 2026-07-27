@@ -3,9 +3,11 @@
 ## A. Dongle BLE 配对与配网
 
 ### 架构链路
-UI（`DongleBLEPairFragment`）→ `PairControllerFactory` → `BLEPairServiceController` → 前台 `DongleBlePairService` → 核心 `DongleBlePairManager`（直接用 Android BLE API）。Service↔UI 用广播：结果 `com.yunos.tv.dongle.action.BLE_PAIR`（extra_pair_result 1成/2败），取消 `BLE_OPTION_ACTION`。
+UI（`DongleBLEPairFragment`）→ `PairControllerFactory.createBLEPairController` → `BLEPairController`（`ui/dongle/pair/controller/imp/BLEPairController.java`，直接持有 `DongleBlePairManager` 并作为其 `PairCallBack`）→ 核心 `DongleBlePairManager`（直接用 Android BLE API）。`PairControllerFactory` 实际返回的是 `BLEPairController`（`.../pair/controller/imp/` 包下）。**`BLEPairServiceController`（`ui/dongle/pair/controller/imp/BLEPairServiceController.java`，实现 `IBLEPairController`）同样存在**，是另一条旁路实现：它注册 `DongleBlePairService.PAIR_ACTION` 广播接收器，经 `DongleBlePairService` 前台 Service 完成配对，其 `startConfigNetWork` 仅向 Service 传 ssid/secret（不传 security/hotelMode），故 `onStartCommand` 把 security 写死 `-1`、hotelMode 写死 `false`（:82）——主 UI 链路并不走它。`DongleBlePairService`（`ui/dongle/pair/DongleBlePairService.java`）是这条旁路的前台 Service：它同样 new 一个 `DongleBlePairManager` 并作 `PairCallBack`，Service↔UI 用广播：结果 `com.yunos.tv.dongle.action.BLE_PAIR`（extra_pair_result 1成/2败），取消 `BLE_OPTION_ACTION`。
 
-- `ui/dongle/pair/DongleBlePairService.java:56-87`（startPair 传 ssid/password）
+- `ui/dongle/pair/controller/imp/BLEPairController.java:43-46`（**主链路**：直接持有 `DongleBlePairManager`，`startConfigNetWork`/`onPairSucceed` 转发）
+- `ui/dongle/pair/controller/imp/PairControllerFactory.java:13-23`（工厂含 `createBLEPairController` :21-23 返回 `BLEPairController`、`createController`→`WiFiPairController`、`createRemoteController`→`RemoteController`；另存在 `BLEPairServiceController.java` 实现 `IBLEPairController` 经 `DongleBlePairService` 广播配对，主链路不走）
+- `ui/dongle/pair/DongleBlePairService.java:56-87`（**旁路** Service：`startPair` 传 ssid/password；`onStartCommand` 写死 security=-1、hotelMode=false，:82）
 - `ui/dongle/fragment/DongleBLEPairFragment.java:76-78`（ssid/password/security/hotelMode 来自 Wi-Fi 设置页）
 
 ### 扫描过滤（`DongleBlePairManager.isDongle`, :438-455）
@@ -13,7 +15,7 @@ UI（`DongleBLEPairFragment`）→ `PairControllerFactory` → `BLEPairServiceCo
 1. 设备名以 **"MagicCast"** 开头（`res/values/strings.xml:567`）；
 2. 广播包含 16-bit Service UUID **0xb81d**（128-bit: `0000b81d-0000-1000-8000-00805f9b34fb`, :74）。
 
-老式 `startLeScan`，扫描超时 40s；支持多台同时配网（每 MAC 独立状态机）。
+老式 `startLeScan`，扫描超时 40s（实际由 `anet.channel.Constants.RECV_TIMEOUT=40000` 驱动，`startConfigNetWork:336` 处 `postDelayed(scanTimeOutRunnable, Constants.RECV_TIMEOUT)`；本地 `SCAN_TIME_OUT=40000`（:46）为未使用的死常量）。支持多台同时配网（每 MAC 独立状态机）。
 
 ### GATT UUID（:70-74）
 | 用途 | UUID |
@@ -33,11 +35,11 @@ UI（`DongleBLEPairFragment`）→ `PairControllerFactory` → `BLEPairServiceCo
 ### 状态机（:47-53）
 `PREPARE(0)→CONNECT(1)→WRITING(2)→WRITE_SUCCEED(3)→PAIR_SUCCEED(4)/PAIR_FAIL(5)`。
 - 反射调 `connectGatt(...,transport=2/LE)`(:462)，连上后延 500ms discoverServices；断线且 state<3 重连最多 3 次。
-- 成功判定：设备经 aa23 notify 回传 UTF-8 字符串 **恰等于 "success"**（:282-290），否则 fail；随后关 GATT。
+- 成功判定：设备经 aa23 notify 回传 UTF-8 字符串恰等于 "success" 且特征 UUID 匹配 CHARACTERISTIC_NOTIFY_UUID（aa23）（:282-290，!"success".equals(str) || !equalsUUID(CHARACTERISTIC_NOTIFY_UUID, ...) 任一成立即 fail）；随后关 GATT。实践中 notify 恒经 aa23 下发，UUID 条件恒成立，但代码层面是双重校验。
 
 ## B. 配对后通信通道：局域网（IDC），不走 BLE
 BLE 仅一次性配网。之后：
-1. `pair/DevAutoConnector.java:51-61`：IDC 局域网遍历按设备名找到 Dongle → `DevmgrApiBu.connect(uuid)` 建 IDC 长连接。
+1. `ui/dongle/pair/DevAutoConnector.java:78-94`（connect 入口）、`:51-63`（遍历监听器）：配对成功回调 `onPairSucceed(name)` 传入的是 **设备名（Bluetooth 设备名，非 IP）**，`BLEPairController` 据此调 `DevAutoConnector.connect(name)` → IDC 局域网按设备名（`mTargetDevNme`）遍历找到 Dongle → `DevmgrApiBu.connect(uuid)` 建 IDC 长连接。
 2. 遥控按键：`DongleRemoteControlFragment` → `ui/dongle/utils/RcUtil.java:38-58` → `IbApiBu.api().rc()`（与电视遥控共用的 inbox 通道，IDC over LAN）。
 3. Dongle 设置（系统信息/分辨率/出厂/重启/网络诊断）：`ui/dongle/rcs/biz/RcsSetting.java`，IDC 模块 **`com.ali.ott.dongle.setting`**（`rcs/api/RcsPublic.java:17`），JSON `RcsPacket_*`。
 4. 播放状态同步：`RemoteController.java` 经 IDC + Immersive 服务监听 `com.yunos.tv.yingshi.boutique` 播放器快照。
@@ -53,13 +55,13 @@ BLE 仅一次性配网。之后：
   - 由电视端 ASR 模块版本 ≥ **2100300000** 决定走 IDST（`biz/observer/AsrObserver.java:24`）。
 
 ### 录音参数
-`jni/AudioRecorderImp.java:28-41`：`AudioRecord(MIC, sRate, MONO, PCM_16BIT)`，buffer=帧长×40，按帧回调 native 做 Opus 编码上行。**采样率由 native 传入，Java 侧不可见；按该 SDK 惯例应为 16 kHz——不确定。**
-控制参数（ASR.java:113-116）：自动停录开、无声停滞上限 10s、最短录音 1500ms、静音阈值 400。状态机 `IDLE→WILL_START_RECORD→RECORDING→WILL_STOP_RECORD→RECOGNIZING`。UI 为按住说话：`ui/rc/asr/AsrView.java:168-190`（按下 startRecord/松开 stopRecord）。
+`jni/AudioRecorderImp.java:28-41`：`AudioRecord(MIC, sRate, 2, PCM_16BIT)`（注意 channelConfig 字面量为 **2**，`getMinBufferSize` 与构造同用 `2`——不等于标准 `AudioFormat.CHANNEL_IN_MONO=0x10`，声道配置含义待固件侧确认），buffer=帧长×40，按帧回调 native 做 Opus 编码上行。**采样率由 native 传入，Java 侧不可见；按该 SDK 惯例应为 16 kHz——不确定。**
+控制参数（ASR.java:112-116）：自动停录开（`setRecordAutoStop(true)`）、无声停滞上限 10s（`setMaxStallTime(10000)`）、最短录音 **2000ms**（`setMinRecordTime(RpcException.ErrorCode.SERVER_SESSIONSTATUS=2000)`，非旧写的 1500ms）、静音阈值 400（`setMinMuteValue(400)`）。`AsrJniImp.setHost` 方法存在（:125）但全 APK 零调用点（v5.2.2 死代码），host 注入逻辑未启用。状态机 `IDLE→WILL_START_RECORD→RECORDING→WILL_STOP_RECORD→RECOGNIZING`。UI 为按住说话：`ui/rc/asr/AsrView.java:168-190`（按下 startRecord/松开 stopRecord）。
 
 ### 结果下发：手机不执行指令，实时转发电视
 IDC 虚拟连接模块 **`com.yunos.tv.asr:etao`**，包 `{"asr_name":<随方向>,"asr_data":{"pk_type":...,"pk_content":...}}`（`biz/AsrDef.java`、`packet/BaseAsrPacket.java:41-96`）——**手机→电视 `asr_name` 为模块全名**（`pre_encode` 用 `ASR_MODULE_NAME`），**电视→手机为 `"ASR_COMMAND"`**（`decode` 的校验值），两个方向不可混用：
 - 手机→电视：
-  - `asr_streaming`（IDST）：每次中间/最终结果即转，字段 `result_code/question(从 asr_out JSON 取 "result")/finish/手机型号`（`packet/AsrPacket_out_asrStreaming.java:26-51`）——边说边推流式文本；
+  - `asr_streaming`（IDST）：每次中间/最终结果即转，param 子键（`AsrPacket_out_asrStreaming.java:26-51`，`param_pre_encode_as_json`）：`result_code`(=`mStatus`)、`question`(从 `asr_out` JSON 取 `"result"`)、`finish`(键名来自 `weex Constants.Event.FINISH="finish"`，值为字符串 `"true"/"false"`，**非布尔**)、`device`(手机型号，键名来自 `com.alipay.sdk.packet.e.n="device"`，值 `Build.MODEL`——**键名是 `device` 不是 `model`**)——边说边推流式文本；
   - `recognize_result`（老模式）：整条 `RecogResult`（`asr_out/ds_out/nlp_out/results`）；
   - `record_start`/`record_stop`/`volume(0-100)`：录音状态/音量同步电视 UI（pk_type 字面值经 `AsrPacket_out_startRecord.java` 等类 `super(...)` 核实，**不是** `start_record`）。
 - 电视→手机：`asr_language`（仅 mandarin，其他语言拒绝启动 ASR.java:146）、`asr_mode`。
@@ -72,10 +74,12 @@ IDC 虚拟连接模块 **`com.yunos.tv.asr:etao`**，包 `{"asr_name":<随方向
 | 主题 | 文件：行 |
 |---|---|
 | BLE UUID/状态机/写包 | `ui/dongle/pair/DongleBlePairManager.java:70-74, 476-613` |
-| 配对 Service | `ui/dongle/pair/DongleBlePairService.java:56-87` |
-| 设备过滤 | `DongleBlePairManager.java:438-455`；`res/values/strings.xml:567` |
+| 配对主链路 Controller | `ui/dongle/pair/controller/imp/BLEPairController.java:43-46`；`ui/dongle/pair/controller/imp/PairControllerFactory.java:13-23`（主链路 `createBLEPairController` :21-23 返回 `BLEPairController`） |
+| 配对旁路 Controller | `ui/dongle/pair/controller/imp/BLEPairServiceController.java`（实现 `IBLEPairController`，注册 `DongleBlePairService.PAIR_ACTION` 广播，仅传 ssid/secret） |
+| 配对旁路 Service | `ui/dongle/pair/DongleBlePairService.java:56-87`（security=-1、hotelMode=false 写死，:82） |
+| 设备过滤 | `ui/dongle/pair/DongleBlePairManager.java:438-455`；`res/values/strings.xml:567` |
 | 配网 UI 入口 | `ui/dongle/fragment/DongleBLEPairFragment.java:58-78` |
-| 配对后回连 | `ui/dongle/pair/DevAutoConnector.java:51-61` |
+| 配对后回连 | `ui/dongle/pair/DevAutoConnector.java:78-94, 51-63` |
 | Dongle 遥控 | `ui/dongle/utils/RcUtil.java:38-58` |
 | Dongle 设置 | `ui/dongle/rcs/biz/RcsSetting.java`；`rcs/api/RcsPublic.java:17` |
 | ASR JNI/库 | `asr/biz/main/jni/AsrJniImp.java:55-63` |
@@ -91,3 +95,4 @@ IDC 虚拟连接模块 **`com.yunos.tv.asr:etao`**，包 `{"asr_name":<随方向
 2. 电视端 NLU/指令映射在固件侧，APK 不可见。
 3. `libmsc.so` 无 Java 引用，判为未使用（未核 .so 间依赖）。
 4. `com.ali.ott.dongle` 包另有一套经典蓝牙 SPP+Socket 配网实现（`bluetoothUtil/BluetoothClient*`），属 OttDongle 旧库/另一种配件，与 `ui/dongle` 的 BLE 流程独立，未展开。
+5. `AsrJniImp.setHost(String)` 方法存在（:125）但全 APK 零调用点（v5.2.2 死代码），host 注入逻辑未启用。

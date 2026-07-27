@@ -30,7 +30,7 @@
 | Activity/页面 | 布局 | 内容与功能 |
 |---|---|---|
 | RcGroupActivity → RcGroupFragment | fragment_rc_group | 遥控主面板（5 种模式） |
-| ├ KeypadView | rc_keypad | 按键遥控：通用按键区 + 五向方向盘 |
+| ├ KeypadView | rc_keypad | 按键遥控：通用按键区（电源/魔键/音量±/主页/返回/菜单 + 动态更多按键容器；上下左右方向键不在该静态布局内，见 §3） |
 | ├ TouchpadView | rc_touchpad | 触屏遥控：触摸板 + 屏幕光标 |
 | ├ MotionpadView | rc_motionpad | 体感遥控（陀螺仪） |
 | ├ JoystickView | rc_joystick | 游戏手柄 |
@@ -47,7 +47,7 @@
 | Activity/页面 | 布局 | 内容与功能 |
 |---|---|---|
 | LocalMediaActivity | layout_media_content | 本地媒体首页：三个 tab：照片/视频/音乐 |
-| FolderAlbumActivity | fragment_photo_folder | 相册文件夹浏览 |
+| FolderAlbumActivity | layout_album | 相册文件夹浏览 |
 | ImagePreviewActivity | activity_image_preview | 图片预览并投屏 |
 | VideoPlayActivity | activity_video_preview | 视频投屏播放 + 控制条 |
 | MusicPlayActivity | activity_music_preview | 音乐投屏播放 + 控制条 |
@@ -88,7 +88,7 @@
 - DevbarFragment：顶部当前设备栏
 - TitlebarFragment：统一标题栏（深/浅色）
 - NowbarFragment：悬浮底部"正在播放"条 + 遥控入口
-- LayerLayout 状态层：断网/加载/断连/升级
+- LayerLayout（ui/app/view/）状态层：断网/加载/断连/升级
 
 ## 2. 主页导航结构
 
@@ -102,7 +102,7 @@
 深色底 #252529，自上而下：设备栏 → 标题栏（模式切换）→ 遥控区（5 模式之一）→ 语音覆盖层。
 
 通用按键区 rc_general_keys（三段式）：
-- 上段：左**电源**、右**魔键**，中间五向方向盘（上下左右+OK）
+- 上段：左**电源**、右**魔键**，中间为动态「更多按键」容器 `rc_general_more_container`（运行时由 `RcGeneralKeysView` 注入；方向键不在该静态布局内，5 向通过 `R.attr.state_5way_pressed_{up,down,left,right}` 属性常量在事件层处理，入口见 `RcFivewayView`/`TouchpadView` → `RcUtil`）
 - 中段：左**音量−**、中**语音占位**、右**音量+**
 - 下段：左**主页**、中**返回**（大键）、右**菜单**
 
@@ -110,8 +110,8 @@
 
 ## 4. 关键文案与配色
 
-- 应用名"阿里TV助手"，slogan"用 手 机 玩 电 视"
-- 配色：通用背景 #f0f3f5，遥控页深色 #252529/#28282c，选中渐变 #37e8ff→#f586ff，点缀橙 #ff9500/绿 #24d870/红 #c92e30
+- 应用名"阿里TV助手"；slogan"用 手 机 玩 电 视"（本地字符串资源未收录，主页为 Weex 远程渲染，slogan 由服务端下发，待真机/抓包核实）
+- 配色：通用背景 #f0f3f5，遥控页深色 #252529/#28282c，选中渐变 #37e8ff→#f586ff，点缀橙 #ff9500/绿 #24d870/红 #ffc92e30
 
 ## 5. 不确定之处
 

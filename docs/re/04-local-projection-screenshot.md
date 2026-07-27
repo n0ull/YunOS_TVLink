@@ -21,10 +21,10 @@
 
 1. 选媒体 → 注册内容节点并拼 URL：
    - 视频 `video/VideoDataMgr.java:99-111`：`video-item-<id>` → `http://<手机IP:port>/video-item-<id>`，`ContentTree.addNode(id, ContentNode(id, item, 本地路径))`
-   - 音乐 `music/MusicDataMgr.java:168-183`（`audio-item-<id>`，专辑封面也挂同一服务）
-   - 图片 `activity/ImagePreviewFragment.java:383-406`（`image-item-<id>`）
+   - 音乐 `music/MusicDataMgr.java:165-185`：`addMediaNode` 注册音频 `ContentTree` 节点（key=`audio-item-<id>`，fullPath=本地路径）；缩略图 URL 设在同一 `MediaItem` 上（`:183`），`musicAlbumPic` 来自 `mAlbumPicMap`（`MediaStore.Audio.Albums.album_art` 列的本地绝对路径）。该封面**不经 `ContentTree` 节点注册**，电视回拉 `thumbnail_url` 时 `HttpServer.serve()` 查不到对应节点，回退为以 URL 路径作文件路径（`myRootDir=new File("/")`，绝对路径直接 serve），故封面可正常回拉
+   - 图片 `activity/ImagePreviewFragment.java:383-417`（`image-item-<id>`）
    - 前缀常量 `mediaserver/ContentTree.java:7-13`（video=1/audio=2/image=3）
-2. 播放：`mediacontrol/TVProjectionPlayer.java:395-416` → `projection().setMedia(type,url,title,thumbnail)`；类型映射 "1"→video、"2"→audio、"3"→image（`:290-298`）。
+2. 播放：`mediacontrol/TVProjectionPlayer.java:395-433`（`setMultimediaURI`）→ `projection().setMedia(type,url,title,thumbnail)`（`:415`）；类型映射 "1"→video、"2"→audio、"3"→image（`:403-411`）。
 3. `MediaProjectionClientImpl.setMedia()`（`:243-252`）：首次新起线程 TCP 连电视（`:402`），10 秒超时（`:591-601`）；已连接则复用长连接。
 4. 发 **POST /setmedia**，电视凭 `content_url` 回拉手机 HTTP 服务播放。
 5. 电视经同一连接回发 `POST /event?state=...` 上报状态，手机回 200 OK（`MediaClientMessageProcessor.java:138-145,174-176`）。
@@ -52,7 +52,7 @@ Content-Length: N
 
 {"content_url":"http://<手机IP:port>/video-item-12",
  "content_name":"标题",
- "thumbnail_url":"http://.../封面",   // 仅音乐
+ "thumbnail_url":"http://.../封面",   // 仅音乐传非空值（工厂对所有 setmedia 均发该头，仅音乐调用方传入）
  "exclusive":true,
  "start_position":0}
 ```
@@ -74,16 +74,16 @@ Content-Length: N
 
 **电视→手机状态事件**：
 ```
-POST /event?state=<prepared|playing|paused|loading|stopped|completed|error|occupied>[&duration=<N>&position=<N>]
+POST /event?state=<null|prepared|playing|paused|loading|stopped|completed|error|occupied>[&duration=<N>&position=<N>]
 ```
-手机回 `HTTP/1.1 200 OK`，映射到 `IStateListener` 回调；`occupied`=电视被其他投屏占用。
+状态字符串取自 `MediaConstants.MediaReverseEventState` 枚举（`:56-85`），`MediaClientMessageProcessor` 经 `lookup()` 大小写不敏感映射；`null` 为枚举初始/未知态，线协议一般不出现。手机回 `HTTP/1.1 200 OK`，映射到 `IStateListener` 回调；`occupied`=电视被其他投屏占用。
 
 工厂另有 `PUT /image`（直推 JPEG：`yunos-assetaction: cacheOnly|displayCached`、`yunos-assetkey`、body 为文件流）和 `POST /reverse`（101 Switching Protocols 反向通道）。**这两方法本 APP 内无调用方**，应是共享库供电视端用；本 APP 图片走 URL 拉流。**（不确定项）**
 
 ## 5. 手机本地 HTTP 服务细节
 
 - `mediaserver/HttpServer.java`：NanoHTTPD 单文件改造，ServerSocket 每连接一线程（`:56-67`）。
-- 端口 8192 起扫描绑定；URL 规则：去前导 `/` 查 `ContentTree` HashMap → 换本地真实路径 → `serveFile()`（`:90-99`）。
+- 端口 8192 起扫描绑定；URL 规则：`serve()`（`:73-99`）去前导 `/` → 查 `ContentTree` HashMap → 命中则换本地真实路径 → 调用真正的 `serveFile()`（约 `:565`）按文件返回；未命中节点时以 URL 路径作为文件路径回退（音乐缩略图即走此分支，`HttpServer` 以 `myRootDir=new File("/")` 为根，绝对路径直接 serve）。
 - 支持 **Range / 206 Partial Content**（`:650-696`）+ `Accept-Ranges: bytes`，电视可拖进度；MIME 按扩展名（`:707-710`）。
 - 拒绝 `..` 穿越（`:580-582`）；未注册路径 404。
 - 退出功能/WiFi 断开时 `stopHttpServer()`。
@@ -92,9 +92,9 @@ POST /event?state=<prepared|playing|paused|loading|stopped|completed|error|occup
 
 走 **IDC 命令通道**（二进制私有 packet，与遥控器同链路），非投屏 HTTP-like 通道：
 
-1. `ui/screenshot/fragment/ScreenShotFragment.java:332-341`：发 `IdcPacket_Cmd_ScreenShot_Req`（packet id **20900**）。Cmd 类包 body 为**两段 LPString**：`LPString({"cmdReqID":N})`（`IdcPacket_CmdReqBase.param_encode`）+ `LPString({"resize_ratio":0,"resize_w":1280,"resize_h":720,"compress_quality":90})`。
+1. `ui/screenshot/fragment/ScreenShotFragment.java:332-341`：发 `IdcPacket_Cmd_ScreenShot_Req`（packet id **20900**）。Cmd 类包 body 为**两段 LPString**：`LPString({"cmdReqID":N})`（`IdcPacket_CmdReqBase.param_encode`）+ `LPString({"resize_ratio":0,"resize_w":1280,"resize_h":720,"compress_quality":90})`（`resize_h` 实际取自 `LoginConstant.RESULT_WINDWANE_CLOSEW`，值为 720）。
 2. 电视截屏→缩放 1280x720→JPEG q90，回 `IdcPacket_Cmd_ScreenShot_Resp`（id **21000**），body = `LPString({"cmdReqID":N})` + `LPString({"dummy":0})` + `LPBytes(jpeg)`，字节在 `mImgData`。
-3. 保存 `DCIM/TV_SCREEN*/<时间戳>.jpg`（`ui/screenshot/util/PhotoSaveUtil.java:17,35`），触发媒体扫描。
+3. 保存 `DCIM/电视截屏/<时间戳>.jpg`（`ui/screenshot/util/PhotoSaveUtil.java:14,17,35`，`TV_SCREEN = "/电视截屏/"` 为确定中文目录名，无通配符），触发媒体扫描。
 4. 单击 1 张；长按连拍 300ms/帧，上限 `SCREENSHOT_MAX_NUM`；电视版本 ≥ `SCREENSHOT_RCS_VER` 才可用。
 
 ## 7. 录屏：不存在
@@ -113,15 +113,17 @@ POST /event?state=<prepared|playing|paused|loading|stopped|completed|error|occup
 | 手机 HTTP 服务 | `ui/localprojection/mediaserver/HttpServer.java`、`MediaServer.java:20-34` |
 | URL→文件映射 | `ui/localprojection/mediaserver/ContentTree.java:7-13` |
 | 视频 URL | `ui/localprojection/video/VideoDataMgr.java:99-111` |
-| 音乐 URL+封面 | `ui/localprojection/music/MusicDataMgr.java:168-183`、`mediacontrol/MusicPlayerCenter.java:107` |
+| 音乐 URL+封面 | `ui/localprojection/music/MusicDataMgr.java:165-185`、`mediacontrol/MusicPlayerCenter.java:107` |
 | 图片投屏+预载 | `ui/localprojection/activity/ImagePreviewFragment.java:383-417` |
-| 播控封装 | `ui/localprojection/mediacontrol/TVProjectionPlayer.java:282-369` |
+| 播控封装 | `ui/localprojection/mediacontrol/TVProjectionPlayer.java:282-433` |
 | 截图请求 | `ui/screenshot/fragment/ScreenShotFragment.java:332-341` |
 | 截图 packet | `ali_tvidclib/packet/IdcPacket_Cmd_ScreenShot_Req/Resp.java`（id 20900/21000） |
 | 截图保存 | `ui/screenshot/util/PhotoSaveUtil.java:17,35` |
 
-## 不确定项
+## 不确定项（手机端事实均已确认，仅对端行为属推测）
 
-1. seek/duration/position 单位：高置信毫秒（变量名 `mMsce` + MediaPlayer 体系），无协议文档不能 100% 确认。
-2. `PUT /image`、`POST /reverse` 本 APK 无调用点，可能是共享库死代码或电视端配套。
-3. 投屏控制连接（13520）与 IDC 是两条独立 TCP；`mediaprojection.projectionport` 命名表明电视端投屏服务独立监听。
+> 经源码核对：以下三项中**手机端的发送侧/连接侧事实均已从反编译源码确认**，本 APK 内不再是"不可确定"；仅"对端（电视/共享库）如何解释或用途"因 TV 端不在本 APK 内而仍属推测，保留如下。
+
+1. seek/duration/position 单位：**发送侧已确认为毫秒**。`TVMusicPlayer.java:409,420-434` 与 `VideoTVProjectionPlayer.java:179,186-199` 在 TV 模式下将毫秒值存入 `mMsce`（`SeekToRunnable.setMsce(i)`）后 `tvplayer_.seek(mMsce)` 发往电视；非 TV 模式直接 `MediaPlayer.seekTo(i)`（毫秒体系）。该值即 `POST /seek?value=<mMsce>` 的 value。→ 手机端发送单位确定；100% 确认电视端按毫秒解释需 TV 端源码。
+2. `PUT /image`、`POST /reverse` 调用方：**已确认本 APK 无调用点**（`MediaMessageFactory.java:93`、`:71` 仅定义，全库 grep 无调用）。用途（共享库死代码或电视端配套）属推测，无法从手机端源码证伪。
+3. 控制连接独立性：**已确认手机端为两条独立 TCP**——IDC 信令通道（`LprojBizBu.java:19-25` 的 `onEstablished` 来自 `IdcApiBu.idcComm()`）与 `setServerInfo(mDevAddr, 13520|projectionport)` 另建的控制 TCP（`LprojBizBu.java:73-87`）。"电视端投屏服务独立监听"为对端行为，手机端仅见 ddh `projectionport` 配置，可推理但需电视端确认。

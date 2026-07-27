@@ -21,12 +21,12 @@
 
 - 路由规则（`support/biz/mtop/Mtoper.java:50-57`）：API 名以 `mtop.youku.` / `mtop.vip.youku.` 开头 → 优酷域，且一律 **POST**；其余 → 淘宝域（GET 默认）。
 - 环境切换由 `LegoApp.env()` 决定（DAILY/PREPARE/ONLINE）。
-- H5/Weex 资源（`utils/cfg/ServerUrl.java:5-10`）：主页 bundle 正式 `https://g.alicdn.com/yuntv/tvhelper_weex/page/home-android-online.js`、beta `.../home-android-daily.js`；家庭监控 `family_monitor.js`；视频通话 `video_chat.js`；反馈 `http://h5.m.taobao.com/yuntv/feedback.html`。
+- H5/Weex 资源（`utils/cfg/ServerUrl.java:5-10`）：主页 bundle 正式 `https://g.alicdn.com/yuntv/tvhelper_weex/page/home-android-online.js`、beta `.../home-android-daily.js`；家庭监控 `https://g.alicdn.com/yuntv/tmall-tvhelper/page/family_monitor.js`；视频通话 `https://g.alicdn.com/yuntv/tmall-tvhelper/page/video_chat.js`；反馈 `http://h5.m.taobao.com/yuntv/feedback.html`。
 - 其他常量：优酷扫码登录跳转 `http://qr.youku.com/pr`；会员购买页 `https://h5.vip.youku.com/buy`；优酷客户端下载 `https://down2.youku.com/youku/down.php`。
 
 ## 2. mtop 接口清单（自有业务）
 
-所有请求对象继承 `MtopPublic.MtopBaseReq`。`NEED_SESSION`/`NEED_ECODE` 均为 false。
+所有请求对象继承 `MtopPublic.MtopBaseReq`。`NEED_SESSION` 均为 false；`NEED_ECODE` 多数 false，但 `favorite.*` 系列与 `playlog.*` 系列（`TvPublicShowUserPlayLogReq` / `TvPublicPushUserFavoriteReq` / `TvPublicListUserPlaylogReq` / `TvPublicListUserFavoriteReq` / `TvPublicIsFavoriteReq` / `TvPublicCleanPlayLogReq` / `TvPublicCancelUserFavoriteReq`）为 **true**（其中 `TvPublicPushPlaylogReq` 为 **false**，其余 playlog 系列为 true）；H5/Weex 透传代理（`H5MtopUtil.sendMtopRequest` 恒 `setNeedEcode(true)`、`TvhMtopProxy` 取请求自带 `needEcode`）亦强制 ecode。
 
 ### push（消息中心，配合 ACCS 推送）
 | API | 版本 | 关键参数 | 用途 |
@@ -74,7 +74,7 @@
 | `mtop.youku.tvspeech.tts.query` / `.delete` / `.getTrainProcess` / `.getrecordingstatements` | 1.0 | `id`, `phone`, `uuid`, `utdid` | 语音任务查询/删除/进度/语句列表 |
 
 > TTS 录音文件走 AUS 上传（OSS），上传后把 URL 传给 mtop 接口。
-> Weex/H5 页内 API 透传：`ui/weex/module/TvhMtopProxy.java:79-82`、`ui/h5/util/H5MtopUtil.java:99`。
+> Weex/H5 页内 API 透传：`ui/weex/module/TvhMtopProxy.java:79-82`、`ui/h5/util/H5MtopUtil.java:92`（`setNeedEcode(true)` 调用点）。
 
 ## 3. 局域网 IDC 协议上的业务模块
 
@@ -128,9 +128,10 @@ VConn 包 `category="immersive"`，messageType：`setMediaReq/setMediaResp`、`p
 
 - **mtop 签名**：mtopsdk + SecurityGuard（x-sign/wua）。appKey 取自安全组件；`appId = appKey + "@android"`。设备 ID 注册为 taid。
 - **设备身份（taid）**：`taid = UPPER_MD5(utdid)`，utdid 来自阿里 UTDevice（`support/biz/taid/TaidMgr.java:52-60`）。
-- **会话**：淘宝登录后 mtop 自动携带 session/cookie；优酷登录为扫码 → SToken → `psp.token.login` 换 accessToken。优酷用户态接口固定字段 `system_info="TVASSIST"`、`access_token`。
-- **公共 systemInfo**：所有 `TvhMtopReq` 子类附带 `systemInfo` 字段：client 信息、taid、utdid、连接电视后的 uuid/device_model/rcs_version。
-- **LAN 鉴权**：同网段信任 + 加密 seed 协商；扫码连接额外校验 `loginMagicNumber`。
+- **会话**：淘宝登录后 mtop 自动携带 session/cookie；优酷登录为扫码 → SToken → `psp.token.login` 换 accessToken。
+- **优酷用户态鉴权字段**（`TvhUserMtopReq`，直接继承 `MtopBaseReq`、**不**继承 `TvhMtopReq`；`ui/hotmovie/mtop/TvhUserMtopReq.java:6-8`）：playlog/favorite 系列固定携带 `system_info="TVASSIST"`、`access_token`（=优酷 accessToken）；**不含** `TvhMtopReq.systemInfo` 设备对象。
+- **公共 systemInfo**（`TvhMtopReq` 子类，多数 ui/* 接口；`support/api/MtopPublic.java:68-70`）：附带 `systemInfo` 对象：client 信息、taid、utdid、连接电视后的 uuid/device_model/rcs_version。
+- **LAN 鉴权**：同网段信任 + 加密 seed 协商；扫码登录（QRCODE）时手机在 `IdcPacket_LoginReq.mLoginMagicNumber` 中填入 magic number 并发送至电视（`idc/biz/comm/IdcComm.java:330-337`），由电视端校验（`IdcPacket_LoginReq.java:82-84` 仅 `login_type==QRCODE` 时读取 `login_magic_number`）；非扫码登录不设此字段。
 
 ## 5. 推送链路
 
@@ -144,10 +145,12 @@ ACCSClient 注册服务：`accs`、`accs-console`、`tvassist` → `CallbackServ
 - RPM：`rpm/biz/main/RPM.java:68-201`、`rpm/biz/observer/RpmObserver.java:16-17,24-27,75-80`、`rpm/biz/main/RpmVConn.java:103-221`、`com/yunos/tv/appstore/idc/IdcConstant.java:6`、`com/yunos/tv/appstore/idc/datapacket/AbsIdcDataPacket.java:13,138-146`、`IdcPacket_InstallRequest.java:24-35`、`IdcPacket_ContinueDownloadRequest.java:7,17`、`IdcPacket_Cmd_LaunchSth.java:17-21,35-37`、`ui/h5/fragment/WindVaneFragment.java:455,607-644`
 - 推送：`push/biz/main/AccsBiz.java:105-128`、`push/biz/main/PushMgr.java:252,265,318`
 
-## 7. 不确定之处
+## 7. 不确定之处（经源码复核）
 
-1. mtop 响应 JSON 结构以 fastjson 映射到 `*Resp` 类，未逐一展开。
-2. ACCS 推送原始 payload 格式未细读，确认"通知→mtop 拉详情"两段式。
-3. asoToken 的实际获取路径（TbAsoToken 为空壳）。
-4. `preid` 常量用途不明，登录/未登录分支同值。
-5. RPM：电视固件是否校验 `login.name`（自报字符串，可伪造为 `com.yunos.tvhelper`）、`com.yunos.idc.appstore` 模块是否常驻（即 Cmd_LaunchSth 唤醒是否必需）——反编译均无证据，待真机证伪。
+> 复核结论：条目 3、4 实为**可确定项**，已从"不确定"移出；仅 5 为 App 层确不可确定；1、2 属文档详略 / SDK 内部，非事实不确定。
+
+1. mtop 响应 JSON 以 fastjson 映射到 `*Resp` 类，未逐一展开——属文档详略范围，**非事实不确定**。
+2. ACCS 推送"通知→mtop 拉详情"两段式**已确认**（`push/biz/main/PushMgr.java` `onMsgArrival` → `queryAllMsg`）；ACCS 原始 payload 线格式由 SDK 内部处理，App 仅收到达广播后走 mtop，非 App 层可解析，故未细读——**非事实不确定**。
+3. asoToken 获取路径——**已确认为空实现（非不确定）**：`account/biz/tbaso/TbAsoToken.java:15-20` 的 `apply()`/`cancelApplyIf()` 均为空方法。`Racct`（`remoteaccount/biz/main/Racct.java:227-228`）与 `HotMovieProjectionBiz`（`ui/hotmovie/projectionBiz/HotMovieProjectionBiz.java:399-400`）注册的 asoToken 回调**永不被触发**，本 APK 内 asoToken 从未真正获取；`RacctPacket_login_info.asoToken` 字段定义存在，但在此链路下恒为空。
+4. `preid` ——**值已确为硬编码常量** `ca241df55b597c56853b2c7564ca251f`，且 `support/biz/mtop/TvhSysinfoUtil.java:72-77` 登录 / 未登录两分支赋**同值**（原文"分支同值"成立）；其语义用途（pre-id 指向何种预设 / 合作方标识）仍不明——**此项为真正不确定**。
+5. RPM：电视固件是否校验 `login.name`、`com.yunos.idc.appstore` 模块是否常驻（Cmd_LaunchSth 唤醒是否必需）——反编译均无证据（`mName` 仅由 `idc/biz/IdcUtils.java:20` 设为自身包名 `com.yunos.tvhelper`，校验与否在电视端），待真机证伪。**确属 App 层不可确定，保留**。
