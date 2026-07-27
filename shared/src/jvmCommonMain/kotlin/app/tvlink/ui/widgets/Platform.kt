@@ -36,3 +36,17 @@ expect fun VoiceButton(onText: (String) -> Unit)
 @Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 expect fun DongleScreen(vm: AppViewModel)
+
+/** 平台键值存储（持久化设置/历史）：desktop = java.util.prefs，android = SharedPreferences。 */
+expect class KeyValueStore(
+    name: String,
+) {
+    fun getString(key: String): String?
+
+    fun putString(
+        key: String,
+        value: String,
+    )
+
+    fun remove(key: String)
+}

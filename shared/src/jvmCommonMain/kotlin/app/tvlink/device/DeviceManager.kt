@@ -5,6 +5,7 @@ import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.parseJsonObject
+import app.tvlink.ui.widgets.KeyValueStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,6 +29,9 @@ class DeviceManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val discovery = Discovery()
+
+    /** 历史设备持久化（原 App 按 SSID 存 SP JSON 数组；本项目简化为全局一条，见 saveHistory）。 */
+    private val history = KeyValueStore("device-history")
 
     /** 自动重连簿记：仅对「成功连接后异常断开」重试；用户显式 disconnect() 不重连。 */
     @Volatile
@@ -144,6 +148,7 @@ class DeviceManager {
                     )
                 retries = 0
                 reconnectTarget = dev
+                saveHistory(dev)
                 _connected.value = dev
                 _connState.value = ConnState.CONNECTED
             } else {
@@ -152,6 +157,27 @@ class DeviceManager {
                 if (retries in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
             }
         }
+    }
+
+    /** 连接成功即持久化，供冷启动直连。ibVer/ibSid 属探测期会话数据，不持久化（重探测即得）。 */
+    private fun saveHistory(d: ConnectedDevice) {
+        history.putString("last.ip", d.ip)
+        history.putString("last.name", d.name)
+        history.putString("last.model", d.model)
+        history.putString("last.uuid", d.uuid)
+        history.putString("last.projectionPort", d.projectionPort.toString())
+    }
+
+    /** 上次成功连接的设备；无历史返回 null。 */
+    fun lastDevice(): ConnectedDevice? {
+        val ip = history.getString("last.ip") ?: return null
+        return ConnectedDevice(
+            ip = ip,
+            name = history.getString("last.name") ?: ip,
+            model = history.getString("last.model") ?: "",
+            uuid = history.getString("last.uuid") ?: "",
+            projectionPort = history.getString("last.projectionPort")?.toIntOrNull() ?: 0,
+        )
     }
 
     /** 异常断开后按 5s → 15s ×2 自动重连（原 App 策略，docs/re/01 §1）；期间 UI 停在 CONNECTING。 */

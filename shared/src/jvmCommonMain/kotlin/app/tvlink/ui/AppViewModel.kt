@@ -196,6 +196,9 @@ class AppViewModel : ViewModel() {
         rc.onCurrentApp = { app ->
             viewModelScope.launch(Dispatchers.Default) { notice = "电视当前应用: $app" }
         }
+
+        // 冷启动直连历史设备（原 App 亮屏/回前台按 SSID 历史直连，docs/re/01 §1；本项目全局一条）
+        deviceManager.lastDevice()?.let { d -> deviceManager.connect(d.ip, d.projectionPort) }
     }
 
     private fun onConnected() {

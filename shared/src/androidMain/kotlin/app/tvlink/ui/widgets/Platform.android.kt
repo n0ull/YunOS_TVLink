@@ -13,3 +13,22 @@ actual fun BackHandler(
 ) {
     androidx.activity.compose.BackHandler(enabled = enabled, onBack = onBack)
 }
+
+actual class KeyValueStore actual constructor(
+    name: String,
+) {
+    private val prefs = AndroidPlatform.appContext.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
+
+    actual fun getString(key: String): String? = prefs.getString(key, null)
+
+    actual fun putString(
+        key: String,
+        value: String,
+    ) {
+        prefs.edit().putString(key, value).apply()
+    }
+
+    actual fun remove(key: String) {
+        prefs.edit().remove(key).apply()
+    }
+}
