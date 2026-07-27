@@ -57,6 +57,11 @@ class AppViewModel : ViewModel() {
         screen = (screen as? Screen.Main)?.copy(moreSub = sub) ?: screen
     }
 
+    /** 配网成功后的接管入口：回设备选择页（由调用方配合 startDiscovery）。 */
+    fun navToDevicePicker() {
+        screen = Screen.DevicePicker
+    }
+
     fun navBack() {
         val s = screen as? Screen.Main ?: return
         screen =

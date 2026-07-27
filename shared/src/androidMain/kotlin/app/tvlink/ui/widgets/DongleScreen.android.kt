@@ -1,9 +1,7 @@
 package app.tvlink.ui.widgets
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -59,14 +57,7 @@ actual fun DongleScreen(vm: AppViewModel) {
     var password by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<BluetoothDevice?>(null) }
 
-    val permissions =
-        remember {
-            if (Build.VERSION.SDK_INT >= 31) {
-                arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-            } else {
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-        }
+    val permissions = remember { pairer.requiredPermissions() }
     val permLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
@@ -78,6 +69,12 @@ actual fun DongleScreen(vm: AppViewModel) {
         pairer.onPhase = { p, m ->
             phase = p
             phaseMsg = m
+            if (p == DongleBlePairer.Phase.SUCCESS) {
+                // 配网成功 → 接管闭环（docs/re/03 §B）：回设备选择页发起全量发现捞取
+                // 入网后的 dongle；dongle 入网需几秒，未及时出现时用户手动刷新
+                vm.startDiscovery()
+                vm.navToDevicePicker()
+            }
         }
         pairer.onFound = { d ->
             if (devices.none { it.address == d.address }) devices.add(d)
