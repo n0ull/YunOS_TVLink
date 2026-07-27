@@ -3,11 +3,15 @@ package app.tvlink.device
 import app.tvlink.proto.ib.IbChannel
 import app.tvlink.proto.ib.RcKey
 import app.tvlink.proto.idc.OpCmdKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -17,30 +21,67 @@ import kotlinx.coroutines.launch
 class RcController(
     private val deviceManager: DeviceManager,
 ) {
+    private companion object {
+        /** 原 IbConn 重连策略（docs/re/02 §2.1）：断线 1s 后启动，之后每 5s；初始连接失败不自动重试。 */
+        const val RECONNECT_START_MS = 1_000L
+        const val RECONNECT_INTERVAL_MS = 5_000L
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var ib: IbChannel? = null
+    private var attachJob: Job? = null
 
     private val _ibReady = MutableStateFlow(false)
     val ibReady: StateFlow<Boolean> = _ibReady
 
     var onCurrentApp: ((String) -> Unit)? = null
 
-    /** Call after IDC is ESTABLISHED. */
+    /** Call after IDC is ESTABLISHED. 重复 attach 先终止上一轮重连循环。 */
     fun attach() {
+        detach()
         val ip = deviceManager.connected.value?.ip ?: return
-        scope.launch {
+        attachJob =
+            scope.launch {
+                connectLoop(ip)
+            }
+    }
+
+    /**
+     * IB 通道保活循环（原 IbConn 断线重连策略，docs/re/02 §2.1）：建立成功则驻留至通道死亡，
+     * 断线 1s 后起、每 5s 重试；初始连接失败不自动重试（与原 App 一致，避免对无 IB 的设备空转）。
+     */
+    private suspend fun connectLoop(ip: String) {
+        var hadSuccess = false
+        while (scope.isActive) {
             val chan = IbChannel(ip)
-            chan.onCurrentApp = { onCurrentApp?.invoke(it) }
-            chan.onStateChanged = { s -> _ibReady.value = (s == IbChannel.State.READY) }
-            if (chan.connect()) {
-                ib = chan
-            } else {
-                _ibReady.value = false
+            try {
+                val died = CompletableDeferred<Unit>()
+                chan.onCurrentApp = { onCurrentApp?.invoke(it) }
+                chan.onStateChanged = { s ->
+                    _ibReady.value = (s == IbChannel.State.READY)
+                    if (s == IbChannel.State.DISCONNECTED) died.complete(Unit)
+                }
+                if (chan.connect()) {
+                    hadSuccess = true
+                    ib = chan
+                    died.await() // 挂起至通道死亡；detach 取消时此处抛 CancellationException
+                    ib = null
+                    delay(RECONNECT_START_MS)
+                } else if (!hadSuccess) {
+                    break
+                } else {
+                    delay(RECONNECT_INTERVAL_MS)
+                }
+            } finally {
+                chan.disconnect()
             }
         }
+        _ibReady.value = false
     }
 
     fun detach() {
+        attachJob?.cancel()
+        attachJob = null
         ib?.disconnect()
         ib = null
         _ibReady.value = false

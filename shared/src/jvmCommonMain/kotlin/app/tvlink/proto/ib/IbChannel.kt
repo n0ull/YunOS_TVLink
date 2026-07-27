@@ -70,6 +70,8 @@ class IbChannel(
             val verStr = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"").find(body)?.groupValues?.get(1)
             serverVer = parseVer(verStr)
             sendFrame(IbConst.REQ_MODULEINFO, ByteArray(0))
+            // 对齐原 IbConn：建链后即发 DEFAULT 模式，消除「首帧前模式不确定」（docs/re/02 §2.1）
+            sendFrame(IbConst.REQ_CHANGETYPE, "[${IbConst.CHANGETYPE_DEFAULT}]".toByteArray(Charsets.UTF_8))
             sendExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "ib-send").apply { isDaemon = true } }
             setState(State.READY)
             startReader()
