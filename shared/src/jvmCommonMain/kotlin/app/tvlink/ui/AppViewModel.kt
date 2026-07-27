@@ -84,8 +84,10 @@ class AppViewModel : ViewModel() {
     private var lastDevice: DeviceManager.ConnectedDevice? = null
 
     /**
-     * 前台恢复时按需重连。后台期间 socket 会被 TV 空闲超时/WiFi 省电/ROM 冻结等机制杀死
-     * (connState 落 IDLE 后操作静默无效),此处是唯一恢复点;用户显式断开后(lastDevice=null)不重连。
+     * 前台恢复时的兜底复活(事件驱动的 IDC/IB 自动重连之外的第二层):
+     * ① 重连重试耗尽(5s→15s×2 全败)后回前台 → 无条件再给一轮(新网络环境=新用户意图);
+     * ② cast 通道单独死亡(IDC/IB 活着)→ 唯一补建入口,其他机制看不见这条 TCP。
+     * 用户显式断开后 lastDevice=null,不重连。
      */
     fun onResume() {
         val d = lastDevice ?: return
