@@ -145,6 +145,7 @@ class AppViewModel : ViewModel() {
     var castVolume by mutableStateOf(0)
     var castTitle by mutableStateOf("")
     var mediaServerUrl by mutableStateOf("")
+    var castServerInfo by mutableStateOf<CastController.ServerInfo?>(null)
 
     // ---- toast-ish ----
     var notice by mutableStateOf("")
@@ -172,6 +173,7 @@ class AppViewModel : ViewModel() {
                     connectedIbVer = ""
                     connectedIbSid = ""
                     mediaServerUrl = ""
+                    castServerInfo = null
                     cast?.disconnect()
                     cast = null
                     mediaServer.stop()
@@ -257,7 +259,10 @@ class AppViewModel : ViewModel() {
                     if (vol >= 0) castVolume = vol
                 }
             }
-            if (cc.connect()) cast = cc
+            if (cc.connect()) {
+                cast = cc
+                castServerInfo = cc.serverInfo()
+            }
             val localIp = Mdns.localLanAddress()?.hostAddress
             if (localIp != null && mediaServer.start(localIp)) {
                 mediaServerUrl = mediaServer.baseUrl
@@ -380,6 +385,10 @@ class AppViewModel : ViewModel() {
     fun castVolumeTo(v: Int) {
         castVolume = v
         viewModelScope.launch(Dispatchers.IO) { cast?.volume(v) }
+    }
+
+    fun castRate(r: Float) {
+        viewModelScope.launch(Dispatchers.IO) { cast?.rate(r) }
     }
 
     fun voiceText(text: String) = asr.sendText(text)

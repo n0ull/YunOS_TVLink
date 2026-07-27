@@ -88,6 +88,32 @@ class CastController(
 
     fun volume(v: Int) = request("POST", "/volume?value=$v")
 
+    /** 倍速（docs/re/04 §4 `POST /rate?value=<N>`）。 */
+    fun rate(r: Float) = request("POST", "/rate?value=$r")
+
+    data class ServerInfo(
+        val features: String = "",
+        val protocolVers: String = "",
+        val serverVers: String = "",
+        val serverCode: String = "",
+        val displayName: String = "",
+    )
+
+    /** GET /server-info（docs/re/04 §4）：固件投屏服务的能力与版本，连接后取一次供诊断/关于页。 */
+    fun serverInfo(): ServerInfo? {
+        val resp = requestRaw("GET", "/server-info", null) ?: return null
+        if (!resp.first.startsWith("200")) return null
+
+        fun str(k: String) = Regex("\"$k\"\\s*:\\s*\"([^\"]*)\"").find(resp.second)?.groupValues?.get(1) ?: ""
+        return ServerInfo(
+            features = str("features"),
+            protocolVers = str("protocol_vers"),
+            serverVers = str("server_vers"),
+            serverCode = str("server_code"),
+            displayName = str("display_name"),
+        )
+    }
+
     private fun playbackInfo(): PlaybackInfo? {
         val resp = requestRaw("GET", "/playback-info", null)
         if (resp == null || !resp.first.startsWith("200")) return null
