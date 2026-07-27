@@ -1,191 +1,142 @@
 # TODO / 备忘录
 
-来源:三份旧研究(`tvhelper` 真机实测报告、`tvhelper2` Go 版、`yunos_tvhelper` Python+web 版)
-交叉提取,均经 jadx 反编译复核与真机探针验证。关键修正已落地:`a116245`(IB 魔数/手柄
-键码/路由)、`5284b54`(发送改后台线程,修 Android 按键闪退)、`547a8bd`(截图 Cmd 帧格式)、
-`4679231`(投屏改轮询 playback-info)。
+来源：三份旧研究（`tvhelper` 真机实测报告、`tvhelper2` Go 版、`yunos_tvhelper` Python+web 版）
+交叉提取，均经 jadx 反编译复核与真机探针验证。协议帧格式基准已全量落地 `docs/re/`
+（2026-07-28 回灌完成，含 Cmd 通道直发包节）；本文件只留真机档案与待办。
 
-## 真机档案(2026-07-20/21 实测,TV 192.168.1.109)
+## 真机档案（2026-07-20/21 实测，TV-A）
 
-- 端口:13510/13511/3988/13521 开放;13520 关闭(投屏走 ddh 下发的 13521)
-- IB `ver=3.29`(≥3.13 → needIb313 键走 IB);IB 魔数 `0x11228899` 握手成功
-- IDC `mVer=2121108324`(≥2100200600 → LaunchSth 可用 activity_new)
-- 截图:无加密 + 正确 connKey + 正确帧格式即成功(「加密墙」证伪,229090B JPEG)
-- 投屏:固件(server_vers 3.2.0)不推 POST /event,状态/时长/进度轮询 `GET /playback-info`
-- LaunchSth:lt=2+标准 action+extra_str(data URI 语义)可触发 TV intent 解析(弹选择框);
-  `ACTION_DIAGNOSTIC` 无对应 activity;直拉酷喵三轮 scheme/包名均失败(详见 P2-1)
-- OpCmd_Key(IDC 按键回退):有效(VOL_UP 音量 OSD 实测)
-- 该 PC mDNS 创建失败(WinError 10065)→ 子网扫描兜底是必需路径,非可选项
-- 桌面端已验证:连接/按键/触控板/手柄/截图/投屏视频(状态/总时长/进度)
-- Android 真机已验证:各遥控模式不闪退(2026-07-21),`5284b54` 主线程网络 IO 闪退修复真机闭环(P0 关闭)
-- **RPM 诊断结论(2026-07-22,诊断脚本 `tvhelper/tvhelper_tool/rpm_diag.py|pkg_probe.py|wake_probe.py`)**:
-  此固件**无 appstore 模块**——登录广播仅 3 模块(`com.yunos.tv.asr:etao`/`RemoteControlServer`/
-  `{"category":"immersive","name":"com.yunos.tv.yingshi.boutique"}`,后者实证 R3 的 JSON m_name 分支真实存在);
-  `Cmd_LaunchSth` 唤醒(lt=1/2 × appstore 动作、ACTION_DIAGNOSTIC)全部无广播回应,在此固件为空操作;
-  `Cmd_PackageInfo`(20500)阳性对照有效(`com.youku.taitan.tv`→existed=True v11.8.3.24),
-  5 个 appstore 候选包名全部 existed=False→**未安装**(非探测语义问题);
-  `login.name` 校验假设**证伪**(`app.tvlink` 与 `com.yunos.tvhelper` 登录广播完全一致);
-  Cmd 通道明文可用(8/8 应答,秒回)。**结论:RPM 在本机不可用属固件能力缺失,代码侧(含 R1–R4)已按协议就绪,待提供 appstore 模块的设备验证**
+- 端口：13510/13511/3988/13521 开放；13520 关闭（投屏走 ddh 下发的 13521）
+- IB `ver=3.29`（≥3.13 → needIb313 键走 IB）；IB 魔数 `0x11228899` 握手成功
+- IDC `mVer=2121108324`（≥2100200600 → LaunchSth 可用 activity_new）
+- 截图：无加密 + 正确 connKey + 正确帧格式即成功（「加密墙」证伪，229090B JPEG）
+- 投屏：固件 server_vers 3.2.0 不推 POST /event，状态/时长/进度轮询 `GET /playback-info`
+- LaunchSth：lt=2+标准 action+extra_str 可触发 TV intent 解析（弹选择框）；
+  `ACTION_DIAGNOSTIC` 无对应 activity；直拉酷喵三轮 scheme/包名均失败（详见已归档）
+- OpCmd_Key（IDC 按键回退）：07-15 未命中，07-20 复测有效（VOL_UP 音量 OSD 实测）
+- 该 PC mDNS 创建失败（WinError 10065）→ 子网扫描兜底是必需路径，非可选项
+- 桌面端已验证：连接/按键/触控板/手柄/截图/投屏视频（状态/总时长/进度）
+- Android 真机已验证：各遥控模式不闪退（2026-07-21），`5284b54` 主线程网络 IO 闪退修复真机闭环（P0 关闭）
+- **RPM 诊断结论（2026-07-22，诊断脚本 `tvhelper/tvhelper_tool/rpm_diag.py|pkg_probe.py|wake_probe.py`）**：
+  此固件**无 appstore 模块**——登录广播仅 3 模块（`com.yunos.tv.asr:etao`/`RemoteControlServer`/
+  `{"category":"immersive","name":"com.yunos.tv.yingshi.boutique"}`，后者实证 R3 的 JSON m_name 分支真实存在）；
+  `Cmd_LaunchSth` 唤醒（lt=1/2 × appstore 动作、ACTION_DIAGNOSTIC）全部无广播回应，在此固件为空操作；
+  `Cmd_PackageInfo`(20500) 阳性对照有效（`com.youku.taitan.tv`→existed=True v11.8.3.24），
+  5 个 appstore 候选包名全部 existed=False→**未安装**（非探测语义问题）；
+  `login.name` 校验假设**证伪**（`app.tvlink` 与 `com.yunos.tvhelper` 登录广播完全一致）；
+  Cmd 通道明文可用（8/8 应答，秒回）。**结论：RPM 在本机不可用属固件能力缺失，代码侧（含 R1–R4）已按协议就绪，待提供 appstore 模块的设备验证**
 
-## 下一步(按优先级)
+## 下一步（按优先级）
 
-### P1 — 未测功能真机验证(桌面/Android)
+### P1 — 真机扫尾（现有硬件即可：TV-A + PC + Android 手机）
 
-- [ ] **应用管理(RPM)——换设备验证**:本机(M638_ALI)固件无 appstore 模块(2026-07-22 诊断
-      证实,见真机档案),**本机不可验证**。代码侧 R1–R4 已就绪(`RpmFixTest` 5/5);
-      若获得提供 `com.yunos.idc.appstore` 模块的设备:列表(4)→打开(14)→卸载(11)→URL 推装(7;
-      `result==2` 下载开始、`appStatus=18` 完成)。注:卸载/列表/打开在原 App v5.2.2 无 UI
-      调用点,电视端实现属推断,该轮验证即首次实证。
-      **反编译复核(2026-07-25,判死替代路径)**:RPM 全部 12 操作唯一通道 = appstore VConn
-      (`RPM.java` 全走 `mRpmModule.sendVConnPacket`),无第二路径;本机第三模块
-      `immersive/yingshi.boutique` = 沉浸式影视播放器(`ImmersivePublic`),与应用管理无关;
-      `LaunchSth` 仅 intent action 拉起(诊断页/唤醒 service),无任意包名拉起语义,不能替
-      「打开应用」;全 jadx 无已知包名字典可复用。**此设备应用管理结构性不可行**
-- [x] 图片投屏——**真机已验证(2026-07-25)**:`/setmedia` image 类型主路成功(本地
-      MediaHttpServer 供片),备选 `PUT /image` 未启用
-- [ ] 远程文字输入——**设备能力缺失,挂起(2026-07-25 双实证)**:①原 App(加密会话 ver=1,
-      排除「明文门」变量)同 TV 同搜索框不弹输入窗 → TV 不推 `Ime_StartInput`(10600);
-      ②明文会话探针 `tvhelper/tvhelper_tool/ime_probe.py` 直发 `Ime_TextChange` 未上屏 →
-      TV 侧无远程输入状态机。根因 = 固件能力缺失(同 RPM appstore 一类)。代码侧已就绪:
-      修复 `ImeStartInput.decodeBody` 布局错误(旧实现把 inputType int 当 LPString 长度读、
-      必抛异常杀整条连接——在有能力设备上进搜索框即断连)+ hint/预填利用 +
-      钉桩 `imeStartInputDecodeMatchesDecompiledFormat`;待提供 IME 推送的设备验证
-- [x] 语音指令(桌面文本输入 → `asr_streaming`)——**真机已验证(2026-07-25,TV 192.168.1.105)**:
-      探针 `tvhelper/tvhelper_tool/asr_probe.py` 按修复后线协议逐字节发包,截图实证 TV 弹出语音 UI
-      回显「打开优酷」且优酷进入前台(前置广告 com.yunos.advert.service 属正常流程);
-      修复要点:模块名 `com.yunos.tv.asr:etao`(裸名曾致静默丢弃,=原根因)、首包前 VConn SYN、
-      `asr_name`=模块全名、`finish:"true"`、`result_code:0`;钉桩 `AsrTextServiceTest` 4/4。
-      注:TV 应答推 `asr_language`(stringified JSON,`asr_name` 电视→手机方向才是 "ASR_COMMAND")。
-      **会话帧必须完整**:`record_start`→`asr_streaming(finish)`→`record_stop`(间隔 150ms)——
-      只发 finish 包指令照执行但「聆听中」卡片卡死(裸 record_stop 无效;ESC 键可兜底关卡片);
-      导航类指令(返回桌面)NLU 不执行属技能侧限制。原 App `ASR.sendText` 全 APK 零调用点(死代码)。
-      **设备侧 STT 已放弃(2026-07-25 决策)**:测试机识别服务为 GoogleRecognitionService,
-      无网/缺语言包/AppOps 报 error 9+12,枚举 getVoiceDetailsIntent 返回 null;移动端与桌面
-      统一为 ⌨ 文字输入(协议相同)。备选存档:sherpa-onnx 离线(+25MB)/讯飞在线(需账号)
-- [ ] 方向盘模式(= 鼠标移动同路,低风险)/ 体感模式(仅 Android)
-- [ ] BLE 魔投配网(需魔投硬件;无硬件则挂起)
+- [ ] **方向盘模式**（桌面+Android）：与鼠标移动同帧 `[2,0,dx,dy,0]`（docs/re/02 §4.2），低风险
+- [ ] **体感模式**（仅 Android）：IB 257/260 + 缩放系数（加速度 x*2000/y*-2000/z*1000，陀螺仪 *286.47888）
+      + 50ms/类节流（docs/re/02 §4.4）
+- [ ] **音乐投屏 + 封面回拉**：audio setmedia 路径已实现未实测；封面走 HttpServer 绝对路径回退
+      分支（docs/re/04 §5），是最该验的脆弱点
+- [ ] **播控残项**：`/seek`（毫秒）、`/rate`、图片 `/zoom`、`/preload`（docs/re/04 §4，同一控制 TCP）
+- 以上打完即发 v1.0：README 功能矩阵除硬件依赖项全绿
 
-### P2 — 新协议能力(已逆向,按需;帧格式注意)
+### P2 — 硬件依赖挂起（代码全部就绪，只等设备）
 
-> CmdReqBase 家族(SysProp/PackageInfo/PathInfo)body 为两段 LPString
-> (`LPString({"cmdReqID":N})` + `LPString({参数})`);LaunchSth 例外,单段 LPString 直发。
+- [ ] **应用管理（RPM）——换设备验证**：本机（M638_ALI）固件无 appstore 模块（2026-07-22 诊断
+      证实，见真机档案），**本机不可验证**；反编译复核判死替代路径（RPM 12 操作唯一通道 =
+      appstore VConn，`immersive/yingshi.boutique` 是影视播放器与应用管理无关，LaunchSth 无任意
+      包名拉起语义）。代码侧 R1–R4 已就绪（`RpmFixTest` 5/5，帧格式见 docs/re/05 §3）。
+      获得提供 `com.yunos.idc.appstore` 模块的设备后：列表(4)→打开(14)→卸载(11)→URL 推装(7；
+      `result==2` 下载开始、`appStatus=18` 完成）；增量操作（UpdateRequest 20、续传 21——
+      **packetId 21 与 UpdateResponse 撞号，靠收发方向消歧**，常量 `ID_CONTINUE_DOWNLOAD=24`
+      为死常量）同轮验证。注：卸载/列表/打开在原 App v5.2.2 无 UI 调用点，该轮验证即首次实证
+- [ ] **远程文字输入——换设备验证**：2026-07-25 双实证设备能力缺失——①原 App（加密会话 ver=1，
+      排除「明文门」变量）同 TV 同搜索框不弹输入窗 → TV 不推 `Ime_StartInput`(10600)；②明文探针
+      `tvhelper/tvhelper_tool/ime_probe.py` 直发 `Ime_TextChange` 未上屏。根因 = 固件能力缺失
+      （同 RPM appstore 一类）。代码侧已就绪：修复 `ImeStartInput.decodeBody` 布局错误（旧实现把
+      inputType int 当 LPString 长度读、必抛异常杀整条连接——在有能力设备上进搜索框即断连）+
+      hint/预填利用 + 钉桩 `imeStartInputDecodeMatchesDecompiledFormat`
+- [ ] **BLE 魔投配网**：需 MagicCast 硬件（扫描过滤「MagicCast」前缀/UUID 0xb81d、GATT 三特征
+      明文写、`"success"` notify 判成，见 docs/re/03 §A），无硬件挂起
 
-1. `Cmd_LaunchSth`(20400):**真机语义实证(2026-07-25,`tvhelper/tvhelper_tool/launch_probe.py`)**:
-   lt=2(activity_new)+标准 action+extra_str 可触发 TV intent 解析——**extra_str 被当
-   intent data URI**(非包名/组件):VIEW/MAIN+裸包名或 URI 弹「以什么应用打开」选择框
-   (VIEW+任意 data 仅泰坦桌面应答;MAIN+data 匹配一堆应用)。`ACTION_DIAGNOSTIC` 在
-   M638_ALI 无对应 activity(07-22 空转复证);直拉酷喵(com.youku.taitan.tv)失败——
-   `youkutv://`/`youku://`/`http://v.youku.com/` 均无导出 handler,无 manifest 不续猜。
-   service 型+非法 action 会致 TV 断连(WinError 10053)。
-   **结论:协议存活但实用价值止于弹选择框**;曾实现的设置屏「TV 诊断页」入口已按
-   ponytail 清理(唯一可测设备实证空操作,「有能力固件上有效」属推测需求=死 UI;
-   需要时语义见本条与 `CmdLaunchSth` 注释,一行可恢复)。
-   反编译实见 action:
-   `com.yunos.tv.intent.RemoteControlServer.ACTION_DIAGNOSTIC`(activity_new)、
-   `yunos.appstore.startprocessservice`(service,RPM R2 已在用)。<2100200600 直接不发包。
-2. `Cmd_SysProp`(21100/21200):读写 TV 系统属性。**真机已验证(2026-07-25)**:设置屏查询
-   `ro.product.model` 回 `M638_ALI`。实现:`SysPropReq/Resp`(`IdcPackets.kt`,对齐反编译
-   `IdcPacket_Cmd_SysProp_Req/Resp.java`,Resp 无 dummy 段)+ `SysPropService`(按 prop_key
-   配对应答);UI 仅暴露读,写 `setProp` 留服务层。钉桩
-   `sysPropCmdFramingMatchesDecompiledFormat` 通过。
-3. AppStore 增量:UpdateRequest(20)、ContinueDownload、GetListCancel(26)、
-   GetAppInfo(2/3)。⚠ packetId **21 撞号(已证实)**:`ContinueDownloadRequest`
-   `super(21)`(`IdcPacket_ContinueDownloadRequest.java:7,17`)与 `ID_UPDATE_RESPONSE`=21
-   冲突,靠收发方向消歧;常量 `ID_CONTINUE_DOWNLOAD=24` 为死常量(零引用)。
-   实现续传**必须发 21**。
+### 明确不做
 
-**明确不做**:Racct 账号/支付、弹幕 MTOP、TV 搜索(依赖已停服云端);
-PROTO_MULTITOUCH(原 App 也无 UI 调用方)。
+Racct 账号/支付（asoToken 在原 App 即空实现，docs/re/05 §7.3）、弹幕 MTOP、TV 搜索（依赖已停服云端）；
+PROTO_MULTITOUCH(IB 272) / IDC OpCmdMultitouch(11200)（原 App 亦无 UI 调用方）。
 
-## 反编译协议核对(2026-07-26,基准:`jadx_out/sources/com/tmalltv/tv/lib/ali_tvidclib/packet/`)
+## 已知天花板
 
-> 以反编译源码为基准,文档仅作辅助。核对范围:`IdcPackets.kt` 全帧 + `RpmService`/`AsrService` 逻辑。
+- **ver=1 加密会话不可复刻**：body AES 可复刻（KDF = 固定种子 `a31c5c871c597d133cb15cd68fefdc1a`
+  前 4 字节小端覆写 `(clientSeed ^ 51550860) ^ serverSeed`，HmacSHA256 取前 16B，见 docs/re/01 §2.3），
+  但 LoginReq seed 封装 `staticSafeEncrypt` 是阿里安全保镖闭源 native，不可还原（引入亦违背
+  原创代码前提）。固定 ver=0 明文会话，实测电视答 ver=0 即通；天花板 = 可能连不上强制 ver=1
+  的设备。注释放名处：`IdcConnection.awaitLogin` 的 `LoginEncryptionResp` 分支
 
-### 已修正
+## 未消费字段（持有，不实现——消费条件未满足）
 
-- [x] **DevNameUpdate(11000)帧格式Bug**: 反编译 `IdcRawPacket_DevInfoUpdate_DevName.java` 的 body 是
-  `LPString(JSON {"dev_name":"…"})`,原实现读 raw LPString → devName 被赋值为原始 JSON 串。
-  已改为 `parseJsonObject(...).str("dev_name")` 解析;同步补 `encodeBody()` 用于发送。
-- [x] **ImeStartInput(10600)缺字段**: 反编译 `IdcRawPacket_Ime_StartInput.java` 有 6 字段
-  (inputType/options/actionId/actionLabel/hintText/existedText),原实现丢弃 options/actionId/actionLabel。
-  已补 `options`/`actionId`/`actionLabel` 字段(保留,待消费)。
-- [x] **LoginEncryptionResp(10090)缺字段**: 反编译含 `encryptionAlgorithmVer`(int) + detail;
-  原实现仅 detail。已补字段(该路径不可达,保留以备 ver≠0 会话)。
-- [x] **新增包类(反编译存在、项目缺失)**:
-  - `DevInfoUpdateDdhParam`(11100): `LPString({"ddhparamkey":K}) + LPBytes(param)`,保留 key/param,不接入 DeviceInfo。
-  - `OpCmdMouseClick`(10400): 已废弃,空包。
-  - `OpCmdMultitouch`(11200): `LPString({"evts":[{x_scale,y_scale,id,act}]})`,无 UI 调用方。
-  - `CmdPackageInfoReq/Resp`(20500/20600): CmdReqBase 双 LPString,Resp 用 `"appIsExist"`(非 `"existed"`)。
-  - `CmdPathInfoReq/Resp`(20700/20800): CmdReqBase 双 LPString,Resp 回显 path。
-  - 全部已在 `IdcPacketFactory.create()` 注册。
-- [x] **RPM JSON 键名修正**(反编译 `AbsIdcDataPacket`/`AppInfo` 为基准):
-  - `parseAppArray`: 列表项 `TvApp.status` 改用 `"status"`(`AppInfo.KEY_STATUS`),原 `"appStatus"` 恒空。
-    `"appStatus"` 仅用于 `ID_INSTALL_STATUS`(9)AppStatus 推送(已保留正确)。
-  - `ID_INSTALL_RESP/UNINSTALL_RESP/OPENAPP_RESP`: 改用 `"result"`(`KEY_RESULT`),原 `"errorCode"` 恒 0。
-  - 新增 `ID_GETAPPINFO_RESP`(3) 分支: 读 `"appIsExist"`,存在时内联 AppInfo → `onSystemInfo`。
-- [x] **VConnFin(20300)下发线**:`IdcConnection.dispatch` 新增 `VConnFin` 分支 → `modules.remove` +
-  `onModuleChanged(...,online=false)`。原 App 双路径下线(ModuleAvailability + VConnFin),本项目原缺此路
-  → TV 拆 VConn 后模块永 online,RPM/ASR 服务会用死通道。
+- `ImeStartInput.options`/`actionId`/`actionLabel`：原 App 用于 IME 动作按钮渲染，待 IME 设备
+- `DevInfoUpdateDdhParam.ddhKey`/`param`：TV→手机 DDH 参数推送，`DeviceInfo.ddhParams` 未动态更新
+- `CmdPackageInfoResp.existed`：阳性对照语义（20600），UI 未暴露包查询（原 App 亦无）
+- `RpmService`：`ID_GETLIST_RESP` 分页标志 `isFinished`/`isInterrupt`、`requestId` 回调配对未用
+- `RpmService`：`appStatus==18` 完成通知未触发 UI 刷新（依赖 TV 推送，本机无模块不可验）
 
-### 未消费字段(已保留,待后续实现消费)
+## 备选方案（条件触发）
 
-- `ImeStartInput.options`/`actionId`/`actionLabel`: 原 App 用于 IME 动作按钮渲染,本项目 UI 未接。
-- `DevInfoUpdateDdhParam.ddhKey`/`param`: TV→phone DDH 参数推送,本项目 `DeviceInfo.ddhParams` 未动态更新。
-- `CmdPackageInfoResp.existed`: 阳性对照语义(20600),本项目 UI 未暴露包查询。
-- `RpmService`:`ID_GETLIST_RESP` 含 `isFinished`/`isInterrupt`(列表分页结束标志)、`requestId`
-  (SparseArray 回调配对);本项目仅取 `apps` 数组,分页/回调 ID 未用。
-- `RpmService`:`ID_INSTALL_STATUS`(9)含 `appStatus`(18=安装完成)/`packageName`/`progress`;
-  本项目 `InstallProgress` 已映射 `progress`+`packageName`+`appStatus`,但 `appStatus==18`
-  完成通知未触发 UI 刷新(依赖 TV 推送,本机无 appstore 模块不可验)。
-
-### 帧格式备注(已确认对齐)
-
-- `CmdReqBase` 家族(SysProp/PackageInfo/PathInfo):双 LPString,已对齐。
-- `LaunchSth`(20400): 单 LPString(例外,非 CmdReqBase 子类),已对齐。
-- `ScreenShot_Resp`: LPString(cmdReqID) + LPString({"dummy":0}) + LPBytes(jpeg),已对齐。
-- `SysProp_Resp`: LPString(cmdReqID) + LPString(属性),无 dummy 段,已对齐。
-- `VConnData`: LPString({"mid":N}) + raw bytes,已对齐。
-- `asr_streaming`: 反编译 `AsrPacket_out_asrStreaming.java` 用 `Build.MODEL`(设备型号),
-  本项目硬编码 `"TVLink"`(标识客户端);`question` 字段反编译从 `mResult.asr_out` JSON 的 `"result"` 子字段提取,本项目直送原文本。真机已验证当前格式可用(2026-07-25),差异不阻塞。
-
-## 备选方案(条件触发)
-
-- 图片投屏失败 → `PUT /image` 直传 JPEG(`yunos-assetkey` + `yunos-assetaction:
-  cacheOnly|displayCached` 头,TV 直收,免本地 HTTP 服务;Python 实测可用)
-- 加密深挖(已非必需,仅存档):KDF = init-key 串 `a31c5c871c597d133cb15cd68fefdc1a`
-  转 16B,前 4 字节小端覆写 `(clientSeed ^ 51550860) ^ serverSeed`,同 buffer 作
-  key=data 做 HmacSHA256 取前 16B 得 AES-128(`IdcEncryptionHelper.java`)
+- 图片投屏失败 → `PUT /image` 直传 JPEG（`yunos-assetkey` + `yunos-assetaction:
+  cacheOnly|displayCached` 头，TV 直收，免本地 HTTP 服务；Python 实测可用）
 
 ## 工具
 
-- **Python(首选,真机验证过)**:`D:\n0ull\Desktop\1\Java\tvhelper\tvhelper_tool`,纯标准库:
+- **Python（首选，真机验证过）**：`tvhelper/tvhelper_tool`（本地研究目录，不入本库），纯标准库：
   `python tvremote.py scan|send <ip> HOME|shell|mouse|click|stick|proj|proj-info|proj-video`。
-  注意其 `tv_protocol.py` 注释里魔数十六进制是错的,十进制 287475865 才对(与 a116245 一致)。
-- **Go(tvhelper2,勿直接用)**:`tvhelper2/tvhelper.exe` 的 IB 魔数写的是 `0x11223359`
-  (≠ 真值 0x11228899,同一类十六进制转写错误),不修跑不通 IB 握手;仅发现功能可借鉴。
+  注意其 `tv_protocol.py` 注释里魔数十六进制是错的，十进制 287475865 才对（与 a116245 一致）
+- **Go（tvhelper2，勿直接使用）**：`tvhelper2/tvhelper.exe` 的 IB 魔数写的是 `0x11223359`
+  （≠ 真值 0x11228899，同一类十六进制转写错误），不修跑不通 IB 握手；仅发现功能可借鉴
 
-## 已归档(完成)
+## 已归档（完成）
 
-- [x] 投屏播放控制修复+真机验证(2026-07-25):播放/暂停/退出曾在 Android 主线程直调阻塞
-      socket → NetworkOnMainThreadException(message 为 null,日志 `request failed: null` 曾
-      误判协议问题),收进 VM 走 IO;`onConnected` 重复触发不释放旧 CastController 曾致双
-      13521 控制会话(TV 会话归属错乱),`connectCast` 先断后建+onResume 单独补建;音量轮询
-      同步+当前值/拖动预览(此前 slider 固定 10f 不取 TV 值)
-
-- [x] IDC OpCmd_Key 兜底验证(2026-07-20,VOL_UP 音量 OSD)
-- [x] 截图:帧格式修正(`547a8bd`)+ 无加密出图(2026-07-20 探针;2026-07-21 桌面端复测)
-- [x] 投屏状态/总时长/进度(2026-07-21 桌面端复测,`4679231`)
-- [x] IB 魔数/手柄键码/路由(`a116245`,手柄模式真机验证)
-- [x] 发送改后台发送线程(`5284b54`,桌面端各模式验证;Android 真机 2026-07-21 确认不闪退)
-- [x] Android 实机验证关闭 P0(2026-07-21):各遥控模式真机无闪退
-- [x] `Discovery.probeHost` TCP 3988(IB)探测兜底分支(`4ff483a`):probeIdc/probeIb 并行,IB hello 响应解析 ver/sid
-- [x] RPM 修复 R1–R4(2026-07-22,依据 `docs/re/05` §3 + 反编译复核):
-  - R1:`RpmService.MODULE_NAME` → `com.yunos.idc.appstore`(`IdcConstant.java:6`/`RpmObserver.java:16`)
-  - R2:module 离线时首个请求发 `CmdLaunchSth`(20400,launch_type=1=service,action
-    `yunos.appstore.startprocessservice`,单 LPString;`IdcCmds.java:115-117` 证实 service
-    唤醒无版本门)→ 等 ModuleAvailability → openVConn 补发挂起请求(原 App 流程 `RpmObserver.java:74-77`)
-  - R3:`ModuleAvailability.decodeBody` 增加 `m_name` JSON `{"name":…}` fallback(`IDC.java:360-368`)
-  - R4:`parseAppArray` 经测试证实原实现已兼容 `apps` 单对象(零代码改动;`IdcPacket_GetListResponse.java:62-65`)
-- [x] RPM 真机诊断定位根因(2026-07-22):本机固件无 appstore 模块/包,LaunchSth 唤醒空转,
-      「应用管理暂时没用」根因 = 设备能力缺失而非代码缺陷(证据链见真机档案);
-      顺带修复 AppsScreen 进屏不自动获取(需手按刷新)+ 空列表无提示两个 UX 缺陷
+- [x] **文档回灌与 TODO 重排（2026-07-28）**：docs/re/02 §5 OpCmd_Key 回退复测有效结论；
+      docs/re/05 §7.5 login.name 校验证伪 + 模块常驻性因固件而异；docs/re/05 §3 新增「Cmd 通道
+      直发包」节（20400/211xx/205xx/207xx/20300/11100/11200/11000/10400）；README 语音/IME 行
+      修订；`IdcConnection` ver=1 天花板 ponytail 注明
+- [x] **反编译协议核对（2026-07-26）全部修正并落地 docs/re**：DevNameUpdate(11000) body 改解析
+      `{"dev_name"}` JSON（原读裸串）+ 补 `encodeBody()`；ImeStartInput(10600) 补 options/actionId/
+      actionLabel 6 字段；LoginEncryptionResp(10090) 补 `encryptionAlgorithmVer`；新增包类注册
+      （11100/10400/11200/20500-20600/20700-20800，`IdcPacketFactory.create()`）；RPM JSON 键名
+      （列表项 `status`、响应 `result`、`ID_GETAPPINFO_RESP`(3) 读 `appIsExist`）；VConnFin(20300)
+      下发线（`modules.remove` + online=false，补原 App 双路径下线）
+- [x] 语音指令真机验证（2026-07-25，TV-B）：探针 `tvhelper/tvhelper_tool/asr_probe.py`
+      按修复后线协议逐字节发包，截图实证 TV 弹出语音 UI 回显「打开优酷」且优酷进入前台（前置
+      广告 com.yunos.advert.service 属正常流程）。修复要点：模块名 `com.yunos.tv.asr:etao`（裸名
+      曾致静默丢弃 = 原根因）、首包前 VConn SYN、`asr_name`=模块全名、`finish:"true"`、
+      `result_code:0`；钉桩 `AsrTextServiceTest` 4/4。注：TV 应答推 `asr_language`（stringified JSON，
+      `asr_name` 电视→手机方向才是 "ASR_COMMAND"）。**会话帧必须完整**：`record_start`→
+      `asr_streaming(finish)`→`record_stop`（间隔 150ms）——只发 finish 包指令照执行但「聆听中」
+      卡片卡死（裸 record_stop 无效；ESC 键可兜底关卡片）；导航类指令 NLU 不执行属技能侧限制。
+      原 App `ASR.sendText` 全 APK 零调用点（死代码）。**设备侧 STT 已放弃**：测试机识别服务为
+      GoogleRecognitionService，无网/缺语言包/AppOps 报 error 9+12，枚举 getVoiceDetailsIntent
+      返回 null；移动端与桌面统一为 ⌨ 文字输入（协议相同）。备选存档：sherpa-onnx 离线(+25MB)/讯飞在线(需账号)
+- [x] 图片投屏真机验证（2026-07-25）：`/setmedia` image 类型主路成功（本地 MediaHttpServer 供片）
+- [x] LaunchSth 语义实证（2026-07-25，`launch_probe.py`）：extra_str = intent data URI，实用价值
+      止于弹选择框；设置屏「TV 诊断页」入口按 ponytail 清理（唯一可测设备实证空操作，语义见
+      docs/re/05 §3 与 `CmdLaunchSth` 注释，一行可恢复）
+- [x] Cmd_SysProp 真机验证（2026-07-25）：设置屏查询 `ro.product.model` 回 `M638_ALI`；实现
+      `SysPropReq/Resp`（Resp 无 dummy 段）+ `SysPropService`；钉桩
+      `sysPropCmdFramingMatchesDecompiledFormat` 通过
+- [x] 投屏播放控制修复+真机验证（2026-07-25）：播放/暂停/退出曾在 Android 主线程直调阻塞
+      socket → NetworkOnMainThreadException（message 为 null，日志 `request failed: null` 曾误判
+      协议问题），收进 VM 走 IO；`onConnected` 重复触发不释放旧 CastController 曾致双 13521
+      控制会话，`connectCast` 先断后建+onResume 单独补建；音量轮询同步+当前值/拖动预览
+- [x] RPM 修复 R1–R4（2026-07-22，依据 docs/re/05 §3 + 反编译复核）：R1 `RpmService.MODULE_NAME`
+      → `com.yunos.idc.appstore`；R2 module 离线时首个请求发 CmdLaunchSth(lt=1 service 唤醒，
+      无版本门) → 等 ModuleAvailability → openVConn 补发；R3 `ModuleAvailability.decodeBody`
+      增加 `m_name` JSON fallback；R4 `parseAppArray` 原实现已兼容 `apps` 单对象（零改动）
+- [x] RPM 真机诊断定位根因（2026-07-22）：本机固件无 appstore 模块/包，LaunchSth 唤醒空转，
+      「应用管理暂时没用」根因 = 设备能力缺失而非代码缺陷；顺带修复 AppsScreen 进屏不自动
+      获取（需手按刷新）+ 空列表无提示两个 UX 缺陷
+- [x] 投屏状态/总时长/进度（2026-07-21 桌面端复测，`4679231` 改轮询 playback-info）
+- [x] Android 实机验证关闭 P0（2026-07-21）：各遥控模式真机无闪退
+- [x] 发送改后台发送线程（`5284b54`，桌面端各模式验证；Android 真机 2026-07-21 确认不闪退）
+- [x] 截图：帧格式修正（`547a8bd`）+ 无加密出图（2026-07-20 探针；2026-07-21 桌面端复测）
+- [x] IB 魔数/手柄键码/路由（`a116245`，手柄模式真机验证）
+- [x] IDC OpCmd_Key 兜底验证（2026-07-20，VOL_UP 音量 OSD）
+- [x] `Discovery.probeHost` TCP 3988(IB) 探测兜底分支（`4ff483a`）：probeIdc/probeIb 并行，
+      IB hello 响应解析 ver/sid
