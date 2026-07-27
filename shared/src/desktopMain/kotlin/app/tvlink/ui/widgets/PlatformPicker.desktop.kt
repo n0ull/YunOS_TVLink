@@ -30,3 +30,6 @@ actual fun pickMediaFile(
         onResult(if (file != null && dir != null) File(dir, file).absolutePath else null)
     }
 }
+
+// 桌面无媒体库内嵌封面提取能力（不引标签库，YAGNI）——音乐投屏无封面
+actual fun albumArtFile(audioPath: String): File? = null

@@ -357,7 +357,19 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val cc = cast ?: return@launch
             castTitle = title
-            val ok = cc.setMedia(type, url, title)
+            // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：Android 经 MediaStore 取封面
+            // 拷入缓存后按注册制供片（不走原 App 的绝对路径回退），失败则无封面投屏
+            val thumbnail =
+                if (type == "audio") {
+                    app.tvlink.ui.widgets.albumArtFile(path)?.let { cover ->
+                        val coverId = "cover-${System.currentTimeMillis()}"
+                        mediaServer.register(coverId, cover, "image/jpeg")
+                        mediaServer.urlFor(coverId)
+                    }
+                } else {
+                    null
+                }
+            val ok = cc.setMedia(type, url, title, thumbnail)
             if (ok) cc.play() else notice = "投屏失败"
         }
     }

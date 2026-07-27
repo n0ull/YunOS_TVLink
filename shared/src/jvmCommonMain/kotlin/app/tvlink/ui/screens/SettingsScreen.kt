@@ -128,6 +128,13 @@ fun SettingsScreen(vm: AppViewModel) {
                 Column {
                     GroupHeader("关于")
                     SettingItem(AppIcons.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
+                    // 投屏服务信息：连接后 GET /server-info 取一次（docs/re/04 §4）
+                    vm.castServerInfo?.let { si ->
+                        SettingItem(AppIcons.Cast, "投屏服务", si.serverVers.ifEmpty { "未知" })
+                        SettingItem(AppIcons.Link, "投屏协议版本", si.protocolVers.ifEmpty { "未知" })
+                        SettingItem(AppIcons.Tv, "投屏服务标识", si.displayName.ifEmpty { si.serverCode }.ifEmpty { "—" })
+                        SettingItem(AppIcons.Memory, "投屏能力", si.features.ifEmpty { "—" })
+                    }
                 }
             }
         }
