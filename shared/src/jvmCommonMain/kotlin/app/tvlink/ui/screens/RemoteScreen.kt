@@ -247,11 +247,14 @@ private fun TouchpadPanel(
                     .background(MaterialTheme.colorScheme.primary, CircleShape),
             )
         }
+        // ponytail: 相对鼠标板无法滚动（IB 接口无 scroll 事件），长列表依赖电视侧光标/按键
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcButton("◀", size = 56) { onKey(RcKey.LEFT) }
-            RcButton("OK", size = 56) { onKey(RcKey.OK) }
-            RcButton("▶", size = 56) { onKey(RcKey.RIGHT) }
-            RcButton("返回", size = 56) { onKey(RcKey.BACK) }
+            RcButton("▲", size = 48) { onKey(RcKey.UP) }
+            RcButton("▼", size = 48) { onKey(RcKey.DOWN) }
+            RcButton("◀", size = 48) { onKey(RcKey.LEFT) }
+            RcButton("▶", size = 48) { onKey(RcKey.RIGHT) }
+            RcButton("OK", size = 48) { onKey(RcKey.OK) }
+            RcButton("返回", size = 48) { onKey(RcKey.BACK) }
         }
     }
 }
