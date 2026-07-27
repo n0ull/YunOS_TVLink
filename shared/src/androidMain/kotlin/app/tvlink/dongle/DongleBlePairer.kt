@@ -40,6 +40,7 @@ class DongleBlePairer(
         const val NAME_PREFIX = "MagicCast"
         const val SCAN_TIMEOUT_MS = 40_000L
         const val CHUNK = 18
+        const val MAX_CONNECT_RETRIES = 3
     }
 
     enum class Phase { IDLE, SCANNING, CONNECTING, WRITING, SUCCESS, FAILED }
@@ -47,10 +48,16 @@ class DongleBlePairer(
     var onPhase: ((Phase, String) -> Unit)? = null
     var onFound: ((BluetoothDevice) -> Unit)? = null
 
-    /** Runtime permissions required for BLE scan + connect on this Android version. */
+    /** Runtime permissions required for BLE scan + connect + reading current SSID on this Android version. */
     fun requiredPermissions(): Array<String> =
         if (Build.VERSION.SDK_INT >= 31) {
-            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            // 31+ BLE 走 BT_SCAN/CONNECT；读 WifiInfo.ssid 仍需定位权限（manifest 已声明
+            // ACCESS_FINE_LOCATION），漏请即「<unknown ssid>」——高版本安卓默认 SSID 未知 bug 根因
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            )
         } else {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
@@ -66,6 +73,9 @@ class DongleBlePairer(
     private var gatt: BluetoothGatt? = null
     private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
     private val writeQueue = ArrayDeque<Pair<UUID, ByteArray>>()
+    private var target: BluetoothDevice? = null
+    private var connectRetries = 0
+    private var currentPhase = Phase.IDLE
 
     private val scanCallback =
         object : ScanCallback() {
@@ -74,8 +84,13 @@ class DongleBlePairer(
                 result: ScanResult,
             ) {
                 val dev = result.device ?: return
-                val name = dev.name ?: result.scanRecord?.deviceName ?: return
-                if (name.startsWith(NAME_PREFIX)) onFound?.invoke(dev)
+                val record = result.scanRecord
+                val name = dev.name ?: record?.deviceName.orEmpty()
+                // 双过滤（docs/re/03 §A 原 isDongle）：名字前缀 或 广播含 0xb81d，
+                // 后者兜住不广播名字的固件变体
+                val isNameMatch = name.startsWith(NAME_PREFIX)
+                val isUuidMatch = record?.serviceUuids?.any { it.uuid == ADV_UUID } == true
+                if (isNameMatch || isUuidMatch) onFound?.invoke(dev)
             }
 
             override fun onScanFailed(errorCode: Int) = phase(Phase.FAILED, "扫描失败 ($errorCode)")
@@ -118,7 +133,7 @@ class DongleBlePairer(
             return
         }
         stopScan()
-        phase(Phase.CONNECTING, "连接 ${device.name ?: device.address}…")
+        connectRetries = 0
         // flatten all writes into 18-byte chunks; onCharacteristicWrite drives the queue
         writeQueue.clear()
         for ((uuid, data) in listOf(
@@ -137,6 +152,21 @@ class DongleBlePairer(
                 }
             }
         }
+        connectTarget(device)
+    }
+
+    private fun connectTarget(device: BluetoothDevice) {
+        target = device
+        phase(
+            Phase.CONNECTING,
+            if (connectRetries ==
+                0
+            ) {
+                "连接 ${device.name ?: device.address}…"
+            } else {
+                "连接断开,重试 $connectRetries/$MAX_CONNECT_RETRIES…"
+            },
+        )
         // 4 参 connectGatt（指定 TRANSPORT_LE）需 API 23+；minSdk 21，低版本退化为 3 参重载，
         // 否则在 API 21–22 设备上直接 NoSuchMethodError 崩溃（Android lint NewApi 实错）。
         gatt =
@@ -156,13 +186,11 @@ class DongleBlePairer(
                 newState: Int,
             ) {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    phase(Phase.FAILED, "连接失败 ($status)")
-                    close()
+                    handleDrop("连接失败 ($status)")
                 } else if (newState == BluetoothGatt.STATE_CONNECTED) {
                     handler.postDelayed({ g.discoverServices() }, 500)
                 } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
-                    phase(Phase.FAILED, "连接断开")
-                    close()
+                    handleDrop("连接断开")
                 }
             }
 
@@ -214,6 +242,23 @@ class DongleBlePairer(
             }
         }
 
+    /**
+     * 原 App 断线且 state<WRITE_SUCCEED 重连最多 3 次（docs/re/03 §A）。写队列按
+     * onCharacteristicWrite 串行消费，重连后从断点续写，无需重排。
+     */
+    private fun handleDrop(msg: String) {
+        val t = target
+        val isInFlight = currentPhase == Phase.CONNECTING || currentPhase == Phase.WRITING
+        if (isInFlight && t != null && connectRetries < MAX_CONNECT_RETRIES) {
+            connectRetries++
+            close()
+            connectTarget(t)
+        } else {
+            close()
+            phase(Phase.FAILED, msg)
+        }
+    }
+
     private fun handleSecurityResult(bytes: ByteArray?) {
         val text = bytes?.let { String(it, Charsets.UTF_8) } ?: return
         if (text == "success") {
@@ -251,12 +296,15 @@ class DongleBlePairer(
         } catch (_: Exception) {
         }
         gatt = null
+        target = null
+        currentPhase = Phase.IDLE
     }
 
     private fun phase(
         p: Phase,
         msg: String,
     ) {
+        currentPhase = p
         handler.post { onPhase?.invoke(p, msg) }
     }
 }
@@ -269,6 +317,7 @@ fun currentSsid(context: Context): String =
             ?.ssid
             ?.removePrefix("\"")
             ?.removeSuffix("\"")
+            ?.takeIf { s -> s.isNotEmpty() && s != "<unknown ssid>" && !s.equals("unknown ssid", true) && s != "0x" }
             .orEmpty()
     } catch (e: Exception) {
         Log.w("DongleBlePairer", "currentSsid failed", e)
