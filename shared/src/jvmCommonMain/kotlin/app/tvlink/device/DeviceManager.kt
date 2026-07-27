@@ -7,7 +7,9 @@ import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.parseJsonObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -17,8 +19,22 @@ import kotlinx.coroutines.launch
  * Lives in jvmCommonMain — no Android/desktop-specific code here.
  */
 class DeviceManager {
+    private companion object {
+        /** 原 App retryConnect 策略（docs/re/01 §1）：首试 5s，之后每 15s，上限 2 次。 */
+        const val FIRST_RETRY_MS = 5_000L
+        const val RETRY_INTERVAL_MS = 15_000L
+        const val MAX_RECONNECT = 2
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val discovery = Discovery()
+
+    /** 自动重连簿记：仅对「成功连接后异常断开」重试；用户显式 disconnect() 不重连。 */
+    @Volatile
+    private var explicitDisconnect = false
+    private var retries = 0
+    private var reconnectJob: Job? = null
+    private var reconnectTarget: ConnectedDevice? = null
 
     enum class ConnState { IDLE, SEARCHING, CONNECTING, CONNECTED, FAILED }
 
@@ -97,6 +113,8 @@ class DeviceManager {
         ibSid: String = "",
     ) {
         if (projectionPort != 0) discoveredProjectionPort = projectionPort
+        explicitDisconnect = false
+        reconnectJob?.cancel()
         _connState.value = ConnState.CONNECTING
         scope.launch {
             // kill any previous session before replacing it
@@ -114,7 +132,7 @@ class DeviceManager {
                         ?.ddhParams
                         ?.get("mediaprojection")
                         ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
-                _connected.value =
+                val dev =
                     ConnectedDevice(
                         ip = ip,
                         name = di?.name ?: ip,
@@ -124,11 +142,32 @@ class DeviceManager {
                         ibVer = ibVer,
                         ibSid = ibSid,
                     )
+                retries = 0
+                reconnectTarget = dev
+                _connected.value = dev
                 _connState.value = ConnState.CONNECTED
             } else {
                 _connState.value = ConnState.FAILED
+                // 重连周期内的失败继续排队下一次重试；用户发起的连接失败不自动重试
+                if (retries in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
             }
         }
+    }
+
+    /** 异常断开后按 5s → 15s ×2 自动重连（原 App 策略，docs/re/01 §1）；期间 UI 停在 CONNECTING。 */
+    private fun scheduleReconnect() {
+        val target = reconnectTarget
+        if (target == null || retries >= MAX_RECONNECT) {
+            _connState.value = ConnState.FAILED
+            return
+        }
+        retries++
+        _connState.value = ConnState.CONNECTING
+        reconnectJob =
+            scope.launch {
+                delay(if (retries == 1) FIRST_RETRY_MS else RETRY_INTERVAL_MS)
+                if (!explicitDisconnect) connect(target.ip, target.projectionPort, target.ibVer, target.ibSid)
+            }
     }
 
     private fun wireCallbacks(conn: IdcConnection) {
@@ -138,7 +177,12 @@ class DeviceManager {
                 connection === conn &&
                 _connState.value == ConnState.CONNECTED
             ) {
-                disconnect()
+                // 异常断开（心跳判死/网络抖动/TV 重启）→ 自动重连；用户显式断开 → 落 IDLE
+                val willReconnect = !explicitDisconnect && reconnectTarget != null
+                connection = null
+                _connected.value = null
+                _modules.value = emptyList()
+                if (willReconnect) scheduleReconnect() else _connState.value = ConnState.IDLE
             }
         }
         conn.onModulesChanged = {
@@ -152,6 +196,11 @@ class DeviceManager {
     }
 
     fun disconnect() {
+        explicitDisconnect = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        retries = 0
+        reconnectTarget = null
         connection?.shutdown()
         connection = null
         _connected.value = null
