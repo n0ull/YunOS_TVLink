@@ -33,9 +33,10 @@
 - [ ] **方向盘模式**（桌面+Android）：与鼠标移动同帧 `[2,0,dx,dy,0]`（docs/re/02 §4.2），低风险
 - [ ] **体感模式**（仅 Android）：IB 257/260 + 缩放系数（加速度 x*2000/y*-2000/z*1000，陀螺仪 *286.47888）
       + 50ms/类节流（docs/re/02 §4.4）
-- [ ] **音乐投屏 + 封面回拉**：audio setmedia 路径已实现未实测；封面走 HttpServer 绝对路径回退
-      分支（docs/re/04 §5），是最该验的脆弱点
-- [ ] **播控残项**：`/seek`（毫秒）、`/rate`、图片 `/zoom`、`/preload`（docs/re/04 §4，同一控制 TCP）
+- [ ] **音乐投屏真机验证**：audio setmedia 基路 + 封面回拉——封面已实现并改注册制供片
+      （`893c3b2`，Android MediaStore 取封面拷缓存；刻意不走原 App 绝对路径回退），未实测
+- [ ] **播控残项真机验证**：`/seek`（已实现已验）、`/rate`（`04fa4e7` 已实现未验）、图片 `/zoom`
+      （未实现，需求驱动；`/preload` 已判不做，见「明确不做」）
 - 以上打完即发 v1.0：README 功能矩阵除硬件依赖项全绿
 
 ### P2 — 硬件依赖挂起（代码全部就绪，只等设备）
@@ -60,7 +61,8 @@
 ### 明确不做
 
 Racct 账号/支付（asoToken 在原 App 即空实现，docs/re/05 §7.3）、弹幕 MTOP、TV 搜索（依赖已停服云端）；
-PROTO_MULTITOUCH(IB 272) / IDC OpCmdMultitouch(11200)（原 App 亦无 UI 调用方）。
+PROTO_MULTITOUCH(IB 272) / IDC OpCmdMultitouch(11200)（原 App 亦无 UI 调用方）；
+POST /preload（图片预览预载下一张，docs/re/04 §3）——本项目为单片选取模型，无画廊/幻灯片流，预载无消费方。
 
 ## 已知天花板
 
