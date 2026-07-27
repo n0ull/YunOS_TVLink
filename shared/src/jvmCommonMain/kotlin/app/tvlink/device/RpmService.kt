@@ -75,6 +75,12 @@ class RpmService(
 
     private val vConnListener: (Int, ByteArray) -> Unit = { _, payload -> handle(payload) }
 
+    private val moduleListener: (String, Int, Boolean) -> Unit = { name, mid, online ->
+        if (name == MODULE_NAME) {
+            onAppStoreModule(online, mid)
+        }
+    }
+
     /**
      * 注册 VConn 数据监听 + module 在线状态回调。module 上线时主动 openVConn 并补发挂起请求。
      * 幂等——每次连接都可安全调用。
@@ -82,11 +88,8 @@ class RpmService(
     fun attach() {
         deviceManager.removeVConnListener(vConnListener)
         deviceManager.addVConnListener(vConnListener)
-        deviceManager.onModuleAvailability = { name, mid, online ->
-            if (name == MODULE_NAME) {
-                onAppStoreModule(online, mid)
-            }
-        }
+        deviceManager.removeModuleListener(moduleListener)
+        deviceManager.addModuleListener(moduleListener)
     }
 
     /** module 上线时打开 VConn 并补发挂起请求;下线时清空状态。 */
@@ -120,7 +123,7 @@ class RpmService(
     /** 注销 VConn 数据监听与 module 回调,清理状态。 */
     fun detach() {
         deviceManager.removeVConnListener(vConnListener)
-        deviceManager.onModuleAvailability = null
+        deviceManager.removeModuleListener(moduleListener)
         resetModuleState()
         pendingRequest = null
     }
