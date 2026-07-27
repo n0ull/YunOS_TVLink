@@ -124,6 +124,8 @@ class IdcConnection(
             when (p) {
                 is LoginEncryptionResp -> {
                     // ver=0 sessions shouldn't get this; ignore and keep waiting for LoginResp
+                    // ponytail: 固定 ver=0 明文会话；ver=1 的 seed 封装依赖闭源 native 不可还原（body AES 可复刻，
+                    // KDF 见 docs/re/01 §2.3），出现强制 ver=1 的设备再议
                 }
 
                 is LoginResp -> {

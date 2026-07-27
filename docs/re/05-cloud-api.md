@@ -115,6 +115,22 @@ idc 模块 = **设备互联框架**（非测速/诊断）。发现/连接细节�
 
 **调用点现状（v5.2.2）**：原 App **无原生应用管理 UI**，唯一调用方为 H5 桥 `common.installTvApk` → `doInstallByUrl`（`WindVaneFragment.java:455,607-644`）。`doDeletePackage`/`doOpenByPackageName`/`doGetAppList` 零 UI 调用点（API 面见 `rpm/api/RpmPublic.java:30-44`）——这三者的电视端实现仅有响应包定义佐证，属推断，**需真机验证**。
 
+### Cmd 通道直发包（非 VConn；2026-07-28 补录，帧格式对齐 `ali_tvidclib/packet/` 反编译基准）
+
+与 VConn 模块并列的另一半 IDC 业务：`IdcPacket_CmdReqBase` 直请求与若干 TV→手机推送。截图 Req/Resp（20900/21000）帧格式见 04 §6。
+
+| 包（ID） | 帧格式 | 语义 / 实证 |
+|---|---|---|
+| `Cmd_LaunchSth`（20400） | **单 LPString**（例外，非 CmdReqBase 子类）`{"launch_type":N,"action":...,"extra_str":...}` | launch_type ordinal：activity=0 / service=1 / activity_new=2。**版本门：activity_new 需 mVer≥2100200600，低于不发**（service 唤醒无门，见上方 rpm 开启流程）。2026-07-25 真机实证：`extra_str` 被 TV 当 intent data URI（非包名/组件），实用价值止于弹「以什么应用打开」选择框；`ACTION_DIAGNOSTIC` 在 M638_ALI 无对应 activity；service 型 + 非法 action 致 TV 断连。**无任意包名拉起语义**——「打开应用」正路是 RPM `OpenAppRequest(14)` |
+| `Cmd_SysProp` Req/Resp（21100/21200） | Req：CmdReqBase 双 LPString（参数含 `prop_key`）；Resp：`LPString(cmdReqID)` + `LPString(属性值)`，**无 dummy 段** | 读/写 TV 系统属性。2026-07-25 真机实证：读 `ro.product.model` 回 `M638_ALI`；写路径（`setProp`）留服务层，UI 仅暴露读 |
+| `Cmd_PackageInfo` Req/Resp（20500/20600） | CmdReqBase 双 LPString；Resp 键名 **`appIsExist`**（非 `existed`） | 包存在性查询。2026-07-22 阳性对照实证：`com.youku.taitan.tv` → existed=True v11.8.3.24 |
+| `Cmd_PathInfo` Req/Resp（20700/20800） | CmdReqBase 双 LPString；Resp 回显 path | 路径信息查询；原 App 无 UI 消费方 |
+| `VConnFin`（20300，TV→手机） | VConn 终止通知 | 模块下线双路径之一（另一为 `ModuleAvailability` isOnline=false）；收到即移除模块并置 offline，否则 VConn 拆除后 RPM/ASR 服务继续用死通道 |
+| `DevInfoUpdate_DevName`（11000，TV→手机） | `LPString({"dev_name":"…"})` | 设备名更新推送（见 01 §2.6）；body 是 JSON 而非裸串，解析取 `dev_name` 键 |
+| `DevInfoUpdateDdhParam`（11100，TV→手机） | `LPString({"ddhparamkey":K})` + `LPBytes(param)` | DDH 参数推送；原 App 亦仅保留，不接入 DevInfo |
+| `OpCmdMultitouch`（11200） | `LPString({"evts":[{x_scale,y_scale,id,act}]})` | 预留，无 UI 调用方（与 IB 272 `PROTO_MULTITOUCH` 为独立概念） |
+| `OpCmdMouseClick`（10400） | 已废弃空包 | — |
+
 ### remoteaccount（远程账号同步）
 把手机登录态同步到电视：
 - `RacctPacket_login_info`：`{nickname, asoToken, yktk, ykStoken}` —— 下发淘宝 asoToken + 优酷 yktk/stoken。
@@ -153,4 +169,4 @@ ACCSClient 注册服务：`accs`、`accs-console`、`tvassist` → `CallbackServ
 2. ACCS 推送"通知→mtop 拉详情"两段式**已确认**（`push/biz/main/PushMgr.java` `onMsgArrival` → `queryAllMsg`）；ACCS 原始 payload 线格式由 SDK 内部处理，App 仅收到达广播后走 mtop，非 App 层可解析，故未细读——**非事实不确定**。
 3. asoToken 获取路径——**已确认为空实现（非不确定）**：`account/biz/tbaso/TbAsoToken.java:15-20` 的 `apply()`/`cancelApplyIf()` 均为空方法。`Racct`（`remoteaccount/biz/main/Racct.java:227-228`）与 `HotMovieProjectionBiz`（`ui/hotmovie/projectionBiz/HotMovieProjectionBiz.java:399-400`）注册的 asoToken 回调**永不被触发**，本 APK 内 asoToken 从未真正获取；`RacctPacket_login_info.asoToken` 字段定义存在，但在此链路下恒为空。
 4. `preid` ——**值已确为硬编码常量** `ca241df55b597c56853b2c7564ca251f`，且 `support/biz/mtop/TvhSysinfoUtil.java:72-77` 登录 / 未登录两分支赋**同值**（原文"分支同值"成立）；其语义用途（pre-id 指向何种预设 / 合作方标识）仍不明——**此项为真正不确定**。
-5. RPM：电视固件是否校验 `login.name`、`com.yunos.idc.appstore` 模块是否常驻（Cmd_LaunchSth 唤醒是否必需）——反编译均无证据（`mName` 仅由 `idc/biz/IdcUtils.java:20` 设为自身包名 `com.yunos.tvhelper`，校验与否在电视端），待真机证伪。**确属 App 层不可确定，保留**。
+5. ~~RPM：电视固件是否校验 `login.name`、`com.yunos.idc.appstore` 模块是否常驻~~ —— **2026-07-22 真机诊断已落地**：`login.name` 校验**证伪**（同一 TV 对 `app.tvlink` 与 `com.yunos.tvhelper` 两个自报名称的登录广播完全一致，Cmd 通道 8/8 明文应答）；`com.yunos.idc.appstore` 模块**因固件而异**——M638_ALI 固件无此模块（登录广播仅 3 模块，5 个 appstore 候选包名 existed=False），`Cmd_LaunchSth` 唤醒空转，应用管理在该机结构性不可行；协议侧规格见 §3，待提供该模块的设备验证。
