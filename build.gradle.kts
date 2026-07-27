@@ -8,8 +8,8 @@ plugins {
     kotlin("android") version "2.1.20" apply false
     kotlin("plugin.compose") version "2.1.20" apply false
     kotlin("plugin.serialization") version "2.1.20" apply false
-    id("com.android.application") version "8.9.2" apply false
-    id("com.android.library") version "8.9.2" apply false
+    id("com.android.application") version "8.13.2" apply false
+    id("com.android.library") version "8.13.2" apply false
     id("org.jetbrains.compose") version "1.8.0" apply false
     // 静态分析与格式化
     id("org.jlleitschuh.gradle.ktlint") version "12.1.2" apply false
