@@ -315,8 +315,10 @@ private fun JoystickPanel(vm: AppViewModel) {
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            RcButton("LT", size = 52) { vm.keyClick(RcKey.PAD_LT) }
             RcButton("LB", size = 52) { vm.keyClick(RcKey.PAD_LB) }
             RcButton("RB", size = 52) { vm.keyClick(RcKey.PAD_RB) }
+            RcButton("RT", size = 52) { vm.keyClick(RcKey.PAD_RT) }
         }
         Row(
             Modifier.fillMaxWidth(),
