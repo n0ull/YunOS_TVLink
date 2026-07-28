@@ -128,12 +128,21 @@ fun SettingsScreen(vm: AppViewModel) {
                 Column {
                     GroupHeader("关于")
                     SettingItem(AppIcons.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
-                    // 投屏服务信息：连接后 GET /server-info 取一次（docs/re/04 §4）
-                    vm.castServerInfo?.let { si ->
-                        SettingItem(AppIcons.Cast, "投屏服务", si.serverVers.ifEmpty { "未知" })
-                        SettingItem(AppIcons.Link, "投屏协议版本", si.protocolVers.ifEmpty { "未知" })
-                        SettingItem(AppIcons.Tv, "投屏服务标识", si.displayName.ifEmpty { si.serverCode }.ifEmpty { "—" })
-                        SettingItem(AppIcons.Memory, "投屏能力", si.features.ifEmpty { "—" })
+                    if (vm.connectedIbOnly) {
+                        // IB-only 连接：无 cast 通道，展示 IB 版本供诊断
+                        SettingItem(AppIcons.Link, "IB 通道", vm.connectedIbVer.ifEmpty { "未知" })
+                        if (vm.connectedIbSid.isNotEmpty()) {
+                            SettingItem(AppIcons.Info, "IB sid", vm.connectedIbSid)
+                        }
+                        SettingItem(AppIcons.Cast, "投屏", "不可用（IDC 未开放）")
+                    } else {
+                        // 投屏服务信息：连接后 GET /server-info 取一次（docs/re/04 §4）
+                        vm.castServerInfo?.let { si ->
+                            SettingItem(AppIcons.Cast, "投屏服务", si.serverVers.ifEmpty { "未知" })
+                            SettingItem(AppIcons.Link, "投屏协议版本", si.protocolVers.ifEmpty { "未知" })
+                            SettingItem(AppIcons.Tv, "投屏服务标识", si.displayName.ifEmpty { si.serverCode }.ifEmpty { "—" })
+                            SettingItem(AppIcons.Memory, "投屏能力", si.features.ifEmpty { "—" })
+                        }
                     }
                 }
             }

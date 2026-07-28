@@ -116,6 +116,7 @@ class AppViewModel : ViewModel() {
     var connectedMac by mutableStateOf("")
     var connectedIbVer by mutableStateOf("")
     var connectedIbSid by mutableStateOf("")
+    var connectedIbOnly by mutableStateOf(false)
     val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
 
     // ---- IME (remote text input) ----
@@ -163,6 +164,7 @@ class AppViewModel : ViewModel() {
                     connectedMac = c?.mac ?: ""
                     connectedIbVer = c?.ibVer ?: ""
                     connectedIbSid = c?.ibSid ?: ""
+                    connectedIbOnly = c?.ibOnly ?: false
                     lastDevice = c
                     onConnected()
                     // 重连不重置页面：已在 Main（任意 tab）时保持当前页，
@@ -175,6 +177,7 @@ class AppViewModel : ViewModel() {
                     connectedMac = ""
                     connectedIbVer = ""
                     connectedIbSid = ""
+                    connectedIbOnly = false
                     mediaServerUrl = ""
                     castServerInfo = null
                     castRate = 1
@@ -237,10 +240,12 @@ class AppViewModel : ViewModel() {
 
     private fun onConnected() {
         rc.attach()
-        rpm.attach()
-        dongleSettings.attach()
-        val c = deviceManager.connected.value ?: return
-        connectCast(c.ip, if (c.projectionPort != 0) c.projectionPort else DEFAULT_CAST_PORT)
+        if (!connectedIbOnly) {
+            rpm.attach()
+            dongleSettings.attach()
+            val c = deviceManager.connected.value ?: return
+            connectCast(c.ip, if (c.projectionPort != 0) c.projectionPort else DEFAULT_CAST_PORT)
+        }
     }
 
     /**
@@ -297,6 +302,13 @@ class AppViewModel : ViewModel() {
     fun connectTo(d: Discovery.FoundDevice) = deviceManager.connect(d)
 
     fun connectToIp(ip: String) = deviceManager.connect(ip)
+
+    /** IB-only 连接入口：仅建 IB 通道，不经 IDC。遥控可用；投屏/截图/应用管理不可用。 */
+    fun connectIbOnly(
+        ip: String,
+        ibVer: String = "",
+        ibSid: String = "",
+    ) = deviceManager.connectIbOnly(ip, ibVer, ibSid)
 
     fun disconnect() {
         lastDevice = null

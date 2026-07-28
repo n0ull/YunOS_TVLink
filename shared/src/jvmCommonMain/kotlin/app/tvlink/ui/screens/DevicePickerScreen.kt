@@ -46,10 +46,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.tvlink.device.DeviceManager
+import app.tvlink.device.Discovery
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.theme.Brand
@@ -88,7 +90,11 @@ fun DevicePickerScreen(vm: AppViewModel) {
 
             else ->
                 Text(
-                    if (vm.foundDevices.isEmpty()) "点击下方按钮搜索设备" else "发现 ${vm.foundDevices.size} 个设备",
+                    if (vm.foundDevices.isEmpty()) {
+                        "点击下方按钮搜索设备"
+                    } else {
+                        "发现 ${vm.foundDevices.size} 个设备"
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         }
@@ -96,38 +102,11 @@ fun DevicePickerScreen(vm: AppViewModel) {
         Spacer(Modifier.height(16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(vm.foundDevices, key = { it.ip }) { d ->
-                ElevatedCard(Modifier.fillMaxWidth().clickable { vm.connectTo(d) }) {
-                    ListItem(
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = {
-                            Text(
-                                d.name.ifEmpty {
-                                    if (d.source == "ib-scan") "电视 (IB 通道)" else "未命名设备"
-                                },
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                listOfNotNull(
-                                    d.ip,
-                                    d.model.takeIf { it.isNotEmpty() },
-                                    d.mac.takeIf { it.isNotEmpty() },
-                                    d.ibVer.takeIf { it.isNotEmpty() }?.let { "IB v$it" },
-                                    d.ibSid.takeIf { it.isNotEmpty() }?.let { "sid=$it" },
-                                ).joinToString("  ·  "),
-                            )
-                        },
-                        leadingContent = {
-                            Box(
-                                Modifier.size(40.dp).background(Brand.accentBrush, CircleShape),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(AppIcons.Tv, contentDescription = null, tint = Color.White) }
-                        },
-                        trailingContent = {
-                            Icon(AppIcons.KeyboardArrowRight, contentDescription = null)
-                        },
-                    )
-                }
+                DeviceCard(
+                    d = d,
+                    onClick = { vm.connectTo(d) },
+                    onIbOnlyClick = { vm.connectIbOnly(d.ip, d.ibVer, d.ibSid) },
+                )
             }
         }
 
@@ -154,6 +133,70 @@ fun DevicePickerScreen(vm: AppViewModel) {
             )
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** IB-only 设备（子网扫描兜底发现）：IB 通道可达，IDC 未开放。
+ *  点击走 IB-only 连接路径：遥控可用；投屏/截图/应用管理不可用。 */
+@Composable
+private fun DeviceCard(
+    d: Discovery.FoundDevice,
+    onClick: () -> Unit,
+    onIbOnlyClick: () -> Unit,
+) {
+    val ibOnly = d.source == "ib-scan" && d.name.isEmpty()
+    val lines =
+        listOfNotNull(
+            d.ip,
+            d.model.takeIf { it.isNotEmpty() },
+            d.mac.takeIf { it.isNotEmpty() },
+            d.ibVer.takeIf { it.isNotEmpty() }?.let { "IB v$it" },
+            d.ibSid.takeIf { it.isNotEmpty() }?.let { "sid=$it" },
+        ).let { base ->
+            if (ibOnly) base.plus("遥控可用 · 投屏/截图/应用管理需 IDC 未开放") else base
+        }
+    ElevatedCard(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = if (ibOnly) onIbOnlyClick else onClick),
+    ) {
+        ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = {
+                Text(d.name.ifEmpty { if (ibOnly) "电视 (IB 通道)" else "未命名设备" })
+            },
+            supportingContent = { Text(lines.joinToString("  ·  ")) },
+            leadingContent = {
+                Box(
+                    Modifier.size(40.dp).background(
+                        if (ibOnly) {
+                            SolidColor(MaterialTheme.colorScheme.surfaceVariant)
+                        } else {
+                            Brand.accentBrush
+                        },
+                        CircleShape,
+                    ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        AppIcons.Tv,
+                        contentDescription = null,
+                        tint = if (ibOnly) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
+                    )
+                }
+            },
+            trailingContent = {
+                if (ibOnly) {
+                    Text(
+                        "IB 仅遥控",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Icon(AppIcons.KeyboardArrowRight, contentDescription = null)
+                }
+            },
+        )
     }
 }
 

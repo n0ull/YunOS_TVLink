@@ -41,6 +41,9 @@ private val tabs =
         TabDest(AppViewModel.MainTab.MORE, "更多", AppIcons.MoreHoriz),
     )
 
+/** IB-only 连接时隐藏投屏 tab（cast 通道不可用）。 */
+private fun visibleTabs(ibOnly: Boolean) = if (ibOnly) tabs.filter { it.tab != AppViewModel.MainTab.CAST } else tabs
+
 @Composable
 fun MainShell(
     vm: AppViewModel,
@@ -48,10 +51,11 @@ fun MainShell(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
+        val dests = visibleTabs(vm.connectedIbOnly)
         Row(Modifier.fillMaxSize()) {
             if (wide) {
                 NavigationRail {
-                    tabs.forEach { d ->
+                    dests.forEach { d ->
                         NavigationRailItem(
                             selected = main.tab == d.tab,
                             onClick = { vm.navTab(d.tab) },
@@ -66,7 +70,7 @@ fun MainShell(
                 bottomBar = {
                     if (!wide) {
                         NavigationBar {
-                            tabs.forEach { d ->
+                            dests.forEach { d ->
                                 NavigationBarItem(
                                     selected = main.tab == d.tab,
                                     onClick = { vm.navTab(d.tab) },

@@ -54,6 +54,9 @@ class DeviceManager {
         val ibVer: String = "",
         /** IB hello 响应中的 sid(会话标识),3988 探测产出;手动输入 IP 连接时为空。 */
         val ibSid: String = "",
+        /** IB-only 连接:仅 IB 通道(3988)可达,IDC(13510/13511)未开放。
+         *  遥控可用,投屏/截图/应用管理/系统属性不可用。 */
+        val ibOnly: Boolean = false,
     )
 
     private val _connState = MutableStateFlow(ConnState.IDLE)
@@ -169,6 +172,40 @@ class DeviceManager {
                 // 重连周期内的失败继续排队下一次重试；用户发起的连接失败不自动重试
                 if (retries in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
             }
+        }
+    }
+
+    /** IB-only 连接：仅建 IB 通道(3988)，不经 IDC。适用于子网扫描发现 IB 但 IDC 未开放的设备。
+     *  遥控可用；投屏/截图/应用管理/系统属性不可用。无自动重连（与原 App 一致，IB 初始失败不重试）。 */
+    fun connectIbOnly(
+        ip: String,
+        ibVer: String = "",
+        ibSid: String = "",
+    ) {
+        explicitDisconnect = false
+        reconnectJob?.cancel()
+        _connState.value = ConnState.CONNECTING
+        scope.launch {
+            connection?.shutdown()
+            connection = null
+            // 不建 IDC，直接置 CONNECTED；RcController.attach() 会据此 ip 建 IB 通道。
+            val dev =
+                ConnectedDevice(
+                    ip = ip,
+                    name = "电视 (IB)",
+                    model = "",
+                    uuid = "",
+                    mac = "",
+                    projectionPort = 0,
+                    ibVer = ibVer,
+                    ibSid = ibSid,
+                    ibOnly = true,
+                )
+            retries = 0
+            reconnectTarget = dev
+            saveHistory(dev)
+            _connected.value = dev
+            _connState.value = ConnState.CONNECTED
         }
     }
 
