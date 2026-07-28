@@ -445,6 +445,13 @@ class AppViewModel : ViewModel() {
     fun takeScreenshotBurst() {
         shotBusy = true
         screenshot.captureBurst()
+        // 兜底超时：TV 应答不足 count 张时 pending 不归零、onScreenshot 不触发，
+        // shotBusy 会永久 stuck。对比 takeScreenshot 的 10s 兜底（:351-353）。
+        // 连拍 5 帧 × 300ms 间隔 + 每帧 TV 响应，20s 足够覆盖。
+        viewModelScope.launch(Dispatchers.Default) {
+            kotlinx.coroutines.delay(20_000)
+            shotBusy = false
+        }
     }
 
     fun voiceText(text: String) = asr.sendText(text)
