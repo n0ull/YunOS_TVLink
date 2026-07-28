@@ -165,34 +165,19 @@ class Discovery {
     }
 
     /**
-     * 对单个 host 并行探测 IDC(13511) 与 IB(3988)。某型号 TV 不监听 13511 时会漏扫,
+     * 对单个 host 顺序探测 IDC(13511) 与 IB(3988)。某型号 TV 不监听 13511 时会漏扫,
      * 此时 IB 通道仍开放,可作为兜底发现路径。report() 按 IP 合并,双通时 IDC 的
      * name/model/uuid 信息更丰富,IB 仅补 source 标签。
+     * 两者各自已有超时(1200ms)，在池线程内顺序执行即可，无需再启内层 Thread。
      */
     private fun probeHost(
         ip: String,
         myEpoch: Int,
     ) {
         if (!active(myEpoch)) return
-        // 线程池是整轮扫描的瓶颈,而非单 host 探测;并行发起避免串行叠加超时。
-        val tIdc =
-            Thread({ probeIdc(ip, myEpoch) }, "disc-idc-$ip").apply {
-                isDaemon = true
-                start()
-            }
-        val tIb =
-            Thread({ probeIb(ip, myEpoch) }, "disc-ib-$ip").apply {
-                isDaemon = true
-                start()
-            }
-        try {
-            tIdc.join(1500)
-        } catch (_: InterruptedException) {
-        }
-        try {
-            tIb.join(1500)
-        } catch (_: InterruptedException) {
-        }
+        probeIdc(ip, myEpoch)
+        if (!active(myEpoch)) return
+        probeIb(ip, myEpoch)
     }
 
     private fun probeIdc(
