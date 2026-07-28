@@ -30,8 +30,10 @@ import kotlinx.coroutines.launch
 /** Central app state shared by both platforms. */
 class AppViewModel : ViewModel() {
     companion object {
-        /** 投屏控制端口默认值(当 mDNS/ddh 未提供时回退)。真机实证:TV 实际监听 13521,13520 关闭。 */
-        private const val DEFAULT_CAST_PORT = 13521
+        /** 投屏控制端口兜底候选（ddh/mDNS 均未提供时按序尝试）。
+         *  原 App 默认 13520；本 TV 固件实际监听 13521（ddh 实证）。
+         *  不同固件端口可能不同，兜底时两个都试，避免写死单一端口。 */
+        private val CAST_FALLBACK_PORTS = intArrayOf(13520, 13521)
     }
 
     // ---- navigation ----
@@ -106,7 +108,7 @@ class AppViewModel : ViewModel() {
         }
         // IDC 在线但投屏控制通道死亡(后台被杀/请求异常)——单独补建
         if (cast?.state != app.tvlink.proto.cast.CastController.State.CONNECTED) {
-            connectCast(d.ip, if (d.projectionPort != 0) d.projectionPort else DEFAULT_CAST_PORT)
+            connectCast(d.ip, d.projectionPort)
         }
     }
 
@@ -245,13 +247,16 @@ class AppViewModel : ViewModel() {
             rpm.attach()
             dongleSettings.attach()
             val c = deviceManager.connected.value ?: return
-            connectCast(c.ip, if (c.projectionPort != 0) c.projectionPort else DEFAULT_CAST_PORT)
+            connectCast(c.ip, c.projectionPort)
         }
     }
 
     /**
-     * 投屏控制通道(13521)建立。先断旧通道再建新——2026-07-25 真机实证:重复 onConnected
+     * 投屏控制通道建立。先断旧通道再建新——2026-07-25 真机实证:重复 onConnected
      * 不断旧通道会残留双控制会话,TV 侧会话归属错乱致播放/暂停/退出/音量全部失效。
+     *
+     * port=0 时（ddh/mDNS 均未提供）依次尝试 CAST_FALLBACK_PORTS；
+     * 原 App 默认 13520，本 TV 固件实际监听 13521（ddh 实证），不同固件可能不同。
      */
     private fun connectCast(
         ip: String,
@@ -260,17 +265,25 @@ class AppViewModel : ViewModel() {
         cast?.disconnect()
         cast = null
         viewModelScope.launch(Dispatchers.IO) {
-            val cc = CastController(ip, port)
-            cc.onEvent = { st, dur, pos, vol, rate ->
-                viewModelScope.launch(Dispatchers.Default) {
-                    castState = st
-                    if (dur > 0) castDuration = dur
-                    castPosition = pos
-                    if (vol >= 0) castVolume = vol
-                    if (rate > 0) castRate = rate
+            val candidates = if (port != 0) intArrayOf(port) else CAST_FALLBACK_PORTS
+            var cc: CastController? = null
+            for (p in candidates) {
+                val trial = CastController(ip, p)
+                if (trial.connect()) {
+                    cc = trial
+                    break
                 }
             }
-            if (cc.connect()) {
+            if (cc != null) {
+                cc.onEvent = { st, dur, pos, vol, rate ->
+                    viewModelScope.launch(Dispatchers.Default) {
+                        castState = st
+                        if (dur > 0) castDuration = dur
+                        castPosition = pos
+                        if (vol >= 0) castVolume = vol
+                        if (rate > 0) castRate = rate
+                    }
+                }
                 cast = cc
                 castServerInfo = cc.serverInfo()
             }

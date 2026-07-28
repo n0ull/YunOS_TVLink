@@ -145,7 +145,7 @@ class DeviceManager {
             if (ok) {
                 connection = conn
                 val di = conn.deviceInfo
-                // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel falls back to DEFAULT_CAST_PORT)
+                // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)
                 val ddhPort =
                     di
                         ?.ddhParams

@@ -134,4 +134,4 @@ POST /event?state=<null|prepared|playing|paused|loading|stopped|completed|error|
 > - **13520：关闭**（`Connection refused`）
 > - **13521：开放**，`GET /server-info` 返回 `{"features":"127","display_name":"TV","server_code":"2100302020","protocol_vers":"1.0","server_vers":"3.2.0"}`
 >
-> 原 App 源码注释的"默认 13520"与本 TV 实际不符。推测：13520 是旧固件/其他厂商端口，本 TV 固件将 cast 控制服务监听在 **13521**（与 IDC 探测端口相同号，但独立 TCP）。TVLink 已将 `DEFAULT_CAST_PORT` 由 13520 改为 13521；ddh/mDNS 提供的 `projectionport` 优先级不变（仍高于默认值）。
+> 原 App 源码注释的"默认 13520"与本 TV 实际不符。推测：13520 是旧固件/其他厂商端口，本 TV 固件将 cast 控制服务监听在 **13521**（与 IDC 探测端口同号，但独立 TCP）。TVLink 兜底策略：ddh/mDNS 未提供端口时依次尝试 13520 → 13521，不写死单一端口，兼容不同固件。

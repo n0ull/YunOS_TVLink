@@ -12,11 +12,11 @@ import java.util.concurrent.TimeUnit
 
 /**
  * YunOS media-projection control channel — HTTP/1.1-style text over a TCP long
- * connection to the TV (default port 13521). See docs/re/04.
+ * connection to the TV (default port 13520). See docs/re/04.
  */
 class CastController(
     private val host: String,
-    private val port: Int = 13521,
+    private val port: Int = 13520,
 ) {
     enum class State { DISCONNECTED, CONNECTED }
 
