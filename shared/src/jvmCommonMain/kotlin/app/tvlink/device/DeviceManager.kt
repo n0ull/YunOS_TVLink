@@ -286,6 +286,7 @@ class DeviceManager {
         _connected.value = null
         _modules.value = emptyList()
         _connState.value = ConnState.IDLE
+        discoveredProjectionPort = 0
     }
 
     /** Release all resources. Call when the owning ViewModel is cleared. */
