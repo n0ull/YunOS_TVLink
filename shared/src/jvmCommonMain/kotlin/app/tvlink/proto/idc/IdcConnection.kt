@@ -305,7 +305,7 @@ class IdcConnection(
             hb.int // key
             hb.int // packetId
             val total = hb.int
-            if (total < IdcConst.HEADER_LEN || total > 16 * 1024 * 1024) return null
+            if (total < IdcConst.HEADER_LEN || total > 1 * 1024 * 1024) return null
             val body = ByteArray(total - IdcConst.HEADER_LEN)
             if (body.isNotEmpty()) inp.readFully(body)
             val frame = java.nio.ByteBuffer.allocate(total)
