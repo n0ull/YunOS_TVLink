@@ -85,6 +85,8 @@ class AppViewModel : ViewModel() {
     val sysprop = SysPropService(deviceManager)
     val dongleSettings = DongleSettingService(deviceManager)
     val mediaServer = MediaHttpServer()
+
+    @Volatile
     var cast: CastController? = null
         private set
 
