@@ -164,7 +164,9 @@ class AppViewModel : ViewModel() {
                     connectedIbSid = c?.ibSid ?: ""
                     lastDevice = c
                     onConnected()
-                    screen = Screen.Main()
+                    // 重连不重置页面：已在 Main（任意 tab）时保持当前页，
+                    // 否则自动重连会把用户从投屏/设置等页面弹回默认遥控 tab
+                    if (screen !is Screen.Main) screen = Screen.Main()
                 } else if (s == DeviceManager.ConnState.IDLE) {
                     connectedName = ""
                     connectedIp = ""
@@ -355,7 +357,11 @@ class AppViewModel : ViewModel() {
         mediaServer.register(id, file)
         val url = mediaServer.urlFor(id)
         viewModelScope.launch(Dispatchers.IO) {
-            val cc = cast ?: return@launch
+            val cc =
+                cast ?: run {
+                    notice = "投屏通道未就绪，请稍后重试"
+                    return@launch
+                }
             castTitle = title
             // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：Android 经 MediaStore 取封面
             // 拷入缓存后按注册制供片（不走原 App 的绝对路径回退），失败则无封面投屏
