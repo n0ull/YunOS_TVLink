@@ -143,6 +143,7 @@ class AppViewModel : ViewModel() {
     var castDuration by mutableStateOf(0L)
     var castPosition by mutableStateOf(0L)
     var castVolume by mutableStateOf(0)
+    var castRate by mutableStateOf(1f)
     var castTitle by mutableStateOf("")
     var mediaServerUrl by mutableStateOf("")
     var castServerInfo by mutableStateOf<CastController.ServerInfo?>(null)
@@ -176,6 +177,7 @@ class AppViewModel : ViewModel() {
                     connectedIbSid = ""
                     mediaServerUrl = ""
                     castServerInfo = null
+                    castRate = 1f
                     cast?.disconnect()
                     cast = null
                     mediaServer.stop()
@@ -253,12 +255,13 @@ class AppViewModel : ViewModel() {
         cast = null
         viewModelScope.launch(Dispatchers.IO) {
             val cc = CastController(ip, port)
-            cc.onEvent = { st, dur, pos, vol ->
+            cc.onEvent = { st, dur, pos, vol, rate ->
                 viewModelScope.launch(Dispatchers.Default) {
                     castState = st
                     if (dur > 0) castDuration = dur
                     castPosition = pos
                     if (vol >= 0) castVolume = vol
+                    if (rate > 0f) castRate = rate
                 }
             }
             if (cc.connect()) {
@@ -405,7 +408,9 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) { cast?.volume(v) }
     }
 
-    fun castRate(r: Float) {
+    /** 播放倍速（POST /rate）：乐观更新本地值，轮询随后校准（与音量同模式）。 */
+    fun castRateTo(r: Float) {
+        castRate = r
         viewModelScope.launch(Dispatchers.IO) { cast?.rate(r) }
     }
 

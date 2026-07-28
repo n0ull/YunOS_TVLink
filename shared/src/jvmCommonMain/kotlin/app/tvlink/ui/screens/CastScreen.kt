@@ -15,6 +15,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -93,6 +94,18 @@ fun CastScreen(vm: AppViewModel) {
                             Icon(AppIcons.Stop, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("退出")
+                        }
+                    }
+
+                    Spacer(Modifier.padding(8.dp))
+                    // 倍速（POST /rate，docs/re/04 §4）：选中态随轮询校准
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(1f, 1.5f, 2f, 3f).forEach { r ->
+                            FilterChip(
+                                selected = vm.castRate == r,
+                                onClick = { vm.castRateTo(r) },
+                                label = { Text(if (r == r.toLong().toFloat()) "${r.toLong()}x" else "${r}x") },
+                            )
                         }
                     }
 

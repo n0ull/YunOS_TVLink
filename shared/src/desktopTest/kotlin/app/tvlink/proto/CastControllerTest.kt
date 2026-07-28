@@ -79,7 +79,7 @@ class CastControllerTest {
         assertTrue(cc.connect(), "connect failed")
         var got: Triple<CastController.PlayState, Long, Long>? = null
         val latch = CountDownLatch(1)
-        cc.onEvent = { st, dur, pos, _ ->
+        cc.onEvent = { st, dur, pos, _, _ ->
             got = Triple(st, dur, pos)
             latch.countDown()
         }
