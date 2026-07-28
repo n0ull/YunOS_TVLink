@@ -27,7 +27,7 @@ class CastController(
         val duration: Long = 0,
         val position: Long = 0,
         val volume: Int = 0,
-        val rate: Float = 1f,
+        val rate: Int = 0,
         val state: String = "",
     )
 
@@ -35,8 +35,8 @@ class CastController(
     var state = State.DISCONNECTED
         private set
 
-    /** (state, durationMs, positionMs, volume, rate);事件推送缺音量/倍速时为 -1(调用方保持旧值)。 */
-    var onEvent: ((PlayState, duration: Long, position: Long, volume: Int, rate: Float) -> Unit)? = null
+    /** (state, durationMs, positionMs, volume, rate);事件推送缺音量/倍速时为 -1/0(调用方保持旧值)。 */
+    var onEvent: ((PlayState, duration: Long, position: Long, volume: Int, rate: Int) -> Unit)? = null
     var onStateChanged: ((State) -> Unit)? = null
 
     private val sessionId: String = UUID.randomUUID().toString()
@@ -88,8 +88,8 @@ class CastController(
 
     fun volume(v: Int) = request("POST", "/volume?value=$v")
 
-    /** 倍速（docs/re/04 §4 `POST /rate?value=<N>`）。 */
-    fun rate(r: Float) = request("POST", "/rate?value=$r")
+    /** 倍速（docs/re/04 §4 `POST /rate?value=<N>`）。TV 固件只接受整数档位，传小数会挂死连接。 */
+    fun rate(r: Int) = request("POST", "/rate?value=$r")
 
     data class ServerInfo(
         val features: String = "",
@@ -133,11 +133,11 @@ class CastController(
             position = num("position"),
             volume = num("volume").toInt(),
             rate =
-                Regex("\"rate\"\\s*:\\s*\"?([0-9.]+)\"?")
+                Regex("\"rate\"\\s*:\\s*\"?([0-9]+)\"?")
                     .find(j)
                     ?.groupValues
                     ?.get(1)
-                    ?.toFloatOrNull() ?: 1f,
+                    ?.toIntOrNull() ?: 0,
             state = str("state"),
         )
     }
@@ -310,7 +310,7 @@ class CastController(
             params["duration"]?.toLongOrNull() ?: 0,
             params["position"]?.toLongOrNull() ?: 0,
             params["volume"]?.toIntOrNull() ?: -1,
-            -1f, // /event 推送不含倍速
+            0, // /event 推送不含倍速
         )
         ackEvent()
     }

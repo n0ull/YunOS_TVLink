@@ -66,7 +66,7 @@ Content-Length: N
 | 停止/退出 | `POST /stop` |
 | 跳转 | `POST /seek?value=<N>`（N 高置信为毫秒） |
 | 音量 | `POST /volume?value=<N>` |
-| 倍速 | `POST /rate?value=<N>` |
+| 倍速 | `POST /rate?value=<N>`（**N 必须为整数**；传小数如 `1.0`/`1.5` TV 固件挂死连接；实证 2026-07-28） |
 | 查询进度 | `GET /playback-info` → JSON `{"name","duration","position","volume","rate"}`（字符串值） |
 | 服务信息 | `GET /server-info` → JSON `{features,protocol_vers,server_vers,server_code,display_name}` |
 | 预载 | `POST /preload`，body `{"content_url":...}` |

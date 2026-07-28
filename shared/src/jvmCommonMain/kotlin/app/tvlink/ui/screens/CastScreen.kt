@@ -100,11 +100,11 @@ fun CastScreen(vm: AppViewModel) {
                     Spacer(Modifier.padding(8.dp))
                     // 倍速（POST /rate，docs/re/04 §4）：选中态随轮询校准
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(1f, 1.5f, 2f, 3f).forEach { r ->
+                        listOf(1, 2, 3).forEach { r ->
                             FilterChip(
                                 selected = vm.castRate == r,
                                 onClick = { vm.castRateTo(r) },
-                                label = { Text(if (r == r.toLong().toFloat()) "${r.toLong()}x" else "${r}x") },
+                                label = { Text("${r}x") },
                             )
                         }
                     }
