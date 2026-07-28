@@ -178,8 +178,11 @@ class IbChannel(
             val size = b.int
             if (size < 0 || size > 1024 * 1024) return null
             val type = b.int
-            b.int // reserve
-            b.int // checksum
+            val reserve = b.int
+            val checksum = b.int
+            // 校验和 = (body.size + reserve) xor helloId，与 sendFrame 对称。
+            // 不匹配说明帧损坏（TCP 流错乱/中间人篡改），丢弃该帧。
+            if (checksum != ((size + reserve) xor helloId)) return null
             val body = ByteArray(size)
             if (size > 0) inp.readFully(body)
             type to body
