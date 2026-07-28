@@ -30,7 +30,8 @@ import kotlinx.coroutines.launch
 /** Central app state shared by both platforms. */
 class AppViewModel : ViewModel() {
     companion object {
-        private const val DEFAULT_CAST_PORT = 13520
+        /** 投屏控制端口默认值(当 mDNS/ddh 未提供时回退)。真机实证:TV 实际监听 13521,13520 关闭。 */
+        private const val DEFAULT_CAST_PORT = 13521
     }
 
     // ---- navigation ----

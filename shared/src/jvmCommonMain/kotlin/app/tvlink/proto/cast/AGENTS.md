@@ -6,7 +6,7 @@
 ## Purpose
 
 Local media projection (screen-cast) — the TV pulls media from an embedded HTTP server on the phone/PC. Control messages
-use an HTTP/1.1-style text protocol over a TCP long connection (default port 13520) with `yunos-session-id` header.
+use an HTTP/1.1-style text protocol over a TCP long connection (default port 13521) with `yunos-session-id` header.
 
 ## Key Files
 

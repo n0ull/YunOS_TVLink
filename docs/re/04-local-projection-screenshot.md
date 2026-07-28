@@ -127,3 +127,11 @@ POST /event?state=<null|prepared|playing|paused|loading|stopped|completed|error|
 1. seek/duration/position 单位：**发送侧已确认为毫秒**。`TVMusicPlayer.java:409,420-434` 与 `VideoTVProjectionPlayer.java:179,186-199` 在 TV 模式下将毫秒值存入 `mMsce`（`SeekToRunnable.setMsce(i)`）后 `tvplayer_.seek(mMsce)` 发往电视；非 TV 模式直接 `MediaPlayer.seekTo(i)`（毫秒体系）。该值即 `POST /seek?value=<mMsce>` 的 value。→ 手机端发送单位确定；100% 确认电视端按毫秒解释需 TV 端源码。
 2. `PUT /image`、`POST /reverse` 调用方：**已确认本 APK 无调用点**（`MediaMessageFactory.java:93`、`:71` 仅定义，全库 grep 无调用）。用途（共享库死代码或电视端配套）属推测，无法从手机端源码证伪。
 3. 控制连接独立性：**已确认手机端为两条独立 TCP**——IDC 信令通道（`LprojBizBu.java:19-25` 的 `onEstablished` 来自 `IdcApiBu.idcComm()`）与 `setServerInfo(mDevAddr, 13520|projectionport)` 另建的控制 TCP（`LprojBizBu.java:73-87`）。"电视端投屏服务独立监听"为对端行为，手机端仅见 ddh `projectionport` 配置，可推理但需电视端确认。
+
+## 端口校准（TVLink 真机实证）
+
+> 2026-07-28 实测（TV 192.168.1.105，IB ver=3.29，重启后）：
+> - **13520：关闭**（`Connection refused`）
+> - **13521：开放**，`GET /server-info` 返回 `{"features":"127","display_name":"TV","server_code":"2100302020","protocol_vers":"1.0","server_vers":"3.2.0"}`
+>
+> 原 App 源码注释的"默认 13520"与本 TV 实际不符。推测：13520 是旧固件/其他厂商端口，本 TV 固件将 cast 控制服务监听在 **13521**（与 IDC 探测端口相同号，但独立 TCP）。TVLink 已将 `DEFAULT_CAST_PORT` 由 13520 改为 13521；ddh/mDNS 提供的 `projectionport` 优先级不变（仍高于默认值）。
