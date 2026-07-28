@@ -45,7 +45,7 @@
       证实，见真机档案），**本机不可验证**；反编译复核判死替代路径（RPM 12 操作唯一通道 =
       appstore VConn，`immersive/yingshi.boutique` 是影视播放器与应用管理无关，LaunchSth 无任意
       包名拉起语义）。代码侧 R1–R4 已就绪（`RpmFixTest` 5/5，帧格式见 docs/re/05 §3）。
-      获得提供 `com.yunos.idc.appstore` 模块的设备后：列表(4)→打开(14)→卸载(11)→URL 推装(7；
+      获得提供 `com.yunos.idc.appstore` 模块的设备后：列表(4)→打开(14)→卸载(11)→URL 推装(7)；
       `result==2` 下载开始、`appStatus=18` 完成）；增量操作（UpdateRequest 20、续传 21——
       **packetId 21 与 UpdateResponse 撞号，靠收发方向消歧**，常量 `ID_CONTINUE_DOWNLOAD=24`
       为死常量）同轮验证。注：卸载/列表/打开在原 App v5.2.2 无 UI 调用点，该轮验证即首次实证
