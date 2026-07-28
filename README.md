@@ -32,7 +32,7 @@ YunOS 电视/盒子的跨平台局域网控制客户端（Android + Windows 桌�
 | 遥控（按键/触控板/手柄/方向盘） | ✅ | ✅ | IB 快速通道 TCP 3988（键码经真机校准）+ IDC 回退（OpCmd_Key，已验证有效） |
 | 体感遥控 | ✅ | — | 陀螺仪/加速度经 IB 通道发送 |
 | 远程文字输入（挂起：测试机固件无能力） | ✅ | ✅ | 电视 IME 激活自动弹出（IDC 10600–10900）；测试机不推 `Ime_StartInput`，待换设备验证（见 TODO.md） |
-| 本地投屏 | ✅ | ✅ | 内嵌 HTTP 服务（8192+，Range），电视回拉；控制通道 TCP 13520（ddhParams 下发，实测 13521）；播放状态/进度轮询 playback-info |
+| 本地投屏 | ✅ | ✅ | 内嵌 HTTP 服务（8192+，Range），电视回拉；控制通道 ddhParams 优先，兜底依次试 13520/13521；播放状态/进度轮询 playback-info |
 | 电视截屏 | ✅ | ✅ | IDC Cmd 20900→21000，JPEG 回传保存（真机已验证，无需加密通道） |
 | 应用管理（测试机固件无此模块，待换设备验证） | ✅ | ✅ | 列表/打开/卸载/按 URL 推装（RPM over VConn；代码按协议实现，唯测试电视固件不提供 `com.yunos.idc.appstore` 模块，见 TODO.md 诊断档案） |
 | 语音指令 | ✅ | ✅ | 双端统一文本输入，经 `asr_streaming` 全会话帧转发（2026-07-25 真机验证；设备侧 STT 已放弃） |
@@ -81,8 +81,8 @@ sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 # 桌面端运行（开发模式）
 ./gradlew :desktopApp:run
 
-# 桌面端打包（Windows exe/msi）
-./gradlew :desktopApp:packageDistributionForCurrentOS
+# 桌面端打包（不含 JRE 的便携 fat jar，用户自备 Java 17+）
+./gradlew :desktopApp:distribNoJre
 ```
 
 ### 4. 运行测试
@@ -102,9 +102,9 @@ sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 |-----|------|------|
 | Test & Code Quality | `./gradlew check`（单元测试 + ktlint + detekt + Android lint 统一门禁） | 测试报告 |
 | Android APK | `:androidApp:assembleDebug`（门禁通过后） | `androidApp-debug.apk`（保留 14 天） |
-| Desktop (Windows) | `:desktopApp:packageDistributionForCurrentOS`（门禁通过后） | exe/msi 安装包（保留 14 天） |
+| Desktop (Windows) | `:desktopApp:distribNoJre`（门禁通过后） | `TVLink-no-jre/` 便携目录（fat jar + 启动 bat，保留 14 天） |
 
-> 桌面端仅 Windows runner：`desktopApp` 的 `targetFormats` 只声明 Exe/Msi，Linux 上无可打包格式。
+> 桌面端仅 Windows runner；产物为不含 JRE 的便携 fat jar，用户需自备 Java 17+。
 
 ---
 
@@ -163,7 +163,7 @@ tvhelper3/
 │   ├── src/desktopMain/         #   Desktop actual（AWT 对话框、截图保存）
 │   └── src/desktopTest/         #   单元测试
 ├── androidApp/                  # Android 应用壳（权限、MulticastLock）
-├── desktopApp/                  # Compose Desktop 壳（Windows exe/msi）
+├── desktopApp/                  # Compose Desktop 壳（便携 fat jar，不含 JRE）
 ├── docs/                        # 逆向分析文档
 │   ├── REPORT.md                #   总报告
 │   └── re/                      #   分模块协议细节（01–06）
@@ -185,7 +185,7 @@ tvhelper3/
 |------|------|--------|
 | IDC | TCP 13510 | 16B 大端头（magic=130311 / key / packetId / totalLen）+ 包体 |
 | IB | TCP 3988 | 20B 头（magic=0x11228899 / size / type / reserve / checksum）+ 文本包体 |
-| 投屏控制 | TCP 13520（ddhParams 可下发其他端口，如 13521） | HTTP/1.1 风格文本，`yunos-session-id` + `yunos-device-id` 头 |
+| 投屏控制 | TCP ddhParams 优先，兜底依次试 13520/13521 | HTTP/1.1 风格文本，`yunos-session-id` + `yunos-device-id` 头 |
 | 媒体服务 | TCP 8192+ | 标准 HTTP/1.1 + Range（电视回拉） |
 | mDNS | UDP 5353 | `_alitv_remote_control._tcp.local` 查询 |
 | DETECT | TCP 13511 | IDC 握手子集（设备发现用） |

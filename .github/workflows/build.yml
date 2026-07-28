@@ -74,9 +74,8 @@ jobs:
 
   desktop:
     name: Desktop (Windows)
-    # 仅 Windows 运行：desktopApp 的 targetFormats 只声明了 Exe/Msi（见 desktopApp/build.gradle.kts），
-    # ubuntu 上 packageDistributionForCurrentOS 没有任何可产出的格式，该矩阵腿只能空跑/报错。
-    # 若未来需要 Linux 安装包：targetFormats 增加 TargetFormat.Deb 并恢复 os 矩阵。
+    # 仅 Windows 运行：产物为不含 JRE 的便携 fat jar，需用户自备 Java 17+。
+    # 构建命令：./gradlew :desktopApp:distribNoJre
     runs-on: windows-latest
     needs: test-and-lint
     steps:
@@ -89,12 +88,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build desktop distribution
-        run: ./gradlew :desktopApp:packageDistributionForCurrentOS
+      - name: Build portable fat jar
+        run: ./gradlew :desktopApp:distribNoJre
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: tvlink-desktop-${{ runner.os }}
-          path: desktopApp/build/compose/binaries/main/
+          path: desktopApp/build/distrib-no-jre/TVLink-no-jre/
           retention-days: 14
