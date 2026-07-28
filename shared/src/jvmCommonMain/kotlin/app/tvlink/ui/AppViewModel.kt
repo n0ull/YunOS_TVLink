@@ -33,7 +33,7 @@ class AppViewModel : ViewModel() {
         /** 投屏控制端口兜底候选（ddh/mDNS 均未提供时按序尝试）。
          *  原 App 默认 13520；本 TV 固件实际监听 13521（ddh 实证）。
          *  不同固件端口可能不同，兜底时两个都试，避免写死单一端口。 */
-        private val CAST_FALLBACK_PORTS = intArrayOf(13520, 13521)
+        private val CAST_FALLBACK_PORTS = intArrayOf(CastController.DEFAULT_PORT, 13521)
     }
 
     // ---- navigation ----

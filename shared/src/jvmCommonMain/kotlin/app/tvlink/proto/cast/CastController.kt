@@ -16,8 +16,13 @@ import java.util.concurrent.TimeUnit
  */
 class CastController(
     private val host: String,
-    private val port: Int = 13520,
+    private val port: Int = DEFAULT_PORT,
 ) {
+    companion object {
+        /** 投屏控制通道默认端口（ddh/mDNS 均未提供时 AppViewModel 兜底依次试 DEFAULT_PORT/13521）。 */
+        const val DEFAULT_PORT = 13520
+    }
+
     enum class State { DISCONNECTED, CONNECTED }
 
     enum class PlayState { PREPARED, PLAYING, PAUSED, LOADING, STOPPED, COMPLETED, ERROR, OCCUPIED, UNKNOWN }
