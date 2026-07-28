@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
 
 # ib
 
@@ -12,7 +12,7 @@ data. Preferred over IDC for input due to lower overhead. Falls back to IDC OpCm
 
 | File           | Description                                                                          |
 |----------------|--------------------------------------------------------------------------------------|
-| `IbChannel.kt` | TCP 3988 session: connect/hello handshake, keepalive, key/motion send, reader thread |
+| `IbChannel.kt` | TCP 3988 session: connect/hello handshake, keepalive, key/motion send, reader thread; `readFrame` 校验 checksum，丢弃损坏帧 |
 
 ### commonMain counterpart
 

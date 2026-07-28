@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
 
 # cast
 
@@ -12,7 +12,7 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 
 | File                 | Description                                                                                                            |
 |----------------------|------------------------------------------------------------------------------------------------------------------------|
-| `CastController.kt`  | TCP control channel: setmedia/play/pause/seek/volume commands; play() 后 1s 轮询 `GET /playback-info` 驱动播放状态回调 |
+| `CastController.kt`  | TCP control channel: setmedia/play/pause/seek/volume commands; play() 后 1s 轮询 `GET /playback-info` 驱动播放状态回调; `DEFAULT_PORT = 13520` 为公共常量 |
 | `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back                              |
 
 ## For AI Agents
@@ -23,6 +23,7 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 - Session identified by `yunos-session-id` header (UUID per session); requests also carry `yunos-device-id`
 - **Tested firmware (server_vers 3.2.0) pushes no `POST /event`** — playback state/duration/position come from polling `/playback-info` (carries its own `state` field; unknown duration reported as `-1`)
 - `requestRaw` is serialized (`reqLock`) so the poller and UI actions can't cross responses
+- `DEFAULT_PORT = 13520` is the canonical cast control port; the projection data port is assigned by the TV at runtime (see `discoveredProjectionPort` in `DeviceManager`)
 - `MediaHttpServer` must support `Range` headers — TV uses partial fetches for large files
 - Reference: `docs/re/04-local-projection-screenshot.md`
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
 
 # device
 
@@ -13,11 +13,13 @@ lifecycle from discovery through connected sessions.
 | File                   | Description                                                                                                        |
 |------------------------|--------------------------------------------------------------------------------------------------------------------|
 | `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` + `onModuleAvailability` 回调(Module 在线状态变化) |
-| `Discovery.kt`         | 双通道设备发现: mDNS 组播 + /24 子网双探测(IDC 13511 + IB 3988 并行); 解析 IB hello 响应提取 `ibVer`/`ibSid`        |
+| `Discovery.kt`         | 双通道设备发现: mDNS 组播 + /24 子网双探测(IDC 13511 + IB 3988 并行); 解析 IB hello 响应提取 `ibVer`/`ibSid`; `report()` 用 `?: return` 安全早退(不用 `!!` 断言); `probeHost` 去掉内层 Thread 包装，直接在池内顺序探测 |
+| `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图); 调用侧(`AppViewModel`)wrap 20s 兜底超时，防止 `shotBusy` 永久 stuck |
 | `RcController.kt`      | Routes key events — IB preferred (needIb313 keys additionally require server ver≥313), IDC OpCmd_Key fallback(真机已验证有效) |
 | `RpmService.kt`        | Remote package management (list/install/uninstall apps); 自动 openVConn(module 在线时) + 挂起请求补发              |
-| `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图)                                       |
 | `AsrTextService.kt`    | Voice/text command forwarding via `com.yunos.tv.asr:etao` VConn module — 首包前自动 VConn SYN; sends finished `asr_streaming` packets; NLU runs on the TV |
+| `DongleSettingService.kt` | 魔投配网设置服务:驱动 `dongle/DongleBlePairer`,读取当前 SSID、触发配网流程; UI 在 `DongleScreen` |
+| `SysPropService.kt`    | 系统属性查询:经 IDC Cmd 读取 TV 端 `SysProp`,SettingsScreen 展示 |
 
 ## For AI Agents
 
@@ -32,7 +34,7 @@ lifecycle from discovery through connected sessions.
 - `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
 - `RcController.destroy()` = detach + scope cancel
 - `Discovery.FoundDevice` 含 `ibVer`/`ibSid`(IB 3988 探测产出,解析 hello 响应 body); `report()` 按 IP 合并,双通时 IDC 信息更丰富
-- **IB 双通道探测**: `probeHost` 对每个 host 并行探测 IDC(13511) + IB(3988),避免串行叠加超时; IB 探测用轻量 raw socket 发 hello 帧并校验 response magic + type
+- **IB 双通道探测**: 24 线程池跨 host 并行; 单 host 内 `probeHost` 顺序执行 `probeIdc()` → `probeIb()`(均在池线程内, 无内层 Thread 包装); IB 探测用轻量 raw socket 发 hello 帧并校验 response magic + type
 - `ScreenshotService.capture()` returns `Boolean` (false if no connection); caller guards `shotBusy`
 - `RcController` implements the IB-first-then-IDC-fallback policy from `docs/re/02`
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
 
 # idc
 
@@ -13,9 +13,8 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 | File               | Description                                                                                                                                           |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved); 提供 `onModuleChanged`/`openVConn` 管理 VConn 生命周期 |
+| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved); 提供 `onModuleChanged`/`openVConn` 管理 VConn 生命周期; `readPacket` 帧上限 16MB 降至 1MB |
 | `IdcPackets.kt`    | `IdcConst` wire constants (ports 13510/13511, magic 130311, packet IDs), packet data classes, LPString/LPBytes primitives, JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`) |
-| `IdcCrypto.kt`     | connKey derivation and optional encryption — DEAD CODE (ver=0 plaintext always; 真机已验证无加密可截屏); do not modify without ver≠0 TV                 |
 
 ## For AI Agents
 
@@ -53,6 +52,5 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 - java.net.Socket, java.io.DataInputStream/OutputStream
 - kotlinx-serialization-json (IdcPackets JSON utilities)
-- javax.crypto (IdcCrypto — dead code, ver=0 plaintext)
 
 <!-- MANUAL: -->
