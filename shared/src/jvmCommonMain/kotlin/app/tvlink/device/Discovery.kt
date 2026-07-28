@@ -107,7 +107,7 @@ class Discovery {
                         ibSid = d.ibSid.ifEmpty { existing.ibSid },
                     )
                 }
-            }!!
+            } ?: return
         onDeviceFound?.invoke(merged)
     }
 
