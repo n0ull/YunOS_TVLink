@@ -19,7 +19,7 @@ YunOS 电视/盒子的跨平台局域网控制客户端（Android + Windows 桌�
 - [协议要点](#协议要点)
 - [真机验证状态](#真机验证状态)
 - [配置说明](#配置说明)
-- [代码质量检查（ktlint / detekt）](#代码质量检查)
+- [代码质量检查（ktlint / detekt）](#代码质量检查ktlint--detekt)
 - [免责声明与许可证](#免责声明与许可证)
 
 ---
@@ -29,13 +29,13 @@ YunOS 电视/盒子的跨平台局域网控制客户端（Android + Windows 桌�
 | 功能 | Android | 桌面端 | 说明 |
 |------|:-------:|:------:|------|
 | 设备发现 | ✅ | ✅ | mDNS（`_alitv_remote_control._tcp.local`）+ /24 子网 TCP 13511 遍历 |
-| 遥控（按键/触控板/手柄/方向盘） | ✅ | ✅ | IB 快速通道 TCP 3988（键码经真机校准）+ IDC 回退（OpCmd_Key，已验证有效） |
+| 遥控（按键/触控板/手柄/方向盘） | ✅ | ✅ | IB 快速通道 TCP 3988 + IDC 回退（OpCmd_Key） |
 | 体感遥控 | ✅ | — | 陀螺仪/加速度经 IB 通道发送 |
-| 远程文字输入（挂起：测试机固件无能力） | ✅ | ✅ | 电视 IME 激活自动弹出（IDC 10600–10900）；测试机不推 `Ime_StartInput`，待换设备验证（见 TODO.md） |
+| 远程文字输入（挂起：测试机固件无此能力） | ✅ | ✅ | 电视 IME 激活自动弹出（IDC 10600～10900） |
 | 本地投屏 | ✅ | ✅ | 内嵌 HTTP 服务（8192+，Range），电视回拉；控制通道 ddhParams 优先，兜底依次试 13520/13521；播放状态/进度轮询 playback-info |
-| 电视截屏 | ✅ | ✅ | IDC Cmd 20900→21000，JPEG 回传保存（真机已验证，无需加密通道） |
-| 应用管理（测试机固件无此模块，待换设备验证） | ✅ | ✅ | 列表/打开/卸载/按 URL 推装（RPM over VConn；代码按协议实现，唯测试电视固件不提供 `com.yunos.idc.appstore` 模块，见 TODO.md 诊断档案） |
-| 语音指令 | ✅ | ✅ | 双端统一文本输入，经 `asr_streaming` 全会话帧转发（2026-07-25 真机验证；设备侧 STT 已放弃） |
+| 电视截屏 | ✅ | ✅ | IDC Cmd 20900→21000，JPEG 回传保存（无需加密通道） |
+| 应用管理（挂起：测试机固件无此模块） | ✅ | ✅ | 列表/打开/卸载/按 URL 推装（RPM over VConn） |
+| 语音指令 | ✅ | ✅ | 双端统一文本输入，经 `asr_streaming` 全会话帧转发 |
 | 魔投 BLE 配网（未测试） | ✅ | — | MagicCast 扫描 + GATT 写入 SSID/密码 |
 
 ---
@@ -58,8 +58,8 @@ YunOS 电视/盒子的跨平台局域网控制客户端（Android + Windows 桌�
 ### 1. 克隆项目
 
 ```bash
-git clone <repo-url> tvhelper3
-cd tvhelper3
+git clone <repo-url> YunOS_TVLink
+cd YunOS_TVLink
 ```
 
 ### 2. 配置 Android SDK
@@ -126,33 +126,33 @@ sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 - **手柄**：双摇杆 + ABXY/LB/RB/START/SELECT（游戏手柄键码）
 - **方向盘**：大圆盘拖动控制光标
 - **体感**（仅 Android）：陀螺仪/加速度实时转发
-- **文字输入（未测试，调不出来）**：电视激活 IME 后自动弹出输入框
+- **文字输入（挂起：测试机固件无此能力）**：电视激活 IME 后自动弹出输入框
 
 ### 投屏
 
-1. 进入「投屏」页面
+1. 进入“投屏”页面
 2. 选择本地视频/音频/图片文件
 3. 点击播放 → 电视通过 HTTP 回拉媒体；播放状态、总时长与进度每秒刷新
 
 ### 截屏
 
-进入「截屏」页面 → 点击「截取」→ JPEG 保存到本地。
+进入“截屏”页面 → 点击“截取”→ JPEG 保存到本地。
 
 ### 应用管理
 
-进入「应用」页面：查看已安装应用、打开、卸载、通过 APK URL 推装。
+进入“应用”页面：查看已安装应用、打开、卸载、通过 APK URL 推装。
 
 ---
 
 ## 项目结构
 
 ```
-tvhelper3/
+YunOS_TVLink/
 ├── shared/                      # 协议栈 + 共享 UI（Kotlin Multiplatform 库）
 │   ├── src/commonMain/          #   平台无关代码（IB 键码常量）
 │   ├── src/jvmCommonMain/       #   JVM 共用：协议实现 + Compose UI
 │   │   └── kotlin/app/tvlink/
-│   │       ├── device/          #     设备服务层（Discovery, DeviceManager, RcController...）
+│   │       ├── device/          #     设备服务层（Discovery、DeviceManager、RcController 等）
 │   │       ├── proto/           #     协议实现
 │   │       │   ├── idc/         #       IDC 控制协议（TCP 13510）
 │   │       │   ├── ib/          #       IB 快速输入通道（TCP 3988）
@@ -166,11 +166,12 @@ tvhelper3/
 ├── desktopApp/                  # Compose Desktop 壳（便携 fat jar，不含 JRE）
 ├── docs/                        # 逆向分析文档
 │   ├── REPORT.md                #   总报告
-│   └── re/                      #   分模块协议细节（01–06）
+│   └── re/                      #   分模块协议细节（01～06）
 ├── .github/                     # GitHub Actions CI（Build & Test 工作流）
-├── apktool_out/                 # 原 App 反编译资源（逆向参考，只读）
-├── jadx_out/                    # 原 App 反编译源码（逆向参考，只读）
-├── media/                       # 本地真机测试媒体（gitignored）
+├── apktool_out/                 # 原 App 反编译资源（逆向参考，只读，已 gitignore）
+├── jadx_out/                    # 原 App 反编译源码（逆向参考，只读，已 gitignore）
+├── media/                       # 本地真机测试媒体（已 gitignore）
+├── tools/                       # 本地研究工具（tvhelper_tool 探针脚本，已 gitignore）
 ├── TODO.md                      # 真机验证档案与待办清单（经 jadx 反编译复核）
 └── AGENTS.md                    # AI 代理导航文档（层级结构）
 ```
@@ -183,8 +184,8 @@ tvhelper3/
 
 | 协议 | 端口 | 帧格式 |
 |------|------|--------|
-| IDC | TCP 13510 | 16B 大端头（magic=130311 / key / packetId / totalLen）+ 包体 |
-| IB | TCP 3988 | 20B 头（magic=0x11228899 / size / type / reserve / checksum）+ 文本包体 |
+| IDC | TCP 13510 | 16 B 大端头（magic=130311 / key / packetId / totalLen）+ 包体 |
+| IB | TCP 3988 | 20 B 头（magic=0x11228899 / size / type / reserve / checksum）+ 文本包体 |
 | 投屏控制 | TCP ddhParams 优先，兜底依次试 13520/13521 | HTTP/1.1 风格文本，`yunos-session-id` + `yunos-device-id` 头 |
 | 媒体服务 | TCP 8192+ | 标准 HTTP/1.1 + Range（电视回拉） |
 | mDNS | UDP 5353 | `_alitv_remote_control._tcp.local` 查询 |
@@ -192,21 +193,20 @@ tvhelper3/
 
 **关键细节：**
 
-- 字符串与字节数组均为 4B 长度前缀 + UTF-8
+- 字符串与字节数组均为 4 B 长度前缀 + UTF-8
 - 登录后 `connKey` 作为后续帧的 key 字段（每帧必带，否则 TV 拒收）
-- 本客户端以 `encryption_algorithm_ver=0` 走明文会话（原协议支持的合法分支；真机已验证明文可截屏、可按键回退）
+- 本客户端以 `encryption_algorithm_ver=0` 走明文会话（原协议支持的合法分支）
 - Cmd 类包（截屏/SysProp 等）body = `LPString({"cmdReqID":N})` + `LPString({参数})`；`Cmd_LaunchSth` 为单段 LPString
 - IB checksum = `(size + reserve) ^ helloId`
-- 投屏播放状态：实测固件（server_vers 3.2.0）不推 `POST /event`，需轮询 `GET /playback-info`（自带 state 字段）
+- 投屏播放状态：固件（server_vers 3.2.0）不推 `POST /event`，需轮询 `GET /playback-info`（自带 state 字段）
 - 所有 socket 写均在后台发送线程执行（Android 主线程网络 IO 会崩溃）
 
 ---
 
 ## 真机验证状态
 
-在 YunOS TV（M638_ALI 系列）上实测通过：设备发现（子网兜底）、IDC 登录、
-按键/触控板/手柄遥控、电视截屏、投屏（状态/总时长/进度）、OpCmd_Key 回退、投屏 server-info。
-详见 [`TODO.md`](TODO.md) 的真机档案与遗留待办。
+功能矩阵中的 ✅ 项均在 YunOS TV（M638_ALI 系列）真机实测通过；标注挂起/未测试的项
+受制于测试机硬件能力或缺对应设备，代码侧已按协议就绪。验证档案与待办清单见 [`TODO.md`](TODO.md)。
 
 ---
 
@@ -226,7 +226,7 @@ tvhelper3/
 
 ## 代码质量检查
 
-代码风格与静态质量由 **ktlint**（格式）与 **detekt**（静态分析）保证，二者职责分离、规则不冲突：
+**ktlint**（格式）与 **detekt**（静态分析）分别负责代码风格与静态质量，二者职责分离、规则不冲突：
 
 - **ktlint** 负责格式（缩进、换行、尾随逗号、导入顺序、行宽、文件末尾换行等），遵循 Kotlin 官方编码规范（`ktlint_official`）。
 - **detekt** 负责静态分析（命名、复杂度、潜在缺陷、协程、性能、异常等），不启用 `formatting` 规则集，因此不会与 ktlint 重复检查。
