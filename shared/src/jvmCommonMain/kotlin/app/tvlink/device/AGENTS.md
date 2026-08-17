@@ -31,7 +31,7 @@ lifecycle from discovery through connected sessions.
 - **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调 → `onAppStoreModule()` 在 module(`MODULE_NAME` = "com.yunos.idc.appstore",线上名,见 `IdcConstant.java:6`)上线时经 `openVConnAndFlushPending()` 主动 `openVConn()` 并补发挂起请求; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
 - **模块唤醒**: module 离线时首个 RPM 请求经 `wakeModuleIfNeeded()` 发一次 `CmdLaunchSth`(launch_type=1/service, action="yunos.appstore.startprocessservice";`RpmObserver.java:74-77` 原流程),module 下线/detach 复位; `ModuleAvailability.m_name` 兼容 `{"name","category"}` 字符串化 JSON(`IDC.java:360-368`); `parseAppArray` 兼容 `apps` 单对象(`IdcPacket_GetListResponse.java:62-65`,回归见 `RpmFixTest`)
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
-- **建连单飞**：`connect()`/`connectIbOnly()` 经 `connectMutex` 串行化（重叠 connect 曾泄漏落败方整条 IDC 会话）;替换会话时先 `connection = null` 再 `shutdown()` 旧会话——旧会话 DISCONNECTED 回调经 `connection === conn` 判据落空，不误判异常断开排队伪重连
+- **建连单飞 + 世代守卫**：`connect()`/`connectIbOnly()` 经 `connectMutex` 串行化（重叠 connect 曾泄漏落败方整条 IDC 会话）;替换会话时先 `connection = null` 再 `shutdown()` 旧会话——旧会话 DISCONNECTED 回调经 `connection === conn` 判据落空，不误判异常断开排队伪重连;世代号(`AtomicInteger generation`)在请求时取号、锁内建连成功装回前校验——期间显式断开/另一次建连则放弃装回（防断开后设备自行连回）,`disconnect()` 递增世代使在途建连自弃
 - `DeviceManager.destroy()` cancels scope + releases connection; called from `AppViewModel.onCleared()`
 - `RcController.destroy()` = detach + scope cancel
 - `Discovery.FoundDevice` 含 `ibVer`/`ibSid`(IB 3988 探测产出,解析 hello 响应 body); `report()` 按 IP 合并,双通时 IDC 信息更丰富

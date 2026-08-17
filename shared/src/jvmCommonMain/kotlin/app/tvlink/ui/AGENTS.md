@@ -14,7 +14,7 @@ screens, theme, icons, and platform-abstracted widgets.
 |-------------------|-------------------------------------------------------------------------------------------------|
 | `App.kt`          | Root `@Composable` — TvTheme(遥控 tab 恒深)+ BackHandler + Snackbar;DevicePicker / MainShell 分发,提供 AppViewModel |
 | `AppViewModel.kt` | App 级协调者: 导航/连接生命周期/服务注册/Feature 装配; 暴露 `connectedIbVer`/`connectedIbSid`(IB 探测诊断信息);重连耗尽终态 FAILED 时 snackbar 提示(延迟复核,重试窗口内瞬态不报)  |
-| `CastFeature.kt`  | 投屏功能状态持有者: 控制通道单飞建连(connectMutex + 世代号防 onDisconnected 竞态复活) + 媒体服务器(仅服务已连 TV IP) + `CastUiState` 密封状态 |
+| `CastFeature.kt`  | 投屏功能状态持有者: 控制通道单飞建连(connectMutex + 世代号:锁顶与装回前双校验防断开竞态复活/误杀新通道;失败分支接管媒体服务器清理) + 媒体服务器(仅服务已连 TV IP,下次投屏清旧条目) + `CastUiState` 密封状态 |
 | `ShotFeature.kt`  | 截屏功能状态持有者: `ShotUiState` 密封状态 + 兜底超时复位;断线时 showNotice 提示不静默 |
 | `SysPropFeature.kt` | 属性查询状态持有者: `SysPropUiState` 密封状态;断线时 showNotice 提示不静默 |
 | `RemoteFeature.kt` | 遥控状态持有者: IME 输入态 + 按键/语音转发;双通道不可用时按键提示「未连接电视」不静默丢弃 |

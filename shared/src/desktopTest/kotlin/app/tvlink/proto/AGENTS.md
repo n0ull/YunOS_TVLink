@@ -17,12 +17,13 @@ real TV or network required.
 | `IdcConnectionTest.kt`         | 回环假 TV:异步发送(FIFO/connKey 有序/close 后不崩)+ Cmd 截图帧格式             |
 | `IdcConnectionLeakTest.kt`     | `IdcConnection` detect/连接失败后无 `idc-hb` 心跳线程泄漏                        |
 | `IdcFrameSkipTest.kt`          | 单帧畸形(LPString 越界)跳过不拆连:后续正常帧照达、会话存活                    |
+| `IdcStreamDesyncTest.kt`       | 另一侧护栏:magic 失步仍拆连(连接保持开放,验证非 EOF 触发)                   |
 | `IbChannelTest.kt`             | IB 假服务(固定 3988):握手不应答 soTimeout 快速失败 + hello 路径(sid/ver 解析、稳态空闲不掉线) |
 | `CastControllerTest.kt`        | 回环假 TV:`play()` 后轮询 `GET /playback-info` 驱动 onEvent + content-length 违规(超限/短 body/负值/超 Int)快速失败 |
 | `MdnsTest.kt`                  | mDNS 响应包解析(PTR/TXT)、查询包格式校验、外来服务应答不入列                  |
-| `MediaHttpServerTest.kt`       | 内嵌 HTTP 服务器:Range(206)/416、来源 IP 过滤、完整供片后注销、Content-Length |
+| `MediaHttpServerTest.kt`       | 内嵌 HTTP 服务器:Range(206)/416、来源 IP 正反过滤、反复拉取全供片、Content-Length |
 | `RpmFixTest.kt`                | RPM 修复回归 R1–R4:模块名常量 / LaunchSth 唤醒帧 / ModuleAvailability JSON m_name 分支 / apps 单对象兼容 |
-| `DeviceManagerConnectTest.kt`  | 重叠 connect 单飞:慢登录落败方 socket 见 EOF、胜方接管(假 TV 绑固定 13510)   |
+| `DeviceManagerConnectTest.kt`  | 重叠 connect 单飞 + 显式断开不复活(假 TV 绑固定 13510;tearDown 清理 prefs 节点) |
 
 ## For AI Agents
 

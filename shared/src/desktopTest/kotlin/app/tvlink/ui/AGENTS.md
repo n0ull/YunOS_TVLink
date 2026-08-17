@@ -12,7 +12,7 @@ JVM unit tests for `app.tvlink.ui` Feature 状态持有者（CastFeature/ShotFea
 
 | File                            | Description                                                                  |
 |---------------------------------|------------------------------------------------------------------------------|
-| `CastFeatureDisconnectTest.kt`  | onDisconnected 与在途 connect 竞态：终态无幽灵通道/媒体服务/UI（假投屏服务 accept-only） |
+| `CastFeatureDisconnectTest.kt`  | 断开竞态终态无幽灵通道/媒体服务/UI + 建连失败停媒体服务器清 url（假服务 `ServerSocket(0)` 显式传端口） |
 | `UiSilentFailureTest.kt`        | 断线时截屏/连拍/属性查询/按键均 showNotice 提示，不静默吞掉                      |
 
 ## For AI Agents

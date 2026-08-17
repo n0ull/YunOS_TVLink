@@ -13,7 +13,7 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 | File                 | Description                                                                                                            |
 |----------------------|------------------------------------------------------------------------------------------------------------------------|
 | `CastController.kt`  | TCP control channel: setmedia/play/pause/seek/volume commands; play() 后 1s 轮询 `GET /playback-info` 驱动播放状态回调; `DEFAULT_PORT = 13520` 为公共常量; content-length 负值/非数字/超 Int 范围=协议违规→交付空 body 后关通道 |
-| `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back; `allowedClientIp` 仅服务已连 TV; 完整 200 供片后注销条目; 畸形 Range 回 416 |
+| `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back; `allowedClientIp` 仅服务已连 TV(拒绝留痕); 畸形 Range 回 416; 条目存续至下次投屏被清 |
 
 ## For AI Agents
 
@@ -25,12 +25,12 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 - `requestRaw` is serialized (`reqLock`) so the poller and UI actions can't cross responses
 - `DEFAULT_PORT = 13520` is the canonical cast control port; the projection data port is assigned by the TV at runtime (see `discoveredProjectionPort` in `DeviceManager`)
 - `MediaHttpServer` must support `Range` headers — TV uses partial fetches for large files
-- `MediaHttpServer` 安全语义（2026-08 收紧）：媒体/封面 ID 为 UUID（不可枚举）；`start(localIp, allowedClientIp=tvIp)` 仅服务已连 TV 来源 IP；完整 200 供片后注销条目（206 分段保留——TV 拉流靠多次 Range）；不可满足 Range → 416 + `Content-Range: bytes */total`（勿写负 Content-Length）
+- `MediaHttpServer` 安全语义（2026-08 收紧）：媒体/封面 ID 为 UUID（不可枚举）；`start(localIp, allowedClientIp=tvIp)` 仅服务已连 TV 来源 IP（拒绝路径打日志：实际源 vs 期望）；条目存续至**下次投屏时被清**（`CastFeature.file()` 先 `clear()` 再注册——同时只播一个媒体；不做供片后注销：首请求若是完整 GET 渐进嗅探，注销会断后续 seek/Range）；不可满足 Range → 416 + `Content-Range: bytes */total`（勿写负 Content-Length）
 - Reference: `docs/re/04-local-projection-screenshot.md`
 
 ### Testing Requirements
 
-- Test files: `MediaHttpServerTest.kt` (Range 请求/416/IP 过滤/供片后注销), `CastControllerTest.kt` (polling loopback + content-length 违规)
+- Test files: `MediaHttpServerTest.kt` (Range 请求/416/IP 正反过滤/反复拉取), `CastControllerTest.kt` (polling loopback + content-length 违规)
 - Test HTTP Range responses, Content-Length correctness
 
 ### Common Patterns
