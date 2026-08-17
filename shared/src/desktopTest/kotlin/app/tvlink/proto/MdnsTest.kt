@@ -52,6 +52,37 @@ class MdnsTest {
         assertEquals(13520, d.projectionPort)
     }
 
+    /** 外来服务（打印机 _ipp）应答：PTR + A + TXT 全套，但不命中本服务。 */
+    private fun buildForeignResponse(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(byteArrayOf(0, 0, 0x84.toByte(), 0, 0, 0, 0, 3, 0, 0, 0, 0)) // an=3
+        // PTR: _ipp._tcp.local -> "HP Printer._ipp._tcp.local"
+        out.write(encodeName("_ipp._tcp.local"))
+        out.write(byteArrayOf(0, 12, 0, 1, 0, 0, 0, 60))
+        val ptrTarget = encodeName("HP Printer._ipp._tcp.local")
+        out.write(byteArrayOf((ptrTarget.size shr 8).toByte(), ptrTarget.size.toByte()))
+        out.write(ptrTarget)
+        // A: 192.168.1.60
+        out.write(encodeName("HP-Printer.local"))
+        out.write(byteArrayOf(0, 1, 0, 1, 0, 0, 0, 60)) // TYPE=A
+        out.write(byteArrayOf(0, 4, -64, -88, 1, 60)) // rdLen=4 + 192.168.1.60
+        // TXT: 打印机的 kv
+        out.write(encodeName("HP Printer._ipp._tcp.local"))
+        out.write(byteArrayOf(0, 16, 0, 1, 0, 0, 0, 60))
+        val kv = "note=office"
+        out.write(byteArrayOf(0, (kv.length + 1).toByte(), kv.length.toByte()))
+        out.write(kv.toByteArray())
+        return out.toByteArray()
+    }
+
+    @Test
+    fun foreignServicePacketsCreateNoDevice() {
+        // H2 回归：打印机/Chromecast 的应答不得进电视列表——只在 PTR 命中本服务时建条目
+        val devices = LinkedHashMap<String, Mdns.MdnsDevice>()
+        Mdns.parse(buildForeignResponse(), "192.168.1.60", devices)
+        assertEquals(0, devices.size, "foreign mDNS host leaked into TV list: $devices")
+    }
+
     @Test
     fun queryIsWellFormed() {
         val q = Mdns.buildQuery()

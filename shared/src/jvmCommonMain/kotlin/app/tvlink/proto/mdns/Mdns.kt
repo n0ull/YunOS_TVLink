@@ -58,7 +58,7 @@ object Mdns {
             buf.position(buf.position() + 4)
         }
         repeat(an) {
-            skipName(buf)
+            val owner = readName(buf)
             if (buf.remaining() < 10) return
             val type = buf.short.toInt() and 0xFFFF
             buf.short // class
@@ -66,26 +66,35 @@ object Mdns {
             val rdLen = buf.short.toInt() and 0xFFFF
             if (buf.remaining() < rdLen) return
             val rdStart = buf.position()
-            var dev = into.getOrPut(sourceIp) { MdnsDevice(ip = sourceIp) }
+            val dev = into[sourceIp]
             when (type) {
-                12 -> dev = dev.copy(name = readName(buf).removeSuffix(".$SERVICE").removeSuffix("."))
-                33 -> { // SRV
-                    buf.short
-                    buf.short
-                    dev = dev.copy(port = buf.short.toInt() and 0xFFFF)
-                }
+                // 只在 PTR 命中本服务时建条目（H2）：打印机/Chromecast 等外来主机的
+                // 应答不再混入电视列表；其余记录只向已建条目折叠，不凭空建条目
+                12 ->
+                    if (owner.equals(SERVICE, ignoreCase = true)) {
+                        val d = dev ?: MdnsDevice(ip = sourceIp)
+                        into[sourceIp] = d.copy(name = readName(buf).removeSuffix(".$SERVICE").removeSuffix("."))
+                    }
 
-                1 -> { // A
-                    if (rdLen == 4) {
+                33 ->
+                    if (dev != null) { // SRV
+                        buf.short
+                        buf.short
+                        into[sourceIp] = dev.copy(port = buf.short.toInt() and 0xFFFF)
+                    }
+
+                1 ->
+                    if (dev != null && rdLen == 4) { // A
                         val b = ByteArray(4)
                         buf.get(b)
-                        dev = dev.copy(ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() })
+                        into[sourceIp] = dev.copy(ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() })
                     }
-                }
 
-                16 -> dev = parseTxt(buf, rdStart + rdLen, dev) // TXT
+                16 ->
+                    if (dev != null) { // TXT
+                        into[sourceIp] = parseTxt(buf, rdStart + rdLen, dev)
+                    }
             }
-            into[sourceIp] = dev
             buf.position(rdStart + rdLen)
         }
     }
