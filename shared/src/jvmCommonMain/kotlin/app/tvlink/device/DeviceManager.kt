@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Facade over discovery + the active IDC session, exposing StateFlows for the UI.
@@ -44,6 +46,11 @@ class DeviceManager {
      *  @Volatile 仅保证可见性不保证原子性，故用 AtomicInteger。 */
     private val retries = AtomicInteger(0)
     private var reconnectJob: Job? = null
+
+    /** 建连单飞（同 CastFeature.connectMutex 范本）：重叠 connect 串行化——后发者等先发者完成后
+     *  再 shutdown 旧会话并接替；否则慢登录的落败方最后完成会覆盖 connection，
+     *  泄漏胜方整条 IDC 会话（3 线程 + socket）且两台 TV 的包混入同一 UI 流。 */
+    private val connectMutex = Mutex()
 
     @Volatile
     private var reconnectTarget: ConnectedDevice? = null
@@ -148,41 +155,47 @@ class DeviceManager {
         reconnectJob?.cancel()
         _connState.value = ConnState.CONNECTING
         scope.launch {
-            // kill any previous session before replacing it
-            connection?.shutdown()
-            connection = null
-            val conn = IdcConnection(ip, IdcConst.TCP_PORT)
-            wireCallbacks(conn)
-            val ok = conn.connect(LoginReq(devName = "TVLink-Client"))
-            if (ok) {
-                connection = conn
-                val di = conn.deviceInfo
-                // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)
-                val ddhPort =
-                    di
-                        ?.ddhParams
-                        ?.get("mediaprojection")
-                        ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
-                val dev =
-                    ConnectedDevice(
-                        ip = ip,
-                        name = di?.name ?: ip,
-                        model = di?.model ?: "",
-                        uuid = di?.uuid ?: "",
-                        mac = mac,
-                        projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
-                        ibVer = ibVer,
-                        ibSid = ibSid,
-                    )
-                retries.set(0)
-                reconnectTarget = dev
-                saveHistory(dev)
-                _connected.value = dev
-                _connState.value = ConnState.CONNECTED
-            } else {
-                _connState.value = ConnState.FAILED
-                // 重连周期内的失败继续排队下一次重试；用户发起的连接失败不自动重试
-                if (retries.get() in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
+            // 单飞锁串行化重叠建连（范本：CastFeature.connectMutex）
+            connectMutex.withLock {
+                // kill any previous session before replacing it。
+                // 先置 null 再 shutdown：旧会话 close() 触发的 DISCONNECTED 回调经
+                // `connection === conn` 判据自然落空，不会误判为异常断开而排队自动重连
+                val old = connection
+                connection = null
+                old?.shutdown()
+                val conn = IdcConnection(ip, IdcConst.TCP_PORT)
+                wireCallbacks(conn)
+                val ok = conn.connect(LoginReq(devName = "TVLink-Client"))
+                if (ok) {
+                    connection = conn
+                    val di = conn.deviceInfo
+                    // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)
+                    val ddhPort =
+                        di
+                            ?.ddhParams
+                            ?.get("mediaprojection")
+                            ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
+                    val dev =
+                        ConnectedDevice(
+                            ip = ip,
+                            name = di?.name ?: ip,
+                            model = di?.model ?: "",
+                            uuid = di?.uuid ?: "",
+                            mac = mac,
+                            projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
+                            ibVer = ibVer,
+                            ibSid = ibSid,
+                        )
+                    retries.set(0)
+                    reconnectTarget = dev
+                    saveHistory(dev)
+                    _connected.value = dev
+                    _connState.value = ConnState.CONNECTED
+                } else {
+                    _connState.value = ConnState.FAILED
+                    // 重连周期内的失败继续排队下一次重试；用户发起的连接失败不自动重试
+                    if (retries.get() in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
+                }
             }
         }
     }
@@ -198,26 +211,29 @@ class DeviceManager {
         reconnectJob?.cancel()
         _connState.value = ConnState.CONNECTING
         scope.launch {
-            connection?.shutdown()
-            connection = null
-            // 不建 IDC，直接置 CONNECTED；RcController.attach() 会据此 ip 建 IB 通道。
-            val dev =
-                ConnectedDevice(
-                    ip = ip,
-                    name = "电视 (IB)",
-                    model = "",
-                    uuid = "",
-                    mac = "",
-                    projectionPort = 0,
-                    ibVer = ibVer,
-                    ibSid = ibSid,
-                    ibOnly = true,
-                )
-            retries.set(0)
-            reconnectTarget = dev
-            saveHistory(dev)
-            _connected.value = dev
-            _connState.value = ConnState.CONNECTED
+            connectMutex.withLock {
+                val old = connection
+                connection = null
+                old?.shutdown()
+                // 不建 IDC，直接置 CONNECTED；RcController.attach() 会据此 ip 建 IB 通道。
+                val dev =
+                    ConnectedDevice(
+                        ip = ip,
+                        name = "电视 (IB)",
+                        model = "",
+                        uuid = "",
+                        mac = "",
+                        projectionPort = 0,
+                        ibVer = ibVer,
+                        ibSid = ibSid,
+                        ibOnly = true,
+                    )
+                retries.set(0)
+                reconnectTarget = dev
+                saveHistory(dev)
+                _connected.value = dev
+                _connState.value = ConnState.CONNECTED
+            }
         }
     }
 
