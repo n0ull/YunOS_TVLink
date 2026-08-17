@@ -138,6 +138,9 @@ class CastFeature(
             connectMutex.withLock {
                 connecting = true
                 try {
+                    // 等锁期间已出现更新意图（断开/另一次建连）：直接退出——
+                    // 无条件断旧会杀掉新 connect 刚建好的通道（M4）
+                    if (generation.get() != gen) return@withLock
                     controller?.disconnect()
                     controller = null
                     val candidates = if (port != 0) intArrayOf(port) else CAST_FALLBACK_PORTS
