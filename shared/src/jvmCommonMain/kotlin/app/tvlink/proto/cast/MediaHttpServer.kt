@@ -34,6 +34,10 @@ class MediaHttpServer {
     private var serverSocket: ServerSocket? = null
     private var pool: ExecutorService? = null
 
+    /** 仅服务此来源 IP（已连 TV）；null 不过滤。不可信网段下防同网段主机拉走投屏文件。 */
+    @Volatile
+    private var allowedClientIp: String? = null
+
     @Volatile
     private var running = false
 
@@ -56,6 +60,7 @@ class MediaHttpServer {
     fun start(
         localIp: String,
         startPort: Int = 8192,
+        allowedClientIp: String? = null,
     ): Boolean {
         stop()
         var p = startPort
@@ -73,6 +78,7 @@ class MediaHttpServer {
         serverSocket = ss
         port = p
         baseUrl = "http://$localIp:$p"
+        this.allowedClientIp = allowedClientIp
         running = true
         // ponytail: TV is the only client and uses Connection: close; 4 threads ample
         pool = Executors.newFixedThreadPool(4) { r -> Thread(r, "media-http-io").apply { isDaemon = true } }
@@ -93,6 +99,7 @@ class MediaHttpServer {
         pool?.shutdownNow()
         pool = null
         registry.clear()
+        allowedClientIp = null
     }
 
     private fun acceptLoop() {
@@ -121,6 +128,8 @@ class MediaHttpServer {
     private fun serve(client: Socket) {
         try {
             client.soTimeout = 10_000
+            val allowed = allowedClientIp
+            if (allowed != null && client.inetAddress.hostAddress != allowed) return close(client)
             val inp = client.getInputStream().bufferedReader(Charsets.ISO_8859_1)
             val requestLine = inp.readLine() ?: return close(client)
             val parts = requestLine.split(' ')
@@ -133,6 +142,9 @@ class MediaHttpServer {
             val total = entry.file.length()
             writeResponse(client, entry, total, range.present, resolveRange(range, total))
             close(client)
+            // 完整 200 供片后注销：条目不常驻，收窄投屏文件暴露窗口（私人文件）。
+            // 206 分段保留——TV 拉流靠多次 Range，注销会断播；失败重试走 Range 亦不受影响。
+            if (!range.present) registry.remove(path, entry)
         } catch (e: Exception) {
             System.err.println("MediaHttpServer: serve failed: ${e.message}")
             close(client)

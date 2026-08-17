@@ -7,6 +7,7 @@ import app.tvlink.proto.cast.CastController
 import app.tvlink.proto.cast.MediaHttpServer
 import app.tvlink.proto.mdns.Mdns
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -140,7 +141,7 @@ class CastFeature(
                     } else {
                         ui = CastUiState.Unavailable
                     }
-                    startMediaServer()
+                    startMediaServer(ip)
                 } finally {
                     connecting = false
                 }
@@ -171,9 +172,10 @@ class CastFeature(
         }
     }
 
-    private fun startMediaServer() {
+    private fun startMediaServer(tvIp: String) {
         val localIp = Mdns.localLanAddress()?.hostAddress
-        if (localIp != null && mediaServer.start(localIp)) {
+        // 仅服务已连 TV 的来源 IP：不可信网段下同网段主机无法拉走投屏文件
+        if (localIp != null && mediaServer.start(localIp, allowedClientIp = tvIp)) {
             mediaServerUrl = mediaServer.baseUrl
         }
     }
@@ -207,11 +209,12 @@ class CastFeature(
             showNotice("媒体服务未就绪")
             return
         }
+        // UUID 媒体 ID：毫秒时间戳可枚举（同网段可爆破拉走私人文件），UUID 不可猜测
         val id =
             when (type) {
-                "video" -> "video-item-${System.currentTimeMillis()}"
-                "audio" -> "audio-item-${System.currentTimeMillis()}"
-                else -> "image-item-${System.currentTimeMillis()}"
+                "video" -> "video-${UUID.randomUUID()}"
+                "audio" -> "audio-${UUID.randomUUID()}"
+                else -> "image-${UUID.randomUUID()}"
             }
         mediaServer.register(id, file)
         val url = mediaServer.urlFor(id)
@@ -228,7 +231,7 @@ class CastFeature(
             val thumbnail =
                 if (type == "audio") {
                     app.tvlink.ui.widgets.albumArtFile(path)?.let { cover ->
-                        val coverId = "cover-${System.currentTimeMillis()}"
+                        val coverId = "cover-${UUID.randomUUID()}"
                         mediaServer.register(coverId, cover, "image/jpeg")
                         mediaServer.urlFor(coverId)
                     }
