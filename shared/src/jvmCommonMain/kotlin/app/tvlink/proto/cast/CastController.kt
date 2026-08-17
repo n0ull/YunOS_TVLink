@@ -263,7 +263,9 @@ class CastController(
             return false
         }
         val len = rawLen.coerceAtMost(MAX_BODY_CHARS)
-        handleMessage(startLine, readBody(reader, len, rawLen))
+        // null = 对端声明 len 却提前 EOF（短 body）：帧已损坏，交付截断体会污染解析——关通道
+        val body = readBody(reader, len, rawLen) ?: return false
+        handleMessage(startLine, body)
         // 超限报文视为对端异常：本次响应已交付（流同步），关闭通道——重连由上层 ensureAlive/onResume 补建
         if (rawLen > MAX_BODY_CHARS) return false
         return true
@@ -287,17 +289,18 @@ class CastController(
      * 下界由调用方 rawLen<0 提前返回保证——负值不会到达这里）；
      * 剩余 total-keep 个字符用复用缓冲丢弃——维持流同步，让本次响应干净交付，
      * 之后由调用方关闭连接（超限即对端异常，不再继续解析）。
+     * 返回 null = 短 body（对端声明 total 却提前 EOF）：帧损坏，调用方据此关通道。
      */
     private fun readBody(
         reader: BufferedReader,
         keep: Int,
         total: Int,
-    ): String {
+    ): String? {
         val bodyChars = CharArray(keep)
         var read = 0
         while (read < keep) {
             val n = reader.read(bodyChars, read, keep - read)
-            if (n < 0) break
+            if (n < 0) return null
             read += n
         }
         // 超出保留上限的部分读取后丢弃；缓冲分配一次复用（超大 total 下逐次新建会产生 GB 级 churn）
@@ -306,7 +309,7 @@ class CastController(
             val discard = CharArray(DISCARD_CHUNK_CHARS)
             while (left > 0) {
                 val n = reader.read(discard, 0, minOf(discard.size, left))
-                if (n < 0) break
+                if (n < 0) return null
                 left -= n
             }
         }

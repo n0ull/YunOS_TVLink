@@ -47,9 +47,13 @@ class CastControllerTest {
                 contentLen = h.substringAfter(':').trim().toIntOrNull() ?: 0
             }
         }
+        val buf = CharArray(4096)
         var left = contentLen
         while (left > 0) {
-            left -= reader.read(CharArray(left.coerceAtMost(4096)))
+            // EOF 返回 -1：不减反增会死循环（left -= -1），必须 break
+            val n = reader.read(buf, 0, minOf(buf.size, left))
+            if (n < 0) break
+            left -= n
         }
     }
 
@@ -128,6 +132,38 @@ class CastControllerTest {
         }
         assertEquals(CastController.State.DISCONNECTED, cc.state)
         assertTrue(!cc.play(), "channel should reject requests after oversized body")
+        cc.disconnect()
+    }
+
+    /**
+     * 短 body EOF 回归：对端声明 Content-Length=100 只发 5 字节即断流——
+     * 帧已损坏，交付截断体会污染解析；reader 须判帧错误并关通道（而非按截断 body 交付）。
+     */
+    @Test
+    fun shortBodyEofClosesChannel() {
+        thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { sock ->
+                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
+                    val out = sock.getOutputStream()
+                    readStartLine(reader)
+                    consumeRest(reader)
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.write("short".toByteArray(Charsets.ISO_8859_1))
+                    out.flush()
+                }
+            }
+        }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        // 后台发请求（其响应永不到达，10s poll 超时由守护线程承担）
+        thread(isDaemon = true) { cc.pause() }
+        var waited = 0L
+        while (cc.state != CastController.State.DISCONNECTED && waited < 3_000) {
+            Thread.sleep(50)
+            waited += 50
+        }
+        assertEquals(CastController.State.DISCONNECTED, cc.state)
         cc.disconnect()
     }
 
