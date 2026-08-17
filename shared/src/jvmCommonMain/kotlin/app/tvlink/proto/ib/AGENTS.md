@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-08-18 -->
 
 # ib
 
@@ -12,7 +12,7 @@ data. Preferred over IDC for input due to lower overhead. Falls back to IDC OpCm
 
 | File           | Description                                                                          |
 |----------------|--------------------------------------------------------------------------------------|
-| `IbChannel.kt` | TCP 3988 session: connect/hello handshake, keepalive, key/motion send, reader thread; `readFrame` 校验 checksum，丢弃损坏帧 |
+| `IbChannel.kt` | TCP 3988 session: connect/hello handshake, keepalive, key/motion send, reader thread; `readFrame` 校验 checksum，丢弃损坏帧;握手期 soTimeout=timeoutMs,hello 完成后复位 0(对端不应答快速失败,稳态空闲不误伤) |
 
 ### commonMain counterpart
 
@@ -33,6 +33,7 @@ data. Preferred over IDC for input due to lower overhead. Falls back to IDC OpCm
 ### Testing Requirements
 
 - Frame checksum logic should be unit-tested (deterministic given helloId)
+- `IbChannelTest.kt`: 握手不应答快速失败(soTimeout) + hello 正常路径(sid/ver 解析、稳态空闲不掉线)
 
 ### Common Patterns
 

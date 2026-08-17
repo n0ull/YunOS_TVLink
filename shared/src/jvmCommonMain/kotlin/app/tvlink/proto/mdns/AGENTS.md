@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-22 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-08-18 -->
 
 # mdns
 
@@ -20,6 +20,7 @@ mDNS/DNS-SD implementation for discovering YunOS TVs on the local network. Queri
 
 - Multicast group: 224.0.0.251:5353 (standard mDNS)
 - Service type: `_alitv_remote_control._tcp.local`
+- **只在 PTR 命中本服务时建条目**（2026-08 H2 修复）：SRV/A/TXT 仅折叠进已建条目——打印机/Chromecast 等外来主机应答不得入列（原实现任何记录都 `getOrPut` 建条目 → 幽灵设备）
 - Response parsing must handle partial/multi-packet responses gracefully
 - Used by `Discovery.kt` as one of two discovery channels (mDNS + subnet sweep)
 - Reference: `docs/re/01-device-discovery.md`

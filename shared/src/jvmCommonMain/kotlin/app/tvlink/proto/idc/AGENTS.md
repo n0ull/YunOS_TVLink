@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-08-18 -->
 
 # idc
 
@@ -13,7 +13,7 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 | File               | Description                                                                                                                                           |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved); 提供 `onModuleChanged`/`openVConn` 管理 VConn 生命周期; `readPacket` 帧上限 16MB 降至 1MB |
+| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved); 提供 `onModuleChanged`/`openVConn` 管理 VConn 生命周期; `readPacket` 帧上限 1MB;单帧 decode 异常跳过该帧续读(magic/total 失步才拆连) |
 | `IdcPackets.kt`    | `IdcConst` wire constants (ports 13510/13511, magic 130311, packet IDs), packet data classes, LPString/LPBytes primitives, JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`) |
 
 ## For AI Agents
@@ -32,7 +32,7 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 ### Testing Requirements
 
-- Test files: `IdcProtocolTest.kt` (frame round-trips), `IdcConnectionLeakTest.kt` (no thread leaks), `IdcConnectionTest.kt` (async send via loopback, Cmd framing)
+- Test files: `IdcProtocolTest.kt` (frame round-trips), `IdcConnectionLeakTest.kt` (no thread leaks), `IdcConnectionTest.kt` (async send via loopback, Cmd framing), `IdcFrameSkipTest.kt` (单帧畸形跳过不拆连)
 - Test frame encode/decode round-trips, especially header field ordering
 
 ### Common Patterns

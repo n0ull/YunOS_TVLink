@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-22 | Updated: 2026-07-24 -->
+<!-- Generated: 2026-07-22 | Updated: 2026-08-18 -->
 
 # proto (desktopTest)
 
@@ -16,10 +16,13 @@ real TV or network required.
 | `IdcProtocolTest.kt`           | IDC 帧编解码往返 + 头部字段校验(loginReq/heartBeat/loginResp/vconnData/AES 派生) |
 | `IdcConnectionTest.kt`         | 回环假 TV:异步发送(FIFO/connKey 有序/close 后不崩)+ Cmd 截图帧格式             |
 | `IdcConnectionLeakTest.kt`     | `IdcConnection` detect/连接失败后无 `idc-hb` 心跳线程泄漏                        |
-| `CastControllerTest.kt`        | 回环假 TV:`play()` 后轮询 `GET /playback-info` 驱动 onEvent(state/duration/position) |
-| `MdnsTest.kt`                  | mDNS 响应包解析(PTR/TXT)与查询包格式校验(捕获字节数组为夹具)                 |
-| `MediaHttpServerTest.kt`       | 内嵌 HTTP 服务器:完整文件服务 + Range 请求(206 分段)、Content-Length           |
+| `IdcFrameSkipTest.kt`          | 单帧畸形(LPString 越界)跳过不拆连:后续正常帧照达、会话存活                    |
+| `IbChannelTest.kt`             | IB 假服务(固定 3988):握手不应答 soTimeout 快速失败 + hello 路径(sid/ver 解析、稳态空闲不掉线) |
+| `CastControllerTest.kt`        | 回环假 TV:`play()` 后轮询 `GET /playback-info` 驱动 onEvent + content-length 违规(超限/短 body/负值/超 Int)快速失败 |
+| `MdnsTest.kt`                  | mDNS 响应包解析(PTR/TXT)、查询包格式校验、外来服务应答不入列                  |
+| `MediaHttpServerTest.kt`       | 内嵌 HTTP 服务器:Range(206)/416、来源 IP 过滤、完整供片后注销、Content-Length |
 | `RpmFixTest.kt`                | RPM 修复回归 R1–R4:模块名常量 / LaunchSth 唤醒帧 / ModuleAvailability JSON m_name 分支 / apps 单对象兼容 |
+| `DeviceManagerConnectTest.kt`  | 重叠 connect 单飞:慢登录落败方 socket 见 EOF、胜方接管(假 TV 绑固定 13510)   |
 
 ## For AI Agents
 
