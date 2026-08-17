@@ -255,10 +255,15 @@ class CastController(
         val startLine = reader.readLine() ?: return false
         if (startLine.isBlank()) return true
         val headers = readHeaders(reader)
-        // content-length 来自对端：coerceIn 同时压负值（防 NegativeArraySizeException）与超大值（限保留上限）
         val rawLen = headers["content-length"]?.toIntOrNull() ?: 0
-        val len = rawLen.coerceIn(0, MAX_BODY_CHARS)
-        handleMessage(startLine, readBody(reader, len, rawLen.coerceAtLeast(0)))
+        // 负 content-length 是协议违规：coerce 为 0 会把随后的 body 字节留在流中误解析为下一条消息
+        // （比旧实现的崩溃拆连更差）——交付空 body 解开在途请求后关通道快速失败，与超限同策略
+        if (rawLen < 0) {
+            handleMessage(startLine, "")
+            return false
+        }
+        val len = rawLen.coerceAtMost(MAX_BODY_CHARS)
+        handleMessage(startLine, readBody(reader, len, rawLen))
         // 超限报文视为对端异常：本次响应已交付（流同步），关闭通道——重连由上层 ensureAlive/onResume 补建
         if (rawLen > MAX_BODY_CHARS) return false
         return true

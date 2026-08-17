@@ -131,9 +131,13 @@ class CastControllerTest {
         cc.disconnect()
     }
 
-    /** 伪造 Content-Length: -1 回归：视为 0（不抛 NegativeArraySizeException），通道存活。 */
+    /**
+     * 伪造 Content-Length: -1（带杂散 body 字节）回归：协议违规快速失败——
+     * 交付空 body 解开在途请求后即关通道；杂散字节不得被误解析为下一条消息
+     * （coerce 为 0 继续解析会让后续响应错位、在途请求全部 10s 超时）。
+     */
     @Test
-    fun negativeContentLengthTreatedAsZero() {
+    fun negativeContentLengthDeliveredThenChannelCloses() {
         thread(isDaemon = true) {
             runCatching {
                 server.accept().use { sock ->
@@ -142,10 +146,7 @@ class CastControllerTest {
                     readStartLine(reader)
                     consumeRest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
-                    out.flush()
-                    readStartLine(reader)
-                    consumeRest(reader)
-                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.write("stray-junk-bytes".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
                 }
             }
@@ -153,7 +154,13 @@ class CastControllerTest {
         val cc = CastController("127.0.0.1", server.localPort)
         assertTrue(cc.connect(), "connect failed")
         assertTrue(cc.pause(), "negative content-length request failed")
-        assertTrue(cc.play(), "channel broken after negative content-length")
+        var waited = 0L
+        while (cc.state != CastController.State.DISCONNECTED && waited < 3_000) {
+            Thread.sleep(50)
+            waited += 50
+        }
+        assertEquals(CastController.State.DISCONNECTED, cc.state)
+        assertTrue(!cc.play(), "channel should reject requests after negative content-length")
         cc.disconnect()
     }
 
