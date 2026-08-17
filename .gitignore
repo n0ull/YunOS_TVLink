@@ -1,11 +1,14 @@
 # Gradle / build
 .gradle/
+.gradle-home/
 build/
 **/build/
+.kotlin/
 
 # IDE
 .idea/
 *.iml
+.vscode/
 
 # OMC operational state
 .omc/
