@@ -157,9 +157,14 @@ class CastFeature(
                         ui = CastUiState.Ready((ui as? CastUiState.Ready)?.status ?: CastStatus())
                         startMediaServer(ip)
                     } else {
-                        // 建连失败，或建连期间发生显式断开/更新建连（世代已变）——放弃装回
+                        // 建连失败，或建连期间发生显式断开/更新建连（世代已变）——放弃装回；
+                        // 媒体服务器一并停掉：旧 registry 持续运行且陈旧 mediaServerUrl
+                        // 会绕过 file() 的 isEmpty() 守卫（新一代建连成功时会自行 start 重建）
                         cc?.disconnect()
                         ui = CastUiState.Unavailable
+                        mediaServer.stop()
+                        mediaServerUrl = ""
+                        serverInfo = null
                     }
                 } finally {
                     connecting = false
