@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.tvlink.proto.cast.CastController
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.CastFeature
 import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.widgets.pickMediaFile
 
@@ -57,7 +58,7 @@ fun CastScreen(vm: AppViewModel) {
                     pendingType = null
                     if (path != null) {
                         val title = path.substringAfterLast('/').substringAfterLast('\\')
-                        vm.castFile(path, title, type)
+                        vm.cast.file(path, title, type)
                     }
                 }
             }
@@ -67,7 +68,7 @@ fun CastScreen(vm: AppViewModel) {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     // 密封状态分发：Unavailable=控制通道未建立，控件整组禁用
-                    val st = (vm.castUi as? AppViewModel.CastUiState.Ready)?.status
+                    val st = (vm.cast.ui as? CastFeature.CastUiState.Ready)?.status
                     Text(
                         st?.title?.takeIf { it.isNotEmpty() } ?: "未在投屏",
                         style = MaterialTheme.typography.titleMedium,
@@ -79,24 +80,24 @@ fun CastScreen(vm: AppViewModel) {
                     )
 
                     Spacer(Modifier.padding(8.dp))
-                    SeekBar(status = st, onSeek = { vm.castSeek(it) })
+                    SeekBar(status = st, onSeek = { vm.cast.seek(it) })
 
                     Spacer(Modifier.padding(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (st?.playState == CastController.PlayState.PLAYING) {
-                            Button(onClick = { vm.castPause() }) {
+                            Button(onClick = { vm.cast.pause() }) {
                                 Icon(AppIcons.Pause, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("暂停")
                             }
                         } else {
-                            Button(onClick = { vm.castPlay() }, enabled = st != null) {
+                            Button(onClick = { vm.cast.play() }, enabled = st != null) {
                                 Icon(AppIcons.PlayArrow, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("播放")
                             }
                         }
-                        OutlinedButton(onClick = { vm.castStop() }, enabled = st != null) {
+                        OutlinedButton(onClick = { vm.cast.stop() }, enabled = st != null) {
                             Icon(AppIcons.Stop, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("退出")
@@ -109,7 +110,7 @@ fun CastScreen(vm: AppViewModel) {
                         listOf(1, 2, 3).forEach { r ->
                             FilterChip(
                                 selected = st?.rate == r,
-                                onClick = { vm.castRateTo(r) },
+                                onClick = { vm.cast.rateTo(r) },
                                 enabled = st != null,
                                 label = { Text("${r}x") },
                             )
@@ -135,7 +136,7 @@ fun CastScreen(vm: AppViewModel) {
                             },
                             onValueChangeFinished = {
                                 dragging = false
-                                vm.castVolumeTo(dragVol.toInt())
+                                vm.cast.volumeTo(dragVol.toInt())
                             },
                             valueRange = 0f..30f,
                             enabled = st != null,
@@ -179,7 +180,7 @@ private fun MediaTypeCard(
  */
 @Composable
 private fun SeekBar(
-    status: AppViewModel.CastStatus?,
+    status: CastFeature.CastStatus?,
     onSeek: (Long) -> Unit,
 ) {
     var dragging by remember { mutableStateOf(false) }

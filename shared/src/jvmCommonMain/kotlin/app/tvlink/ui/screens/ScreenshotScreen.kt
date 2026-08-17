@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.ShotFeature
 import app.tvlink.ui.icons.AppIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,12 +47,12 @@ fun ScreenshotScreen(vm: AppViewModel) {
         ) {
             ElevatedCard(Modifier.weight(1f).fillMaxWidth()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    val shotState = vm.shotState
+                    val shotState = vm.shot.state
                     val shot =
                         when (shotState) {
-                            is AppViewModel.ShotUiState.Success -> shotState.jpeg
-                            is AppViewModel.ShotUiState.Capturing -> shotState.previous
-                            AppViewModel.ShotUiState.Idle -> null
+                            is ShotFeature.ShotUiState.Success -> shotState.jpeg
+                            is ShotFeature.ShotUiState.Capturing -> shotState.previous
+                            ShotFeature.ShotUiState.Idle -> null
                         }
                     if (shot == null) {
                         Text(
@@ -69,15 +70,15 @@ fun ScreenshotScreen(vm: AppViewModel) {
             }
 
             Spacer(Modifier.height(16.dp))
-            val busy = vm.shotState is AppViewModel.ShotUiState.Capturing
+            val busy = vm.shot.state is ShotFeature.ShotUiState.Capturing
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = { vm.takeScreenshot() }, enabled = !busy) {
+                FilledTonalButton(onClick = { vm.shot.capture() }, enabled = !busy) {
                     Text(if (busy) "截取中…" else "截屏")
                 }
-                FilledTonalButton(onClick = { vm.takeScreenshotBurst() }, enabled = !busy) {
+                FilledTonalButton(onClick = { vm.shot.captureBurst() }, enabled = !busy) {
                     Text("连拍 ×5")
                 }
-                (vm.shotState as? AppViewModel.ShotUiState.Success)?.let { success ->
+                (vm.shot.state as? ShotFeature.ShotUiState.Success)?.let { success ->
                     Button(
                         onClick = {
                             vm.notice =

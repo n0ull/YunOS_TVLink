@@ -46,7 +46,7 @@ fun AppsScreen(vm: AppViewModel) {
     var uninstallTarget by remember { mutableStateOf<RpmService.TvApp?>(null) }
 
     // 进屏即拉列表:module 未就绪时该请求同时触发 R2 唤醒,模块上线后经挂起补发回填
-    LaunchedEffect(Unit) { vm.refreshApps() }
+    LaunchedEffect(Unit) { vm.apps.refresh() }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -57,7 +57,7 @@ fun AppsScreen(vm: AppViewModel) {
                 }
             },
             actions = {
-                IconButton(onClick = { vm.refreshApps() }) {
+                IconButton(onClick = { vm.apps.refresh() }) {
                     Icon(AppIcons.Refresh, contentDescription = "刷新")
                 }
                 IconButton(onClick = { showInstall = true }) {
@@ -67,13 +67,13 @@ fun AppsScreen(vm: AppViewModel) {
         )
 
         Text(
-            "共 ${vm.tvApps.size} 个应用",
+            "共 ${vm.apps.tvApps.size} 个应用",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
-        if (vm.tvApps.isEmpty()) {
+        if (vm.apps.tvApps.isEmpty()) {
             Text(
                 "列表为空——电视的应用管理模块(com.yunos.idc.appstore)未就绪；部分固件不提供该模块。",
                 style = MaterialTheme.typography.bodyMedium,
@@ -86,7 +86,7 @@ fun AppsScreen(vm: AppViewModel) {
             Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(vm.tvApps, key = { it.packageName }) { app ->
+            items(vm.apps.tvApps, key = { it.packageName }) { app ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),

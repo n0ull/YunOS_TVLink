@@ -107,10 +107,19 @@ fun RemoteScreen(vm: AppViewModel) {
             when (mode) {
                 RcMode.KEYPAD ->
                     KeypadPanel(
-                        onKey = { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) },
+                        onKey = { if (it == RcKey.POWER) powerConfirm = true else vm.remote.keyClick(it) },
                     )
 
-                RcMode.TOUCHPAD -> TouchpadPanel(vm) { if (it == RcKey.POWER) powerConfirm = true else vm.keyClick(it) }
+                RcMode.TOUCHPAD ->
+                    TouchpadPanel(vm) {
+                        if (it ==
+                            RcKey.POWER
+                        ) {
+                            powerConfirm = true
+                        } else {
+                            vm.remote.keyClick(it)
+                        }
+                    }
                 RcMode.JOYSTICK -> JoystickPanel(vm)
                 RcMode.WHEEL -> WheelPanel(vm)
                 RcMode.MOTION -> MotionPanel(vm)
@@ -120,7 +129,7 @@ fun RemoteScreen(vm: AppViewModel) {
         BottomAppBar {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 app.tvlink.ui.widgets
-                    .VoiceButton(onText = { vm.voiceText(it) })
+                    .VoiceButton(onText = { vm.remote.voiceText(it) })
             }
         }
     }
@@ -133,7 +142,7 @@ fun RemoteScreen(vm: AppViewModel) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        vm.keyClick(RcKey.POWER)
+                        vm.remote.keyClick(RcKey.POWER)
                         powerConfirm = false
                     },
                 ) { Text("确定") }
@@ -142,18 +151,18 @@ fun RemoteScreen(vm: AppViewModel) {
         )
     }
 
-    if (vm.imeActive) {
+    if (vm.remote.imeActive) {
         AlertDialog(
-            onDismissRequest = { vm.imeCommit() },
+            onDismissRequest = { vm.remote.imeCommit() },
             title = { Text("电视请求输入") },
             text = {
                 OutlinedTextField(
-                    value = vm.imeText,
-                    onValueChange = { vm.imeChanged(it) },
-                    label = { Text(vm.imeHint.ifEmpty { "在手机上输入，实时同步到电视" }) },
+                    value = vm.remote.imeText,
+                    onValueChange = { vm.remote.imeChanged(it) },
+                    label = { Text(vm.remote.imeHint.ifEmpty { "在手机上输入，实时同步到电视" }) },
                 )
             },
-            confirmButton = { TextButton(onClick = { vm.imeCommit() }) { Text("完成") } },
+            confirmButton = { TextButton(onClick = { vm.remote.imeCommit() }) { Text("完成") } },
         )
     }
 }
@@ -318,10 +327,10 @@ private fun JoystickPanel(vm: AppViewModel) {
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcButton("LT", size = 52) { vm.keyClick(RcKey.PAD_LT) }
-            RcButton("LB", size = 52) { vm.keyClick(RcKey.PAD_LB) }
-            RcButton("RB", size = 52) { vm.keyClick(RcKey.PAD_RB) }
-            RcButton("RT", size = 52) { vm.keyClick(RcKey.PAD_RT) }
+            RcButton("LT", size = 52) { vm.remote.keyClick(RcKey.PAD_LT) }
+            RcButton("LB", size = 52) { vm.remote.keyClick(RcKey.PAD_LB) }
+            RcButton("RB", size = 52) { vm.remote.keyClick(RcKey.PAD_RB) }
+            RcButton("RT", size = 52) { vm.remote.keyClick(RcKey.PAD_RT) }
         }
         Row(
             Modifier.fillMaxWidth(),
@@ -341,12 +350,12 @@ private fun JoystickPanel(vm: AppViewModel) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                RcButton("Y", size = 48) { vm.keyClick(RcKey.PAD_Y) }
+                RcButton("Y", size = 48) { vm.remote.keyClick(RcKey.PAD_Y) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    RcButton("X", size = 48) { vm.keyClick(RcKey.PAD_X) }
-                    RcButton("B", size = 48) { vm.keyClick(RcKey.PAD_B) }
+                    RcButton("X", size = 48) { vm.remote.keyClick(RcKey.PAD_X) }
+                    RcButton("B", size = 48) { vm.remote.keyClick(RcKey.PAD_B) }
                 }
-                RcButton("A", size = 48) { vm.keyClick(RcKey.PAD_A) }
+                RcButton("A", size = 48) { vm.remote.keyClick(RcKey.PAD_A) }
             }
             Stick(
                 onRelease = {
@@ -359,8 +368,8 @@ private fun JoystickPanel(vm: AppViewModel) {
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcButton("SELECT", size = 52) { vm.keyClick(RcKey.PAD_SELECT) }
-            RcButton("START", size = 52) { vm.keyClick(RcKey.PAD_START) }
+            RcButton("SELECT", size = 52) { vm.remote.keyClick(RcKey.PAD_SELECT) }
+            RcButton("START", size = 52) { vm.remote.keyClick(RcKey.PAD_START) }
         }
     }
 }
@@ -393,8 +402,8 @@ private fun WheelPanel(vm: AppViewModel) {
             Box(Modifier.size(80.dp).background(Brand.accentBrush, CircleShape))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            RcButton("返回") { vm.keyClick(RcKey.BACK) }
-            RcButton("主页") { vm.keyClick(RcKey.HOME) }
+            RcButton("返回") { vm.remote.keyClick(RcKey.BACK) }
+            RcButton("主页") { vm.remote.keyClick(RcKey.HOME) }
         }
     }
 }
@@ -438,8 +447,8 @@ private fun MotionPanel(vm: AppViewModel) {
         )
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            RcButton("OK") { vm.keyClick(RcKey.OK) }
-            RcButton("返回") { vm.keyClick(RcKey.BACK) }
+            RcButton("OK") { vm.remote.keyClick(RcKey.OK) }
+            RcButton("返回") { vm.remote.keyClick(RcKey.BACK) }
         }
     }
 }

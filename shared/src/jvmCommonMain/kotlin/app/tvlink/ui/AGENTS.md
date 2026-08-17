@@ -13,7 +13,12 @@ screens, theme, icons, and platform-abstracted widgets.
 | File              | Description                                                                                     |
 |-------------------|-------------------------------------------------------------------------------------------------|
 | `App.kt`          | Root `@Composable` — TvTheme(遥控 tab 恒深)+ BackHandler + Snackbar;DevicePicker / MainShell 分发,提供 AppViewModel |
-| `AppViewModel.kt` | Central state: 连接生命周期/导航/服务代理; 截屏/属性查询/投屏用密封 UI 状态(`ShotUiState`/`SysPropUiState`/`CastUiState`); 暴露 `connectedIbVer`/`connectedIbSid`  |
+| `AppViewModel.kt` | App 级协调者: 导航/连接生命周期/服务注册/Feature 装配; 暴露 `connectedIbVer`/`connectedIbSid`(IB 探测诊断信息)  |
+| `CastFeature.kt`  | 投屏功能状态持有者: 控制通道单飞建连 + 媒体服务器 + `CastUiState` 密封状态 |
+| `ShotFeature.kt`  | 截屏功能状态持有者: `ShotUiState` 密封状态 + 兜底超时复位 |
+| `SysPropFeature.kt` | 属性查询状态持有者: `SysPropUiState` 密封状态 |
+| `RemoteFeature.kt` | 遥控状态持有者: IME 输入态 + 按键/语音转发 |
+| `AppsFeature.kt`  | TV 应用管理状态持有者: 应用列表流 + RPM 结果通知 |
 | `MainShell.kt`    | 连接后主壳 — 遥控/投屏/更多三 tab;窄屏 NavigationBar,≥600dp 宽屏 NavigationRail                 |
 
 ## Subdirectories
@@ -29,7 +34,7 @@ screens, theme, icons, and platform-abstracted widgets.
 
 ### Working In This Directory
 
-- `AppViewModel` is the single source of truth — screens observe its state, never own business logic
+- `AppViewModel` 为 App 级协调者;每屏功能状态/动作在该屏的 Feature 状态持有者(`vm.cast`/`vm.shot`/`vm.props`/`vm.remote`/`vm.apps`),随 AppViewModel 构造与 onCleared — screens observe state, never own business logic
 - Navigation: `Screen.DevicePicker` / `Screen.Main(tab, moreSub)`;tab 切换由 `MainShell` 承载(NavigationBar 窄屏 / NavigationRail ≥600dp 宽屏)
 - Platform-specific UI needs `expect`/`actual` in `widgets/Platform.kt`
 - All screens are in `jvmCommonMain` — both platforms render identical UI

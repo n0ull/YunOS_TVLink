@@ -52,7 +52,7 @@ fun MoreScreen(vm: AppViewModel) {
                     },
                     modifier =
                         Modifier.clickable {
-                            if (item.sub == AppViewModel.MoreSub.APPS) vm.refreshApps()
+                            if (item.sub == AppViewModel.MoreSub.APPS) vm.apps.refresh()
                             vm.navMore(item.sub)
                         },
                 )

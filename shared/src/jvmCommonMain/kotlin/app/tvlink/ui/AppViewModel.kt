@@ -14,31 +14,17 @@ import app.tvlink.device.RcController
 import app.tvlink.device.RpmService
 import app.tvlink.device.ScreenshotService
 import app.tvlink.device.SysPropService
-import app.tvlink.proto.cast.CastController
-import app.tvlink.proto.cast.MediaHttpServer
-import app.tvlink.proto.ib.RcKey
 import app.tvlink.proto.idc.IdcPacket
-import app.tvlink.proto.idc.ImeAction
-import app.tvlink.proto.idc.ImeFinishInput
-import app.tvlink.proto.idc.ImeStartInput
-import app.tvlink.proto.idc.ImeTextChange
-import app.tvlink.proto.mdns.Mdns
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
-/** Central app state shared by both platforms. */
+/**
+ * App 级协调者：导航、设备连接生命周期、服务注册表与各屏幕功能状态持有者
+ * （[cast]/[shot]/[props]/[remote]/[apps]，随本 ViewModel 构造与清理）的装配。
+ * 功能状态与动作已下沉到各 Feature 类；本类只做跨功能编排。
+ */
 class AppViewModel : ViewModel() {
-    companion object {
-        /** 投屏控制端口兜底候选（ddh/mDNS 均未提供时按序尝试）。
-         *  原 App 默认 13520；本 TV 固件实际监听 13521（ddh 实证）。
-         *  不同固件端口可能不同，兜底时两个都试，避免写死单一端口。 */
-        private val CAST_FALLBACK_PORTS = intArrayOf(CastController.DEFAULT_PORT, 13521)
-    }
-
     // ---- navigation ----
     sealed interface Screen {
         data object DevicePicker : Screen
@@ -87,19 +73,14 @@ class AppViewModel : ViewModel() {
     val screenshot = ScreenshotService(deviceManager)
     val sysprop = SysPropService(deviceManager)
     val dongleSettings = DongleSettingService(deviceManager)
-    val mediaServer = MediaHttpServer()
 
-    @Volatile
-    var cast: CastController? = null
-        private set
-
-    /** 投屏建连单飞：onConnected/onResume 可能并发触发 connectCast，重叠调用会互断对方
-     *  已建好的通道（各自先 disconnect 再建），Mutex 串行化避免。 */
-    private val castConnectMutex = Mutex()
-
-    /** 有在途建连标志：castFile 据此等待建连完成，而非立即判“投屏通道未就绪”。 */
-    @Volatile
-    private var castConnecting = false
+    // ---- feature state holders (per-screen) ----
+    val cast = CastFeature(viewModelScope) { notice = it }
+    val shot = ShotFeature(viewModelScope, screenshot)
+    val props = SysPropFeature(viewModelScope, sysprop)
+    val remote =
+        RemoteFeature(viewModelScope, deviceManager, rc, asr) { notice = it }
+    val apps = AppsFeature(viewModelScope, rpm) { notice = it }
 
     // ---- auto-reconnect ----
 
@@ -119,12 +100,10 @@ class AppViewModel : ViewModel() {
             deviceManager.connect(d.ip, d.projectionPort, d.ibVer, d.ibSid)
             return
         }
-        // IDC 在线但投屏控制通道死亡(后台被杀/请求异常)——单独补建
-        if (cast?.state != app.tvlink.proto.cast.CastController.State.CONNECTED) {
-            connectCast(d.ip, d.projectionPort)
-        }
+        cast.ensureAlive(d.ip, d.projectionPort)
     }
 
+    // ---- connection state ----
     var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
     var connectedName by mutableStateOf("")
     var connectedIp by mutableStateOf("")
@@ -135,78 +114,9 @@ class AppViewModel : ViewModel() {
     var connectedIbOnly by mutableStateOf(false)
     val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
 
-    // ---- IME (remote text input) ----
-    var imeActive by mutableStateOf(false)
-    var imeText by mutableStateOf("")
-    var imeHint by mutableStateOf("")
-
-    // ---- screenshot ----
-
-    /** 截屏 UI 状态（密封层级）：Capturing 携带上一帧，截取期间旧图保持显示。 */
-    sealed interface ShotUiState {
-        data object Idle : ShotUiState
-
-        data class Capturing(
-            val previous: ByteArray?,
-        ) : ShotUiState
-
-        data class Success(
-            val jpeg: ByteArray,
-        ) : ShotUiState
-    }
-
-    var shotState by mutableStateOf<ShotUiState>(ShotUiState.Idle)
-        private set
-
-    // ---- sysprop ----
-
-    /** 系统属性查询 UI 状态（密封层级）：Idle/Loading/Result。 */
-    sealed interface SysPropUiState {
-        data object Idle : SysPropUiState
-
-        data object Loading : SysPropUiState
-
-        data class Result(
-            val key: String,
-            val value: String,
-        ) : SysPropUiState
-    }
-
-    var sysPropState by mutableStateOf<SysPropUiState>(SysPropUiState.Idle)
-        private set
-
-    // ---- TV apps ----
-    val tvApps = mutableStateListOf<RpmService.TvApp>()
-
     // ---- dongle settings (module com.ali.ott.dongle.setting) ----
     var dongleOnline by mutableStateOf(false)
     var dongleInfo by mutableStateOf<DongleSettingService.SysInfo?>(null)
-
-    // ---- casting ----
-
-    /** 投屏播放快照（最近一次轮询/事件 + 本地乐观更新）。 */
-    data class CastStatus(
-        val title: String = "",
-        val playState: CastController.PlayState = CastController.PlayState.UNKNOWN,
-        val duration: Long = 0L,
-        val position: Long = 0L,
-        val volume: Int = 0,
-        val rate: Int = 1,
-    )
-
-    /** 投屏 UI 状态（密封层级）：Unavailable=控制通道未建立；Ready=通道就绪，status 为最新快照。 */
-    sealed interface CastUiState {
-        data object Unavailable : CastUiState
-
-        data class Ready(
-            val status: CastStatus = CastStatus(),
-        ) : CastUiState
-    }
-
-    var castUi by mutableStateOf<CastUiState>(CastUiState.Unavailable)
-        private set
-    var mediaServerUrl by mutableStateOf("")
-    var castServerInfo by mutableStateOf<CastController.ServerInfo?>(null)
 
     // ---- toast-ish ----
     var notice by mutableStateOf("")
@@ -237,12 +147,7 @@ class AppViewModel : ViewModel() {
                     connectedIbVer = ""
                     connectedIbSid = ""
                     connectedIbOnly = false
-                    mediaServerUrl = ""
-                    castServerInfo = null
-                    castUi = CastUiState.Unavailable
-                    cast?.disconnect()
-                    cast = null
-                    mediaServer.stop()
+                    cast.onDisconnected()
                 }
             }
         }
@@ -253,23 +158,6 @@ class AppViewModel : ViewModel() {
             }
         }
         deviceManager.packets.collectInVm { p -> handlePacket(p) }
-        rpm.appList.collectInVm { apps ->
-            tvApps.clear()
-            tvApps.addAll(apps)
-        }
-        rpm.installProgress.collectInVm { pr -> notice = "安装 ${pr.packageName}: ${pr.progress}%" }
-        rpm.opResults.collectInVm { r ->
-            notice =
-                if (r.errorCode == 0) {
-                    "${r.op} ${r.packageName} 成功"
-                } else {
-                    "${r.op} ${r.packageName} 失败 (${r.errorCode})"
-                }
-            if (r.errorCode == 0) rpm.getAppList()
-        }
-        screenshot.screenshots.collectInVm { jpeg -> shotState = ShotUiState.Success(jpeg) }
-        sysprop.values.collectInVm { v -> sysPropState = SysPropUiState.Result(v.key, v.value) }
-        rc.currentApp.collectInVm { app -> notice = "电视当前应用: $app" }
         dongleSettings.moduleOnline.collectInVm { online -> dongleOnline = online }
         dongleSettings.sysInfo.collectInVm { info -> dongleInfo = info }
 
@@ -288,95 +176,15 @@ class AppViewModel : ViewModel() {
             rpm.attach()
             dongleSettings.attach()
             val c = deviceManager.connected.value ?: return
-            connectCast(c.ip, c.projectionPort)
+            cast.onHostConnected(c.ip, c.projectionPort)
         }
     }
 
-    /**
-     * 投屏控制通道建立。先断旧通道再建新——2026-07-25 真机实证:重复 onConnected
-     * 不断旧通道会残留双控制会话,TV 侧会话归属错乱致播放/暂停/退出/音量全部失效。
-     *
-     * port=0 时（ddh/mDNS 均未提供）依次尝试 CAST_FALLBACK_PORTS；
-     * 原 App 默认 13520，本 TV 固件实际监听 13521（ddh 实证），不同固件可能不同。
-     */
-    private fun connectCast(
-        ip: String,
-        port: Int,
-    ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // 单飞锁：与并发 connectCast 串行，防止互断已建好的通道；断旧建新整体在锁内
-            castConnectMutex.withLock {
-                castConnecting = true
-                try {
-                    cast?.disconnect()
-                    cast = null
-                    val candidates = if (port != 0) intArrayOf(port) else CAST_FALLBACK_PORTS
-                    var cc: CastController? = null
-                    for (p in candidates) {
-                        val trial = CastController(ip, p)
-                        if (trial.connect()) {
-                            cc = trial
-                            break
-                        }
-                    }
-                    if (cc != null) {
-                        cc.onEvent = { st, dur, pos, vol, rate ->
-                            viewModelScope.launch(Dispatchers.Default) {
-                                updateCastStatus { s ->
-                                    s.copy(
-                                        playState = st,
-                                        duration = if (dur > 0) dur else s.duration,
-                                        position = pos,
-                                        volume = if (vol >= 0) vol else s.volume,
-                                        rate = if (rate > 0) rate else s.rate,
-                                    )
-                                }
-                            }
-                        }
-                        cast = cc
-                        // 重建保留旧快照：重连时 TV 往往仍在播放，标题/进度不清零（轮询随后校准）
-                        castUi = CastUiState.Ready((castUi as? CastUiState.Ready)?.status ?: CastStatus())
-                        castServerInfo = cc.serverInfo()
-                    } else {
-                        castUi = CastUiState.Unavailable
-                    }
-                    val localIp = Mdns.localLanAddress()?.hostAddress
-                    if (localIp != null && mediaServer.start(localIp)) {
-                        mediaServerUrl = mediaServer.baseUrl
-                    }
-                } finally {
-                    castConnecting = false
-                }
-            }
-        }
-    }
-
-    /** 等待在途建连完成并返回通道；无在途建连且通道为空时立即返回 null（不空等）。 */
-    private suspend fun awaitCastChannel(): CastController? {
-        // 上限覆盖兜底端口依次尝试（13520 超时 → 13521）的最坏耗时
-        var waited = 0L
-        while (waited <= 15_000L) {
-            cast?.let { return it }
-            if (!castConnecting) return null
-            kotlinx.coroutines.delay(200)
-            waited += 200
-        }
-        return null
-    }
-
+    /** 包路由：服务层分派（截图/属性应答）+ 遥控 IME 事件。 */
     private fun handlePacket(p: IdcPacket) {
         screenshot.handlePacket(p)
         sysprop.handlePacket(p)
-        when (p) {
-            is ImeStartInput ->
-                viewModelScope.launch(Dispatchers.Default) {
-                    imeText = p.initText
-                    imeHint = p.hint
-                    imeActive = true
-                }
-
-            is ImeFinishInput -> viewModelScope.launch(Dispatchers.Default) { imeActive = false }
-        }
+        remote.onPacket(p)
     }
 
     // ---- actions ----
@@ -403,142 +211,10 @@ class AppViewModel : ViewModel() {
         screen = Screen.DevicePicker
     }
 
-    fun keyClick(k: RcKey) = rc.keyClick(k)
-
-    fun imeCommit() {
-        deviceManager.connection?.send(ImeAction(-1))
-        imeActive = false
-    }
-
-    fun imeChanged(text: String) {
-        imeText = text
-        deviceManager.connection?.send(ImeTextChange(text, text.length))
-    }
-
-    fun takeScreenshot() {
-        if (!screenshot.capture()) return
-        shotState = ShotUiState.Capturing(currentShot())
-        resetCapturingAfter(10_000)
-    }
-
-    private fun currentShot(): ByteArray? = (shotState as? ShotUiState.Success)?.jpeg
-
-    /** 兜底超时后仍在 Capturing（TV 未应答）则回退上一帧/Idle，防止按钮永久禁用。 */
-    private fun resetCapturingAfter(timeoutMs: Long) {
-        viewModelScope.launch(Dispatchers.Default) {
-            kotlinx.coroutines.delay(timeoutMs)
-            val s = shotState as? ShotUiState.Capturing ?: return@launch
-            shotState = s.previous?.let { ShotUiState.Success(it) } ?: ShotUiState.Idle
-        }
-    }
-
-    /** 仅在 Ready 时更新投屏快照（Unavailable 无通道，丢弃事件）。 */
-    private fun updateCastStatus(block: (CastStatus) -> CastStatus) {
-        val r = castUi as? CastUiState.Ready ?: return
-        castUi = r.copy(status = block(r.status))
-    }
-
-    fun querySysProp(key: String) {
-        val k = key.trim()
-        if (k.isEmpty() || !sysprop.getProp(k)) return
-        sysPropState = SysPropUiState.Loading
-        viewModelScope.launch(Dispatchers.Default) {
-            kotlinx.coroutines.delay(10_000)
-            // TV 未应答兜底：仅在仍是本次 Loading 时复位，避免清掉已到结果
-            if (sysPropState is SysPropUiState.Loading) sysPropState = SysPropUiState.Idle
-        }
-    }
-
-    fun refreshApps() = rpm.getAppList()
-
-    fun castFile(
-        path: String,
-        title: String,
-        type: String,
-    ) {
-        val file = File(path)
-        if (!file.exists() || mediaServerUrl.isEmpty()) {
-            notice = "媒体服务未就绪"
-            return
-        }
-        val id =
-            when (type) {
-                "video" -> "video-item-${System.currentTimeMillis()}"
-                "audio" -> "audio-item-${System.currentTimeMillis()}"
-                else -> "image-item-${System.currentTimeMillis()}"
-            }
-        mediaServer.register(id, file)
-        val url = mediaServer.urlFor(id)
-        viewModelScope.launch(Dispatchers.IO) {
-            val cc =
-                // 建连在途时等其完成（点击投屏恰逢自动建连的竞态），而非立即判失败
-                awaitCastChannel() ?: run {
-                    notice = "投屏通道未就绪，请稍后重试"
-                    return@launch
-                }
-            updateCastStatus { it.copy(title = title) }
-            // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：Android 经 MediaStore 取封面
-            // 拷入缓存后按注册制供片（不走原 App 的绝对路径回退），失败则无封面投屏
-            val thumbnail =
-                if (type == "audio") {
-                    app.tvlink.ui.widgets.albumArtFile(path)?.let { cover ->
-                        val coverId = "cover-${System.currentTimeMillis()}"
-                        mediaServer.register(coverId, cover, "image/jpeg")
-                        mediaServer.urlFor(coverId)
-                    }
-                } else {
-                    null
-                }
-            val ok = cc.setMedia(type, url, title, thumbnail)
-            if (ok) cc.play() else notice = "投屏失败"
-        }
-    }
-
-    fun castSeek(ms: Long) {
-        viewModelScope.launch(Dispatchers.IO) { cast?.seek(ms) }
-    }
-
-    // 播放控制必须经 IO 线程:CastController 是阻塞 socket,Android 主线程直调
-    // 会抛 NetworkOnMainThreadException(message 为 null,曾误判为协议失败)。
-
-    fun castPlay() {
-        viewModelScope.launch(Dispatchers.IO) { cast?.play() }
-    }
-
-    fun castPause() {
-        viewModelScope.launch(Dispatchers.IO) { cast?.pause() }
-    }
-
-    fun castStop() {
-        viewModelScope.launch(Dispatchers.IO) { cast?.stop() }
-    }
-
-    /** 调 TV 音量并乐观更新本地值(轮询随后校准)。 */
-    fun castVolumeTo(v: Int) {
-        updateCastStatus { it.copy(volume = v) }
-        viewModelScope.launch(Dispatchers.IO) { cast?.volume(v) }
-    }
-
-    /** 播放倍速（POST /rate）：乐观更新本地值，轮询随后校准（与音量同模式）。 */
-    fun castRateTo(r: Int) {
-        updateCastStatus { it.copy(rate = r) }
-        viewModelScope.launch(Dispatchers.IO) { cast?.rate(r) }
-    }
-
-    fun takeScreenshotBurst() {
-        shotState = ShotUiState.Capturing(currentShot())
-        screenshot.captureBurst()
-        // 连拍 5 帧 × 300ms 间隔 + 每帧 TV 响应，20s 兜底足够覆盖
-        resetCapturingAfter(20_000)
-    }
-
-    fun voiceText(text: String) = asr.sendText(text)
-
     override fun onCleared() {
         rc.destroy()
         rpm.detach()
-        cast?.disconnect()
-        mediaServer.stop()
+        cast.destroy()
         deviceManager.destroy()
         super.onCleared()
     }

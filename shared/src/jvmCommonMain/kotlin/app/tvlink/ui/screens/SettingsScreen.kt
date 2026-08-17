@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.tvlink.ui.AppViewModel
+import app.tvlink.ui.SysPropFeature
 import app.tvlink.ui.icons.AppIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,7 +68,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     SettingItem(AppIcons.Link, "MAC", vm.connectedMac.ifEmpty { "未获取（仅 mDNS 发现携带）" })
                     SettingItem(AppIcons.Memory, "IB 版本", vm.connectedIbVer.ifEmpty { "未探测（手动连接）" })
                     SettingItem(AppIcons.Link, "IB sid", vm.connectedIbSid.ifEmpty { "未探测（手动连接）" })
-                    SettingItem(AppIcons.Wifi, "媒体服务", vm.mediaServerUrl.ifEmpty { "未启动" })
+                    SettingItem(AppIcons.Wifi, "媒体服务", vm.cast.mediaServerUrl.ifEmpty { "未启动" })
                     SettingItem(
                         AppIcons.Link,
                         "IB 快速通道",
@@ -98,15 +99,15 @@ fun SettingsScreen(vm: AppViewModel) {
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(8.dp))
-                        val propBusy = vm.sysPropState is AppViewModel.SysPropUiState.Loading
+                        val propBusy = vm.props.state is SysPropFeature.SysPropUiState.Loading
                         FilledTonalButton(
-                            onClick = { vm.querySysProp(propKey) },
+                            onClick = { vm.props.query(propKey) },
                             enabled = propKey.isNotBlank() && !propBusy,
                         ) {
                             Text(if (propBusy) "查询中…" else "查询")
                         }
                     }
-                    val propResult = vm.sysPropState as? AppViewModel.SysPropUiState.Result
+                    val propResult = vm.props.state as? SysPropFeature.SysPropUiState.Result
                     if (propResult != null) {
                         Text(
                             "${propResult.key} = ${propResult.value.ifEmpty { "(空)" }}",
@@ -139,7 +140,7 @@ fun SettingsScreen(vm: AppViewModel) {
                         SettingItem(AppIcons.Cast, "投屏", "不可用（IDC 未开放）")
                     } else {
                         // 投屏服务信息：连接后 GET /server-info 取一次（docs/re/04 §4）
-                        vm.castServerInfo?.let { si ->
+                        vm.cast.serverInfo?.let { si ->
                             SettingItem(AppIcons.Cast, "投屏服务", si.serverVers.ifEmpty { "未知" })
                             SettingItem(AppIcons.Link, "投屏协议版本", si.protocolVers.ifEmpty { "未知" })
                             SettingItem(AppIcons.Tv, "投屏服务标识", si.displayName.ifEmpty { si.serverCode }.ifEmpty { "—" })

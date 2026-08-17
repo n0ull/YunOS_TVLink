@@ -25,8 +25,8 @@ state and renders UI — no business logic lives here.
 ### Working In This Directory
 
 - Screens receive `AppViewModel` as parameter — never construct services directly
-- State observation: `val state by viewModel.xxx.collectAsState()`
-- User actions: call `viewModel.someAction()` — ViewModel handles threading
+- 屏级状态/动作走对应 Feature(`vm.cast.*`/`vm.shot.*`/`vm.props.*`/`vm.remote.*`/`vm.apps.*`);连接/导航走 `vm.*`
+- User actions: call feature methods — Feature/ViewModel handles threading
 - Add new screens: create file here;主 tab 接线在 `MainShell.kt`,More 子屏挂在 `MoreScreen.kt` + `AppViewModel` 的 MainTab/MoreSub
 
 ### Common Patterns
