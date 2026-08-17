@@ -132,9 +132,10 @@ class CastControllerTest {
     }
 
     /**
-     * 伪造 Content-Length: -1（带杂散 body 字节）回归：协议违规快速失败——
-     * 交付空 body 解开在途请求后即关通道；杂散字节不得被误解析为下一条消息
-     * （coerce 为 0 继续解析会让后续响应错位、在途请求全部 10s 超时）。
+     * 伪造 Content-Length: -1（后随完整伪响应）回归：协议违规快速失败——
+     * 交付空 body 解开在途请求后即关通道。伪响应必须是完整消息：旧实现（coerce 为 0 继续解析）
+     * 会把它当正常响应吞掉、通道保持存活（状态不落 DISCONNECTED 且后续 play() 成功），
+     * 本测试据此区分新旧行为；零散的非法字节在旧实现下同样会因 socket EOF 关通道，无法区分。
      */
     @Test
     fun negativeContentLengthDeliveredThenChannelCloses() {
@@ -146,7 +147,13 @@ class CastControllerTest {
                     readStartLine(reader)
                     consumeRest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
-                    out.write("stray-junk-bytes".toByteArray(Charsets.ISO_8859_1))
+                    // 完整伪响应（旧实现会误解析并吞掉它，通道不断）
+                    out.write("HTTP/1.1 400 JUNK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.flush()
+                    // 保持通道服务下一个请求：旧实现的 play() 会发到这里并成功（回归即被捕获）
+                    readStartLine(reader)
+                    consumeRest(reader)
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
                 }
             }

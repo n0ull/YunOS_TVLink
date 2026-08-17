@@ -283,7 +283,8 @@ class CastController(
     }
 
     /**
-     * 读 [keep] 个字符进 body（keep 已在调用方 coerceIn(0, MAX_BODY_CHARS)）；
+     * 读 [keep] 个字符进 body（上界由调用方 coerceAtMost(MAX_BODY_CHARS) 保证，
+     * 下界由调用方 rawLen<0 提前返回保证——负值不会到达这里）；
      * 剩余 total-keep 个字符用复用缓冲丢弃——维持流同步，让本次响应干净交付，
      * 之后由调用方关闭连接（超限即对端异常，不再继续解析）。
      */
