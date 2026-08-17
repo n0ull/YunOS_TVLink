@@ -154,9 +154,9 @@ class MediaHttpServer {
             }
             writeResponse(client, entry, total, range.present, span)
             close(client)
-            // 完整 200 供片后注销：条目不常驻，收窄投屏文件暴露窗口（私人文件）。
-            // 206 分段保留——TV 拉流靠多次 Range，注销会断播；失败重试走 Range 亦不受影响。
-            if (!range.present) registry.remove(path, entry)
+            // 不在供片后注销条目：注销时机押在未录包验证的 TV 行为上——首请求若为完整 GET
+            // （渐进嗅探，播放器常见），注销会断后续 seek/Range。暴露窗口收窄由
+            // CastFeature.file() 下次投屏清旧条目承担（同时只播一个媒体，天然成立）
         } catch (e: Exception) {
             System.err.println("MediaHttpServer: serve failed: ${e.message}")
             close(client)

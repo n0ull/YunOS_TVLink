@@ -23,17 +23,17 @@ class MediaHttpServerTest {
         assertTrue(server.start("127.0.0.1", 8192))
         server.register("video-item-1", tmp, "application/octet-stream")
 
-        // range GET 100..199 先行：完整 200 供片后条目即注销（H1 回归）
+        // full GET
+        val full = URL(server.urlFor("video-item-1")).readBytes()
+        assertEquals(content.size, full.size)
+        assertTrue(content.contentEquals(full))
+
+        // range GET 100..199
         val conn = URL(server.urlFor("video-item-1")).openConnection()
         conn.setRequestProperty("Range", "bytes=100-199")
         val range = conn.getInputStream().readBytes()
         assertEquals(100, range.size)
         assertTrue(content.copyOfRange(100, 200).contentEquals(range))
-
-        // full GET
-        val full = URL(server.urlFor("video-item-1")).readBytes()
-        assertEquals(content.size, full.size)
-        assertTrue(content.contentEquals(full))
 
         // unregistered path -> connection closes without data
         try {
@@ -55,7 +55,11 @@ class MediaHttpServerTest {
         assertTrue(server.start("127.0.0.1", 8192))
         server.register("audio-item-1", tmp, "audio/mpeg")
 
-        // 中段 Range（TV 大文件分段拉取）先行：完整 200 后条目即注销（H1 回归）
+        val full = URL(server.urlFor("audio-item-1")).readBytes()
+        assertEquals(content.size, full.size)
+        assertTrue(content.contentEquals(full))
+
+        // 中段 Range（TV 大文件分段拉取）
         val from = 3 * 1024 * 1024 + 11
         val to = 5 * 1024 * 1024 - 1
         val conn = URL(server.urlFor("audio-item-1")).openConnection()
@@ -63,10 +67,6 @@ class MediaHttpServerTest {
         val range = conn.getInputStream().readBytes()
         assertEquals(to - from + 1, range.size)
         assertTrue(content.copyOfRange(from, to + 1).contentEquals(range))
-
-        val full = URL(server.urlFor("audio-item-1")).readBytes()
-        assertEquals(content.size, full.size)
-        assertTrue(content.contentEquals(full))
         tmp.delete()
     }
 
@@ -88,28 +88,30 @@ class MediaHttpServerTest {
     }
 
     @Test
-    fun unregistersAfterFullServeButKeepsRangeServable() {
-        // H1 回归：Range(206) 供片保留条目（分段拉流可续）；完整 200 供片后注销，再取即拒
-        val tmp = File.createTempFile("tvlink-test-once", ".bin")
+    fun consecutiveFetchesAllServed() {
+        // 同一媒体可反复拉取（供片后不再注销——注销时机押在未录包验证的 TV 行为上：
+        // 首请求若为完整 GET 渐进嗅探，serve 后注销会断后续 seek/Range）；
+        // 暴露窗口收窄改由 CastFeature 下次投屏时清旧条目承担
+        val tmp = File.createTempFile("tvlink-test-repeat", ".bin")
         val content = ByteArray(4096) { (it % 251).toByte() }
         tmp.writeBytes(content)
         assertTrue(server.start("127.0.0.1", 8192))
-        server.register("one-shot", tmp)
+        server.register("repeat", tmp)
 
-        val conn = URL(server.urlFor("one-shot")).openConnection()
-        conn.setRequestProperty("Range", "bytes=0-99")
-        val head = conn.getInputStream().readBytes()
-        assertEquals(100, head.size)
-
-        val full = URL(server.urlFor("one-shot")).readBytes()
-        assertTrue(content.contentEquals(full))
-
-        try {
-            URL(server.urlFor("one-shot")).readBytes()
-            throw AssertionError("expected second full fetch to fail after unregister")
-        } catch (e: Exception) {
-            System.err.println("MediaHttpServerTest: post-serve fetch rejected as expected: ${e.message}")
+        fun fetch(rangeHeader: String? = null): ByteArray {
+            val conn = URL(server.urlFor("repeat")).openConnection() as HttpURLConnection
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            if (rangeHeader != null) conn.setRequestProperty("Range", rangeHeader)
+            val bytes = conn.getInputStream().readBytes()
+            conn.disconnect()
+            return bytes
         }
+
+        assertTrue(content.contentEquals(fetch()), "full fetch failed")
+        assertEquals(100, fetch("bytes=0-99").size, "first range fetch failed")
+        assertTrue(content.contentEquals(fetch()), "second full fetch failed")
+        assertEquals(100, fetch("bytes=500-599").size, "second range fetch failed")
         tmp.delete()
     }
 

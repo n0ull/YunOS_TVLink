@@ -228,6 +228,9 @@ class CastFeature(
             showNotice("媒体服务未就绪")
             return
         }
+        // 同时只播一个媒体：注册新条目前清掉上一次投屏的旧条目（含旧封面），
+        // 收窄注册表暴露窗口；本条目的媒体+封面随后一并注册，互不影响
+        mediaServer.clear()
         // UUID 媒体 ID：毫秒时间戳可枚举（同网段可爆破拉走私人文件），UUID 不可猜测
         val id =
             when (type) {
