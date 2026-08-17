@@ -71,6 +71,11 @@ class CastFeature(
     @Volatile
     private var connecting = false
 
+    /** 生命周期世代号：connect/onDisconnected 发起即递增。在途 connect 装回前校验世代未变
+     *  （期间发生显式断开则放弃装回，防幽灵通道复活）；onDisconnected 的异步清理同样校验——
+     *  之后已有新建连意图时由新 connect 接管清理，避免陈旧清理误杀新会话。 */
+    private val generation = java.util.concurrent.atomic.AtomicInteger(0)
+
     /** 控制通道存活（供 AppViewModel.onResume 判断是否需补建）。 */
     val channelAlive: Boolean
         get() = controller?.state == CastController.State.CONNECTED
@@ -89,17 +94,26 @@ class CastFeature(
         if (!channelAlive) connect(ip, port)
     }
 
-    /** IDC 断开（落 IDLE）：释放通道与媒体服务器，状态归零。 */
+    /** IDC 断开（落 IDLE）：释放通道与媒体服务器，状态归零。
+     *  清理收进 connectMutex（H4）：旧实现不进锁，在途 connect 会在清理完成后
+     *  又把 controller 装回并重启媒体服务——幽灵投屏通道 + HTTP 服务残留。 */
     fun onDisconnected() {
-        mediaServerUrl = ""
-        serverInfo = null
-        ui = CastUiState.Unavailable
-        controller?.disconnect()
-        controller = null
-        mediaServer.stop()
+        val g = generation.incrementAndGet()
+        scope.launch(Dispatchers.IO) {
+            connectMutex.withLock {
+                if (generation.get() != g) return@withLock // 之后已有新建连意图，清理由其接管
+                mediaServerUrl = ""
+                serverInfo = null
+                ui = CastUiState.Unavailable
+                controller?.disconnect()
+                controller = null
+                mediaServer.stop()
+            }
+        }
     }
 
     fun destroy() {
+        generation.incrementAndGet() // 在途 connect 不得在本对象销毁后装回通道
         controller?.disconnect()
         mediaServer.stop()
     }
@@ -115,6 +129,9 @@ class CastFeature(
         ip: String,
         port: Int,
     ) {
+        // 请求时取号（非协程内）：协程调度延迟会让后发的 onDisconnected 先递增，
+        // 请求顺序即世代顺序才能保证「建连期间断过连」判定不错漏
+        val gen = generation.incrementAndGet()
         scope.launch(Dispatchers.IO) {
             var built: CastController? = null
             // 单飞锁：与并发 connect 串行，防止互断已建好的通道；断旧建新整体在锁内
@@ -132,16 +149,18 @@ class CastFeature(
                             break
                         }
                     }
-                    if (cc != null) {
+                    if (cc != null && generation.get() == gen) {
                         wireEvents(cc)
                         controller = cc
                         built = cc
                         // 重建保留旧快照：重连时 TV 往往仍在播放，标题/进度不清零（轮询随后校准）
                         ui = CastUiState.Ready((ui as? CastUiState.Ready)?.status ?: CastStatus())
+                        startMediaServer(ip)
                     } else {
+                        // 建连失败，或建连期间发生显式断开/更新建连（世代已变）——放弃装回
+                        cc?.disconnect()
                         ui = CastUiState.Unavailable
                     }
-                    startMediaServer(ip)
                 } finally {
                     connecting = false
                 }
