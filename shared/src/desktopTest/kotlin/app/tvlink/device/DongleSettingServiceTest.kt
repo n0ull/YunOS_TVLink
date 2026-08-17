@@ -23,10 +23,8 @@ class DongleSettingServiceTest {
             """{"category":"immersive","messageType":"SysInfo","packageName":"com.ali.ott.dongle",""" +
                 """"requestId":1,"ip":"10.0.0.5","mac":"AA:BB:CC:DD:EE:FF","sn":"SN01","uuid":"U01",""" +
                 """"firmware":"3.0.1","current":"1080P 60Hz","resolution":["720P 60Hz","1080P 60Hz"]}"""
-        var got: DongleSettingService.SysInfo? = null
-        service.onSysInfo = { got = it }
         service.handle(json)
-        val info = got ?: error("SysInfo callback not fired")
+        val info = service.sysInfo.value ?: error("SysInfo flow not updated")
         assertEquals("3.0.1", info.firmware)
         assertEquals("10.0.0.5", info.ip)
         assertEquals("1080P 60Hz", info.current)
@@ -35,9 +33,7 @@ class DongleSettingServiceTest {
 
     @Test
     fun nonSysInfoMessagesAreIgnored() {
-        var got: DongleSettingService.SysInfo? = null
-        service.onSysInfo = { got = it }
         service.handle("""{"category":"immersive","messageType":"netDiagnosis","requestId":2}""")
-        assertNull(got)
+        assertNull(service.sysInfo.value)
     }
 }

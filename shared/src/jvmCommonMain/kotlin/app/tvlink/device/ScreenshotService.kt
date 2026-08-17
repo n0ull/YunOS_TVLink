@@ -3,6 +3,8 @@ package app.tvlink.device
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.ScreenShotReq
 import app.tvlink.proto.idc.ScreenShotResp
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 /**
  * TV screenshot over the IDC command channel (20900 -> 21000). See docs/re/04 §6.
@@ -10,18 +12,20 @@ import app.tvlink.proto.idc.ScreenShotResp
 class ScreenshotService(
     private val deviceManager: DeviceManager,
 ) {
-    var onScreenshot: ((jpeg: ByteArray) -> Unit)? = null
+    /** 每张 TV 截图应答一个元素（连拍逐张）。tryEmit 不阻塞读线程。 */
+    private val _screenshots = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8)
+    val screenshots: SharedFlow<ByteArray> = _screenshots
 
     /** 在途请求数：连拍时 >1，应答按 TCP 序到达逐张转发（docs/re/04 §6 原 App 长按连拍语义）。 */
     private val pending =
         java.util.concurrent.atomic
             .AtomicInteger(0)
 
-    /** Wire into DeviceManager.onPacket (compose with other consumers at the call site). */
+    /** Wire into DeviceManager.packets (compose with other consumers at the call site). */
     fun handlePacket(p: IdcPacket) {
         if (p is ScreenShotResp && pending.get() > 0 && p.imgData.isNotEmpty()) {
             pending.decrementAndGet()
-            onScreenshot?.invoke(p.imgData)
+            _screenshots.tryEmit(p.imgData)
         }
     }
 

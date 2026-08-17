@@ -3,6 +3,8 @@ package app.tvlink.device
 import app.tvlink.proto.idc.FlatJson
 import app.tvlink.proto.idc.parseJsonObject
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * 魔投（dongle）设置 —— IDC VConn 模块 "com.ali.ott.dongle.setting"（docs/re/03 §B.3，
@@ -35,8 +37,13 @@ class DongleSettingService(
         val resolutions: List<String> = emptyList(),
     )
 
-    var onSysInfo: ((SysInfo) -> Unit)? = null
-    var onModuleState: ((online: Boolean) -> Unit)? = null
+    /** 模块在线状态（下线/detach 时 false）。 */
+    private val _moduleOnline = MutableStateFlow(false)
+    val moduleOnline: StateFlow<Boolean> = _moduleOnline
+
+    /** 最近一次 SysInfo 应答；模块下线时清空。 */
+    private val _sysInfo = MutableStateFlow<SysInfo?>(null)
+    val sysInfo: StateFlow<SysInfo?> = _sysInfo
 
     private val requestId = AtomicInteger(1)
     private var moduleId: Int? = null
@@ -72,6 +79,7 @@ class DongleSettingService(
     ) {
         if (online) {
             moduleId = mid
+            _moduleOnline.value = true
             if (!vconnOpen) {
                 vconnOpen = true
                 deviceManager.connection?.openVConn(mid)
@@ -80,12 +88,13 @@ class DongleSettingService(
         } else {
             resetModuleState()
         }
-        onModuleState?.invoke(online)
     }
 
     private fun resetModuleState() {
         moduleId = null
         vconnOpen = false
+        _moduleOnline.value = false
+        _sysInfo.value = null
     }
 
     fun getSysInfo(): Boolean = send("getSysInfo", "")
@@ -124,7 +133,7 @@ class DongleSettingService(
     internal fun handle(json: String) {
         val j = parseJsonObject(json)
         if (j.str("messageType") != MSG_SYSINFO_RESP) return
-        onSysInfo?.invoke(parseSysInfo(j))
+        _sysInfo.value = parseSysInfo(j)
     }
 
     internal fun parseSysInfo(j: FlatJson): SysInfo =

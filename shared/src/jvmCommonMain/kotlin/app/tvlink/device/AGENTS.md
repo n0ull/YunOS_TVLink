@@ -41,7 +41,7 @@ lifecycle from discovery through connected sessions.
 ### Common Patterns
 
 - `CoroutineScope(SupervisorJob() + Dispatchers.IO)` per service
-- `MutableStateFlow` for observable state consumed by Compose `collectAsState()`
+- `MutableStateFlow`(状态)/`MutableSharedFlow`(事件, tryEmit) — services expose flows, not callbacks; consumed by `AppViewModel.collectInVm`
 - Thread-safe collections (`ConcurrentHashMap`, `AtomicInteger`) for callback-driven data
 
 ## Dependencies

@@ -9,7 +9,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,7 +36,9 @@ class RcController(
     private val _ibReady = MutableStateFlow(false)
     val ibReady: StateFlow<Boolean> = _ibReady
 
-    var onCurrentApp: ((String) -> Unit)? = null
+    /** TV 端当前前台应用（IB 通道推送，事件流）。 */
+    private val _currentApp = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val currentApp: SharedFlow<String> = _currentApp
 
     /** Call after IDC is ESTABLISHED. 重复 attach 先终止上一轮重连循环。 */
     fun attach() {
@@ -56,7 +60,7 @@ class RcController(
             val chan = IbChannel(ip)
             try {
                 val died = CompletableDeferred<Unit>()
-                chan.onCurrentApp = { onCurrentApp?.invoke(it) }
+                chan.onCurrentApp = { _currentApp.tryEmit(it) }
                 chan.onStateChanged = { s ->
                     _ibReady.value = (s == IbChannel.State.READY)
                     if (s == IbChannel.State.DISCONNECTED) died.complete(Unit)

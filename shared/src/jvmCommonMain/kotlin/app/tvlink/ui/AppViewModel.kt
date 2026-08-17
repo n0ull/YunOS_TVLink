@@ -25,6 +25,7 @@ import app.tvlink.proto.idc.ImeTextChange
 import app.tvlink.proto.mdns.Mdns
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 /** Central app state shared by both platforms. */
@@ -198,49 +199,40 @@ class AppViewModel : ViewModel() {
                 foundDevices.addAll(list)
             }
         }
-        deviceManager.onPacket = { p -> handlePacket(p) }
-        rpm.onAppList = { apps ->
-            viewModelScope.launch(Dispatchers.Default) {
-                tvApps.clear()
-                tvApps.addAll(apps)
-            }
+        deviceManager.packets.collectInVm { p -> handlePacket(p) }
+        rpm.appList.collectInVm { apps ->
+            tvApps.clear()
+            tvApps.addAll(apps)
         }
-        rpm.onInstallProgress = { pr ->
-            viewModelScope.launch(Dispatchers.Default) { notice = "安装 ${pr.packageName}: ${pr.progress}%" }
+        rpm.installProgress.collectInVm { pr -> notice = "安装 ${pr.packageName}: ${pr.progress}%" }
+        rpm.opResults.collectInVm { r ->
+            notice =
+                if (r.errorCode == 0) {
+                    "${r.op} ${r.packageName} 成功"
+                } else {
+                    "${r.op} ${r.packageName} 失败 (${r.errorCode})"
+                }
+            if (r.errorCode == 0) rpm.getAppList()
         }
-        rpm.onOpResult = { op, pkg, err ->
-            viewModelScope.launch(Dispatchers.Default) {
-                notice = if (err == 0) "$op $pkg 成功" else "$op $pkg 失败 ($err)"
-                if (err == 0) rpm.getAppList()
-            }
+        screenshot.screenshots.collectInVm { jpeg ->
+            lastShot = jpeg
+            shotBusy = false
         }
-        screenshot.onScreenshot = { jpeg ->
-            viewModelScope.launch(Dispatchers.Default) {
-                lastShot = jpeg
-                shotBusy = false
-            }
+        sysprop.values.collectInVm { v ->
+            sysPropBusy = false
+            sysPropResult = "${v.key} = ${v.value.ifEmpty { "(空)" }}"
         }
-        sysprop.onSysProp = { key, value ->
-            viewModelScope.launch(Dispatchers.Default) {
-                sysPropBusy = false
-                sysPropResult = "$key = ${value.ifEmpty { "(空)" }}"
-            }
-        }
-        rc.onCurrentApp = { app ->
-            viewModelScope.launch(Dispatchers.Default) { notice = "电视当前应用: $app" }
-        }
-        dongleSettings.onModuleState = { online ->
-            viewModelScope.launch(Dispatchers.Default) {
-                dongleOnline = online
-                if (!online) dongleInfo = null
-            }
-        }
-        dongleSettings.onSysInfo = { info ->
-            viewModelScope.launch(Dispatchers.Default) { dongleInfo = info }
-        }
+        rc.currentApp.collectInVm { app -> notice = "电视当前应用: $app" }
+        dongleSettings.moduleOnline.collectInVm { online -> dongleOnline = online }
+        dongleSettings.sysInfo.collectInVm { info -> dongleInfo = info }
 
         // 冷启动直连历史设备（原 App 亮屏/回前台按 SSID 历史直连，docs/re/01 §1；本项目全局一条）
         deviceManager.lastDevice()?.let { d -> deviceManager.connect(d.ip, d.projectionPort) }
+    }
+
+    /** 在 viewModelScope(Default) 收集服务层数据流并写入 Compose 状态（数据向上单向流）。 */
+    private fun <T> Flow<T>.collectInVm(block: (T) -> Unit) {
+        viewModelScope.launch(Dispatchers.Default) { collect { block(it) } }
     }
 
     private fun onConnected() {
@@ -445,7 +437,7 @@ class AppViewModel : ViewModel() {
     fun takeScreenshotBurst() {
         shotBusy = true
         screenshot.captureBurst()
-        // 兜底超时：TV 应答不足 count 张时 pending 不归零、onScreenshot 不触发，
+        // 兜底超时：TV 应答不足 count 张时 pending 不归零、screenshots 流不发射，
         // shotBusy 会永久 stuck。对比 takeScreenshot 的 10s 兜底（:351-353）。
         // 连拍 5 帧 × 300ms 间隔 + 每帧 TV 响应，20s 足够覆盖。
         viewModelScope.launch(Dispatchers.Default) {

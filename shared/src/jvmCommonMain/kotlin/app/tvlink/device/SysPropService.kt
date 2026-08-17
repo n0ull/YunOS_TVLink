@@ -3,6 +3,8 @@ package app.tvlink.device
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.SysPropReq
 import app.tvlink.proto.idc.SysPropResp
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 /**
  * TV 系统属性读写 over the IDC command channel (21100 -> 21200).
@@ -11,18 +13,25 @@ import app.tvlink.proto.idc.SysPropResp
 class SysPropService(
     private val deviceManager: DeviceManager,
 ) {
-    var onSysProp: ((key: String, value: String) -> Unit)? = null
+    data class SysPropValue(
+        val key: String,
+        val value: String,
+    )
+
+    /** 每次查询应答一个元素（prop_key 配对成功后）。tryEmit 不阻塞读线程。 */
+    private val _values = MutableSharedFlow<SysPropValue>(extraBufferCapacity = 4)
+    val values: SharedFlow<SysPropValue> = _values
 
     @Volatile
     private var pendingKey: String? = null
 
-    /** Wire into DeviceManager.onPacket (compose with other consumers at the call site). */
+    /** Wire into DeviceManager.packets (compose with other consumers at the call site). */
     fun handlePacket(p: IdcPacket) {
         val resp = p as? SysPropResp ?: return
         val expected = pendingKey ?: return
         if (resp.propKey != expected) return
         pendingKey = null
-        onSysProp?.invoke(resp.propKey, resp.propVal)
+        _values.tryEmit(SysPropValue(resp.propKey, resp.propVal))
     }
 
     fun getProp(key: String): Boolean = send(isGet = true, key = key, value = "")

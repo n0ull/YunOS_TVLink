@@ -5,6 +5,10 @@ import app.tvlink.proto.idc.jsonEscape
 import app.tvlink.proto.idc.parseJsonObject
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * RPM — remote package management over IDC VConn. Module wire name is "com.yunos.idc.appstore"
@@ -30,10 +34,28 @@ class RpmService(
         val status: String,
     )
 
-    var onAppList: ((List<TvApp>) -> Unit)? = null
-    var onSystemInfo: ((Map<String, String>) -> Unit)? = null
-    var onInstallProgress: ((InstallProgress) -> Unit)? = null
-    var onOpResult: ((op: String, packageName: String, errorCode: Int) -> Unit)? = null
+    /** Install/Uninstall/OpenApp 操作应答（"result" 错误码，0=成功）。 */
+    data class OpResult(
+        val op: String,
+        val packageName: String,
+        val errorCode: Int,
+    )
+
+    /** 最近一次拉取的应用列表（状态流，新订阅者立得当前值）。 */
+    private val _appList = MutableStateFlow<List<TvApp>>(emptyList())
+    val appList: StateFlow<List<TvApp>> = _appList
+
+    /** GetAppInfo/SystemInfo 应答（事件流，读线程 tryEmit 不阻塞）。 */
+    private val _systemInfo = MutableSharedFlow<Map<String, String>>(extraBufferCapacity = 4)
+    val systemInfo: SharedFlow<Map<String, String>> = _systemInfo
+
+    /** 安装进度推送（AppStatus, packetId 9）。 */
+    private val _installProgress = MutableSharedFlow<InstallProgress>(extraBufferCapacity = 16)
+    val installProgress: SharedFlow<InstallProgress> = _installProgress
+
+    /** 操作结果应答（install/uninstall/open）。 */
+    private val _opResults = MutableSharedFlow<OpResult>(extraBufferCapacity = 8)
+    val opResults: SharedFlow<OpResult> = _opResults
 
     private val requestId = AtomicInteger(1)
     private var moduleId: Int? = null
@@ -217,26 +239,26 @@ class RpmService(
         when (id) {
             ID_GETLIST_RESP -> {
                 val apps = parseAppArray(j.str("apps"))
-                onAppList?.invoke(apps)
+                _appList.value = apps
             }
 
             // GetAppInfoResponse(3): {"appIsExist":B,"packageName":"…",存在时内联 AppInfo}。
             ID_GETAPPINFO_RESP -> {
                 val existed = j.bool("appIsExist")
-                if (existed) onSystemInfo?.invoke(j.toMap())
+                if (existed) _systemInfo.tryEmit(j.toMap())
             }
 
-            ID_SYSTEMINFO -> onSystemInfo?.invoke(j.toMap())
+            ID_SYSTEMINFO -> _systemInfo.tryEmit(j.toMap())
             ID_INSTALL_STATUS ->
-                onInstallProgress?.invoke(
+                _installProgress.tryEmit(
                     // AppStatus(9) 推送用 "appStatus"(AbsIdcDataPacket.KEY_STATUS="appStatus"),与列表 "status" 不同。
                     InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus")),
                 )
 
             // Install/Uninstall/OpenApp/Update Response 统一用 "result"(KEY_RESULT="result"),非 "errorCode"。
-            ID_INSTALL_RESP -> onOpResult?.invoke("install", j.str("packageName"), j.int("result"))
-            ID_UNINSTALL_RESP -> onOpResult?.invoke("uninstall", j.str("packageName"), j.int("result"))
-            ID_OPENAPP_RESP -> onOpResult?.invoke("open", j.str("packageName"), j.int("result"))
+            ID_INSTALL_RESP -> _opResults.tryEmit(OpResult("install", j.str("packageName"), j.int("result")))
+            ID_UNINSTALL_RESP -> _opResults.tryEmit(OpResult("uninstall", j.str("packageName"), j.int("result")))
+            ID_OPENAPP_RESP -> _opResults.tryEmit(OpResult("open", j.str("packageName"), j.int("result")))
         }
     }
 

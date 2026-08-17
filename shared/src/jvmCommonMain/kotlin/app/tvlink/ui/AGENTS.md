@@ -40,7 +40,7 @@ screens, theme, icons, and platform-abstracted widgets.
 
 - `viewModelScope.launch(Dispatchers.IO)` for protocol calls from UI events
 - `collectAsState()` on `StateFlow` from device services
-- Callbacks from services → `mutableStateOf` update → automatic recomposition
+- Service data arrives as `StateFlow`/`SharedFlow` → `AppViewModel.collectInVm` copies into `mutableStateOf` → automatic recomposition (no service→VM callbacks)
 
 ## Dependencies
 

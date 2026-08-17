@@ -11,7 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -71,8 +73,10 @@ class DeviceManager {
     private val _modules = MutableStateFlow<List<IdcConnection.ModuleInfo>>(emptyList())
     val modules: StateFlow<List<IdcConnection.ModuleInfo>> = _modules
 
-    /** unmatched packets from the TV (IME events, screenshot resp, ...) */
-    var onPacket: ((IdcPacket) -> Unit)? = null
+    /** Unmatched packets from the TV (IME events, screenshot resp, ...).
+     *  读线程 tryEmit 不阻塞；缓冲满时丢弃（IME/截图应答低频，64 足够）。 */
+    private val _packets = MutableSharedFlow<IdcPacket>(extraBufferCapacity = 64)
+    val packets: SharedFlow<IdcPacket> = _packets
     private val vConnListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, ByteArray) -> Unit>()
 
     /**
@@ -271,7 +275,7 @@ class DeviceManager {
         conn.onModuleChanged = { moduleId, name, online ->
             moduleListeners.forEach { it(name, moduleId, online) }
         }
-        conn.onPacket = { p -> onPacket?.invoke(p) }
+        conn.onPacket = { p -> _packets.tryEmit(p) }
         conn.onVConnData = { mid, payload -> vConnListeners.forEach { it(mid, payload) } }
     }
 
