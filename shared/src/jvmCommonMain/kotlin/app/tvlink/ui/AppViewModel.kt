@@ -27,6 +27,8 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Central app state shared by both platforms. */
 class AppViewModel : ViewModel() {
@@ -90,6 +92,14 @@ class AppViewModel : ViewModel() {
     @Volatile
     var cast: CastController? = null
         private set
+
+    /** 投屏建连单飞：onConnected/onResume 可能并发触发 connectCast，重叠调用会互断对方
+     *  已建好的通道（各自先 disconnect 再建），Mutex 串行化避免。 */
+    private val castConnectMutex = Mutex()
+
+    /** 有在途建连标志：castFile 据此等待建连完成，而非立即判“投屏通道未就绪”。 */
+    @Volatile
+    private var castConnecting = false
 
     // ---- auto-reconnect ----
 
@@ -293,43 +303,65 @@ class AppViewModel : ViewModel() {
         ip: String,
         port: Int,
     ) {
-        cast?.disconnect()
-        cast = null
         viewModelScope.launch(Dispatchers.IO) {
-            val candidates = if (port != 0) intArrayOf(port) else CAST_FALLBACK_PORTS
-            var cc: CastController? = null
-            for (p in candidates) {
-                val trial = CastController(ip, p)
-                if (trial.connect()) {
-                    cc = trial
-                    break
-                }
-            }
-            if (cc != null) {
-                cc.onEvent = { st, dur, pos, vol, rate ->
-                    viewModelScope.launch(Dispatchers.Default) {
-                        updateCastStatus { s ->
-                            s.copy(
-                                playState = st,
-                                duration = if (dur > 0) dur else s.duration,
-                                position = pos,
-                                volume = if (vol >= 0) vol else s.volume,
-                                rate = if (rate > 0) rate else s.rate,
-                            )
+            // 单飞锁：与并发 connectCast 串行，防止互断已建好的通道；断旧建新整体在锁内
+            castConnectMutex.withLock {
+                castConnecting = true
+                try {
+                    cast?.disconnect()
+                    cast = null
+                    val candidates = if (port != 0) intArrayOf(port) else CAST_FALLBACK_PORTS
+                    var cc: CastController? = null
+                    for (p in candidates) {
+                        val trial = CastController(ip, p)
+                        if (trial.connect()) {
+                            cc = trial
+                            break
                         }
                     }
+                    if (cc != null) {
+                        cc.onEvent = { st, dur, pos, vol, rate ->
+                            viewModelScope.launch(Dispatchers.Default) {
+                                updateCastStatus { s ->
+                                    s.copy(
+                                        playState = st,
+                                        duration = if (dur > 0) dur else s.duration,
+                                        position = pos,
+                                        volume = if (vol >= 0) vol else s.volume,
+                                        rate = if (rate > 0) rate else s.rate,
+                                    )
+                                }
+                            }
+                        }
+                        cast = cc
+                        // 重建保留旧快照：重连时 TV 往往仍在播放，标题/进度不清零（轮询随后校准）
+                        castUi = CastUiState.Ready((castUi as? CastUiState.Ready)?.status ?: CastStatus())
+                        castServerInfo = cc.serverInfo()
+                    } else {
+                        castUi = CastUiState.Unavailable
+                    }
+                    val localIp = Mdns.localLanAddress()?.hostAddress
+                    if (localIp != null && mediaServer.start(localIp)) {
+                        mediaServerUrl = mediaServer.baseUrl
+                    }
+                } finally {
+                    castConnecting = false
                 }
-                cast = cc
-                castUi = CastUiState.Ready()
-                castServerInfo = cc.serverInfo()
-            } else {
-                castUi = CastUiState.Unavailable
-            }
-            val localIp = Mdns.localLanAddress()?.hostAddress
-            if (localIp != null && mediaServer.start(localIp)) {
-                mediaServerUrl = mediaServer.baseUrl
             }
         }
+    }
+
+    /** 等待在途建连完成并返回通道；无在途建连且通道为空时立即返回 null（不空等）。 */
+    private suspend fun awaitCastChannel(): CastController? {
+        // 上限覆盖兜底端口依次尝试（13520 超时 → 13521）的最坏耗时
+        var waited = 0L
+        while (waited <= 15_000L) {
+            cast?.let { return it }
+            if (!castConnecting) return null
+            kotlinx.coroutines.delay(200)
+            waited += 200
+        }
+        return null
     }
 
     private fun handlePacket(p: IdcPacket) {
@@ -439,7 +471,8 @@ class AppViewModel : ViewModel() {
         val url = mediaServer.urlFor(id)
         viewModelScope.launch(Dispatchers.IO) {
             val cc =
-                cast ?: run {
+                // 建连在途时等其完成（点击投屏恰逢自动建连的竞态），而非立即判失败
+                awaitCastChannel() ?: run {
                     notice = "投屏通道未就绪，请稍后重试"
                     return@launch
                 }
