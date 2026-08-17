@@ -52,6 +52,11 @@ class DeviceManager {
      *  泄漏胜方整条 IDC 会话（3 线程 + socket）且两台 TV 的包混入同一 UI 流。 */
     private val connectMutex = Mutex()
 
+    /** 生命周期世代号（同 CastFeature 范本）：connect/connectIbOnly/disconnect 发起即递增。
+     *  锁内建连（最坏 ~16s 端口兜底）成功后装回前校验世代——期间显式断开/另一次建连
+     *  则放弃装回，防「断开后设备自行连回」。请求时取号（非协程内）：取号顺序=请求顺序。 */
+    private val generation = AtomicInteger(0)
+
     @Volatile
     private var reconnectTarget: ConnectedDevice? = null
 
@@ -154,6 +159,7 @@ class DeviceManager {
         explicitDisconnect = false
         reconnectJob?.cancel()
         _connState.value = ConnState.CONNECTING
+        val gen = generation.incrementAndGet()
         scope.launch {
             // 单飞锁串行化重叠建连（范本：CastFeature.connectMutex）
             connectMutex.withLock {
@@ -167,6 +173,11 @@ class DeviceManager {
                 wireCallbacks(conn)
                 val ok = conn.connect(LoginReq(devName = "TVLink-Client"))
                 if (ok) {
+                    if (generation.get() != gen) {
+                        // 锁内建连期间出现更新意图（显式断开/另一次建连）：放弃装回
+                        conn.shutdown()
+                        return@withLock
+                    }
                     connection = conn
                     val di = conn.deviceInfo
                     // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)
@@ -210,8 +221,10 @@ class DeviceManager {
         explicitDisconnect = false
         reconnectJob?.cancel()
         _connState.value = ConnState.CONNECTING
+        val gen = generation.incrementAndGet()
         scope.launch {
             connectMutex.withLock {
+                if (generation.get() != gen) return@withLock // 等锁期间出现更新意图，放弃
                 val old = connection
                 connection = null
                 old?.shutdown()
@@ -305,6 +318,7 @@ class DeviceManager {
 
     fun disconnect() {
         explicitDisconnect = true
+        generation.incrementAndGet() // 使在途建连的装回检查失效（放弃安装）
         reconnectJob?.cancel()
         reconnectJob = null
         retries.set(0)

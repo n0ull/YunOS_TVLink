@@ -49,6 +49,14 @@ class DeviceManagerConnectTest {
         runCatching { sock1?.close() }
         runCatching { sock2?.close() }
         serverThread.join(2000)
+        // saveHistory 走 java.util.prefs userRoot（Windows=注册表）——清掉测试写入的历史设备，
+        // 避免真实 App 下次启动拿 127.0.0.1 当历史设备直连
+        runCatching {
+            java.util.prefs.Preferences
+                .userRoot()
+                .node("app/tvlink/device-history")
+                .removeNode()
+        }
     }
 
     /** 读 LoginReq → 延迟 → 回 LoginResp（帧格式与 IdcConnectionTest 假 TV 一致）。 */
@@ -104,6 +112,26 @@ class DeviceManagerConnectTest {
             }
             assertTrue(dm.connection != null, "no active connection after overlap")
             assertEquals(DeviceManager.ConnState.CONNECTED, dm.connState.value)
+        } finally {
+            dm.destroy()
+        }
+    }
+
+    @Test
+    fun disconnectDuringInflightConnectDoesNotResurrect() {
+        // H2' 回归：锁内阻塞建连期间用户显式断开——慢登录(1.5s)完成后不得装回
+        // connection/CONNECTED/reconnectTarget（旧实现断开后 ~秒级设备自行连回）
+        val dm = DeviceManager()
+        try {
+            dm.connect("127.0.0.1")
+            assertTrue(firstAccepted.await(5, TimeUnit.SECONDS), "connect never reached fake TV")
+            Thread.sleep(200) // 确保 conn 已进入延迟登录（锁内阻塞中）
+            dm.disconnect()
+
+            // 慢登录完成 + 装回检查点充分落地（假 TV 1.5s 应答 + 余量）
+            Thread.sleep(2_000)
+            assertTrue(dm.connection == null, "connection resurrected after explicit disconnect")
+            assertEquals(DeviceManager.ConnState.IDLE, dm.connState.value)
         } finally {
             dm.destroy()
         }
