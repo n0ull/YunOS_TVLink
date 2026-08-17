@@ -51,6 +51,9 @@ class IbChannel(
             val s = Socket()
             s.connect(InetSocketAddress(host, IbConst.PORT), timeoutMs)
             s.tcpNoDelay = true
+            // 握手期读超时（照 IdcConnection.connect 模式）：对端收包不应答则快速失败，
+            // 否则 readFrame 无限阻塞——connect 调用线程永久泄漏、IB 通道永不重试
+            s.soTimeout = timeoutMs
             socket = s
             out = s.getOutputStream()
             dataIn = DataInputStream(s.getInputStream())
@@ -72,6 +75,8 @@ class IbChannel(
             sendFrame(IbConst.REQ_MODULEINFO, ByteArray(0))
             // 对齐原 IbConn：建链后即发 DEFAULT 模式，消除「首帧前模式不确定」（docs/re/02 §2.1）
             sendFrame(IbConst.REQ_CHANGETYPE, "[${IbConst.CHANGETYPE_DEFAULT}]".toByteArray(Charsets.UTF_8))
+            // 握手完成即复位：稳态 reader 依赖无限阻塞读，soTimeout 残留会把空闲通道误判超时
+            s.soTimeout = 0
             sendExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "ib-send").apply { isDaemon = true } }
             setState(State.READY)
             startReader()
