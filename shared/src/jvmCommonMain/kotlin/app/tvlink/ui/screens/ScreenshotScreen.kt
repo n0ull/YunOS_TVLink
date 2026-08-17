@@ -46,7 +46,13 @@ fun ScreenshotScreen(vm: AppViewModel) {
         ) {
             ElevatedCard(Modifier.weight(1f).fillMaxWidth()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    val shot = vm.lastShot
+                    val shotState = vm.shotState
+                    val shot =
+                        when (shotState) {
+                            is AppViewModel.ShotUiState.Success -> shotState.jpeg
+                            is AppViewModel.ShotUiState.Capturing -> shotState.previous
+                            AppViewModel.ShotUiState.Idle -> null
+                        }
                     if (shot == null) {
                         Text(
                             "还没有截图，点击下方按钮截取电视画面",
@@ -63,19 +69,20 @@ fun ScreenshotScreen(vm: AppViewModel) {
             }
 
             Spacer(Modifier.height(16.dp))
+            val busy = vm.shotState is AppViewModel.ShotUiState.Capturing
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = { vm.takeScreenshot() }, enabled = !vm.shotBusy) {
-                    Text(if (vm.shotBusy) "截取中…" else "截屏")
+                FilledTonalButton(onClick = { vm.takeScreenshot() }, enabled = !busy) {
+                    Text(if (busy) "截取中…" else "截屏")
                 }
-                FilledTonalButton(onClick = { vm.takeScreenshotBurst() }, enabled = !vm.shotBusy) {
+                FilledTonalButton(onClick = { vm.takeScreenshotBurst() }, enabled = !busy) {
                     Text("连拍 ×5")
                 }
-                if (vm.lastShot != null) {
+                (vm.shotState as? AppViewModel.ShotUiState.Success)?.let { success ->
                     Button(
                         onClick = {
                             vm.notice =
                                 app.tvlink.ui.widgets
-                                    .saveShot(vm.lastShot!!) ?: "已保存"
+                                    .saveShot(success.jpeg) ?: "已保存"
                         },
                     ) {
                         Text("保存")

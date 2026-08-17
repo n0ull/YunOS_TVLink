@@ -131,12 +131,39 @@ class AppViewModel : ViewModel() {
     var imeHint by mutableStateOf("")
 
     // ---- screenshot ----
-    var lastShot by mutableStateOf<ByteArray?>(null)
-    var shotBusy by mutableStateOf(false)
+
+    /** 截屏 UI 状态（密封层级）：Capturing 携带上一帧，截取期间旧图保持显示。 */
+    sealed interface ShotUiState {
+        data object Idle : ShotUiState
+
+        data class Capturing(
+            val previous: ByteArray?,
+        ) : ShotUiState
+
+        data class Success(
+            val jpeg: ByteArray,
+        ) : ShotUiState
+    }
+
+    var shotState by mutableStateOf<ShotUiState>(ShotUiState.Idle)
+        private set
 
     // ---- sysprop ----
-    var sysPropResult by mutableStateOf("")
-    var sysPropBusy by mutableStateOf(false)
+
+    /** 系统属性查询 UI 状态（密封层级）：Idle/Loading/Result。 */
+    sealed interface SysPropUiState {
+        data object Idle : SysPropUiState
+
+        data object Loading : SysPropUiState
+
+        data class Result(
+            val key: String,
+            val value: String,
+        ) : SysPropUiState
+    }
+
+    var sysPropState by mutableStateOf<SysPropUiState>(SysPropUiState.Idle)
+        private set
 
     // ---- TV apps ----
     val tvApps = mutableStateListOf<RpmService.TvApp>()
@@ -146,12 +173,28 @@ class AppViewModel : ViewModel() {
     var dongleInfo by mutableStateOf<DongleSettingService.SysInfo?>(null)
 
     // ---- casting ----
-    var castState by mutableStateOf(CastController.PlayState.UNKNOWN)
-    var castDuration by mutableStateOf(0L)
-    var castPosition by mutableStateOf(0L)
-    var castVolume by mutableStateOf(0)
-    var castRate by mutableStateOf(1)
-    var castTitle by mutableStateOf("")
+
+    /** 投屏播放快照（最近一次轮询/事件 + 本地乐观更新）。 */
+    data class CastStatus(
+        val title: String = "",
+        val playState: CastController.PlayState = CastController.PlayState.UNKNOWN,
+        val duration: Long = 0L,
+        val position: Long = 0L,
+        val volume: Int = 0,
+        val rate: Int = 1,
+    )
+
+    /** 投屏 UI 状态（密封层级）：Unavailable=控制通道未建立；Ready=通道就绪，status 为最新快照。 */
+    sealed interface CastUiState {
+        data object Unavailable : CastUiState
+
+        data class Ready(
+            val status: CastStatus = CastStatus(),
+        ) : CastUiState
+    }
+
+    var castUi by mutableStateOf<CastUiState>(CastUiState.Unavailable)
+        private set
     var mediaServerUrl by mutableStateOf("")
     var castServerInfo by mutableStateOf<CastController.ServerInfo?>(null)
 
@@ -186,7 +229,7 @@ class AppViewModel : ViewModel() {
                     connectedIbOnly = false
                     mediaServerUrl = ""
                     castServerInfo = null
-                    castRate = 1
+                    castUi = CastUiState.Unavailable
                     cast?.disconnect()
                     cast = null
                     mediaServer.stop()
@@ -214,14 +257,8 @@ class AppViewModel : ViewModel() {
                 }
             if (r.errorCode == 0) rpm.getAppList()
         }
-        screenshot.screenshots.collectInVm { jpeg ->
-            lastShot = jpeg
-            shotBusy = false
-        }
-        sysprop.values.collectInVm { v ->
-            sysPropBusy = false
-            sysPropResult = "${v.key} = ${v.value.ifEmpty { "(空)" }}"
-        }
+        screenshot.screenshots.collectInVm { jpeg -> shotState = ShotUiState.Success(jpeg) }
+        sysprop.values.collectInVm { v -> sysPropState = SysPropUiState.Result(v.key, v.value) }
         rc.currentApp.collectInVm { app -> notice = "电视当前应用: $app" }
         dongleSettings.moduleOnline.collectInVm { online -> dongleOnline = online }
         dongleSettings.sysInfo.collectInVm { info -> dongleInfo = info }
@@ -271,15 +308,22 @@ class AppViewModel : ViewModel() {
             if (cc != null) {
                 cc.onEvent = { st, dur, pos, vol, rate ->
                     viewModelScope.launch(Dispatchers.Default) {
-                        castState = st
-                        if (dur > 0) castDuration = dur
-                        castPosition = pos
-                        if (vol >= 0) castVolume = vol
-                        if (rate > 0) castRate = rate
+                        updateCastStatus { s ->
+                            s.copy(
+                                playState = st,
+                                duration = if (dur > 0) dur else s.duration,
+                                position = pos,
+                                volume = if (vol >= 0) vol else s.volume,
+                                rate = if (rate > 0) rate else s.rate,
+                            )
+                        }
                     }
                 }
                 cast = cc
+                castUi = CastUiState.Ready()
                 castServerInfo = cc.serverInfo()
+            } else {
+                castUi = CastUiState.Unavailable
             }
             val localIp = Mdns.localLanAddress()?.hostAddress
             if (localIp != null && mediaServer.start(localIp)) {
@@ -341,21 +385,35 @@ class AppViewModel : ViewModel() {
 
     fun takeScreenshot() {
         if (!screenshot.capture()) return
-        shotBusy = true
+        shotState = ShotUiState.Capturing(currentShot())
+        resetCapturingAfter(10_000)
+    }
+
+    private fun currentShot(): ByteArray? = (shotState as? ShotUiState.Success)?.jpeg
+
+    /** 兜底超时后仍在 Capturing（TV 未应答）则回退上一帧/Idle，防止按钮永久禁用。 */
+    private fun resetCapturingAfter(timeoutMs: Long) {
         viewModelScope.launch(Dispatchers.Default) {
-            kotlinx.coroutines.delay(10_000)
-            shotBusy = false
+            kotlinx.coroutines.delay(timeoutMs)
+            val s = shotState as? ShotUiState.Capturing ?: return@launch
+            shotState = s.previous?.let { ShotUiState.Success(it) } ?: ShotUiState.Idle
         }
+    }
+
+    /** 仅在 Ready 时更新投屏快照（Unavailable 无通道，丢弃事件）。 */
+    private fun updateCastStatus(block: (CastStatus) -> CastStatus) {
+        val r = castUi as? CastUiState.Ready ?: return
+        castUi = r.copy(status = block(r.status))
     }
 
     fun querySysProp(key: String) {
         val k = key.trim()
         if (k.isEmpty() || !sysprop.getProp(k)) return
-        sysPropBusy = true
-        sysPropResult = ""
+        sysPropState = SysPropUiState.Loading
         viewModelScope.launch(Dispatchers.Default) {
             kotlinx.coroutines.delay(10_000)
-            sysPropBusy = false
+            // TV 未应答兜底：仅在仍是本次 Loading 时复位，避免清掉已到结果
+            if (sysPropState is SysPropUiState.Loading) sysPropState = SysPropUiState.Idle
         }
     }
 
@@ -385,7 +443,7 @@ class AppViewModel : ViewModel() {
                     notice = "投屏通道未就绪，请稍后重试"
                     return@launch
                 }
-            castTitle = title
+            updateCastStatus { it.copy(title = title) }
             // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：Android 经 MediaStore 取封面
             // 拷入缓存后按注册制供片（不走原 App 的绝对路径回退），失败则无封面投屏
             val thumbnail =
@@ -424,26 +482,21 @@ class AppViewModel : ViewModel() {
 
     /** 调 TV 音量并乐观更新本地值(轮询随后校准)。 */
     fun castVolumeTo(v: Int) {
-        castVolume = v
+        updateCastStatus { it.copy(volume = v) }
         viewModelScope.launch(Dispatchers.IO) { cast?.volume(v) }
     }
 
     /** 播放倍速（POST /rate）：乐观更新本地值，轮询随后校准（与音量同模式）。 */
     fun castRateTo(r: Int) {
-        castRate = r
+        updateCastStatus { it.copy(rate = r) }
         viewModelScope.launch(Dispatchers.IO) { cast?.rate(r) }
     }
 
     fun takeScreenshotBurst() {
-        shotBusy = true
+        shotState = ShotUiState.Capturing(currentShot())
         screenshot.captureBurst()
-        // 兜底超时：TV 应答不足 count 张时 pending 不归零、screenshots 流不发射，
-        // shotBusy 会永久 stuck。对比 takeScreenshot 的 10s 兜底（:351-353）。
-        // 连拍 5 帧 × 300ms 间隔 + 每帧 TV 响应，20s 足够覆盖。
-        viewModelScope.launch(Dispatchers.Default) {
-            kotlinx.coroutines.delay(20_000)
-            shotBusy = false
-        }
+        // 连拍 5 帧 × 300ms 间隔 + 每帧 TV 响应，20s 兜底足够覆盖
+        resetCapturingAfter(20_000)
     }
 
     fun voiceText(text: String) = asr.sendText(text)

@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,32 +66,37 @@ fun CastScreen(vm: AppViewModel) {
 
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
+                    // 密封状态分发：Unavailable=控制通道未建立，控件整组禁用
+                    val st = (vm.castUi as? AppViewModel.CastUiState.Ready)?.status
                     Text(
-                        if (vm.castTitle.isEmpty()) "未在投屏" else vm.castTitle,
+                        st?.title?.takeIf { it.isNotEmpty() } ?: "未在投屏",
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.padding(4.dp))
-                    AssistChip(onClick = {}, label = { Text("状态: ${vm.castState}") })
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(if (st != null) "状态: ${st.playState}" else "投屏通道未就绪") },
+                    )
 
                     Spacer(Modifier.padding(8.dp))
-                    SeekBar(vm)
+                    SeekBar(status = st, onSeek = { vm.castSeek(it) })
 
                     Spacer(Modifier.padding(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (vm.castState == CastController.PlayState.PLAYING) {
+                        if (st?.playState == CastController.PlayState.PLAYING) {
                             Button(onClick = { vm.castPause() }) {
                                 Icon(AppIcons.Pause, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("暂停")
                             }
                         } else {
-                            Button(onClick = { vm.castPlay() }) {
+                            Button(onClick = { vm.castPlay() }, enabled = st != null) {
                                 Icon(AppIcons.PlayArrow, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("播放")
                             }
                         }
-                        OutlinedButton(onClick = { vm.castStop() }) {
+                        OutlinedButton(onClick = { vm.castStop() }, enabled = st != null) {
                             Icon(AppIcons.Stop, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("退出")
@@ -102,8 +108,9 @@ fun CastScreen(vm: AppViewModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(1, 2, 3).forEach { r ->
                             FilterChip(
-                                selected = vm.castRate == r,
+                                selected = st?.rate == r,
                                 onClick = { vm.castRateTo(r) },
+                                enabled = st != null,
                                 label = { Text("${r}x") },
                             )
                         }
@@ -121,7 +128,7 @@ fun CastScreen(vm: AppViewModel) {
                         var dragging by remember { mutableStateOf(false) }
                         var dragVol by remember { mutableStateOf(0f) }
                         Slider(
-                            value = if (dragging) dragVol else vm.castVolume.toFloat(),
+                            value = if (dragging) dragVol else (st?.volume ?: 0).toFloat(),
                             onValueChange = {
                                 dragging = true
                                 dragVol = it
@@ -131,12 +138,13 @@ fun CastScreen(vm: AppViewModel) {
                                 vm.castVolumeTo(dragVol.toInt())
                             },
                             valueRange = 0f..30f,
+                            enabled = st != null,
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(8.dp))
                         // 拖动中预览目标音量,平时显示 TV 当前音量
                         Text(
-                            "${if (dragging) dragVol.toInt() else vm.castVolume}",
+                            "${if (dragging) dragVol.toInt() else st?.volume ?: 0}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -170,11 +178,18 @@ private fun MediaTypeCard(
  * TV 实际进度到位(±3s)则交还轮询,超时未到位则回退到实际进度。
  */
 @Composable
-private fun SeekBar(vm: AppViewModel) {
+private fun SeekBar(
+    status: AppViewModel.CastStatus?,
+    onSeek: (Long) -> Unit,
+) {
     var dragging by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf(false) }
     var override by remember { mutableStateOf(0f) }
-    val duration = vm.castDuration.toFloat().coerceAtLeast(1f)
+    val durationMs = status?.duration ?: 0L
+    val positionMs = status?.position ?: 0L
+    // 挂起循环内须读最新值：本地 val 快照不会随轮询更新，经 rememberUpdatedState 桥接
+    val currentPositionMs by rememberUpdatedState(positionMs)
+    val duration = durationMs.toFloat().coerceAtLeast(1f)
     val showOverride = dragging || pending
 
     LaunchedEffect(pending, override) {
@@ -182,7 +197,7 @@ private fun SeekBar(vm: AppViewModel) {
         val targetMs = override.toLong()
         var waited = 0L
         while (waited < 2500L) {
-            if (kotlin.math.abs(vm.castPosition - targetMs) <= 3000L) break
+            if (kotlin.math.abs(currentPositionMs - targetMs) <= 3000L) break
             kotlinx.coroutines.delay(200)
             waited += 200
         }
@@ -190,7 +205,7 @@ private fun SeekBar(vm: AppViewModel) {
     }
 
     Slider(
-        value = if (showOverride) override else vm.castPosition.toFloat().coerceIn(0f, duration),
+        value = if (showOverride) override else positionMs.toFloat().coerceIn(0f, duration),
         onValueChange = {
             dragging = true
             override = it
@@ -198,14 +213,14 @@ private fun SeekBar(vm: AppViewModel) {
         onValueChangeFinished = {
             dragging = false
             pending = true
-            vm.castSeek(override.toLong())
+            onSeek(override.toLong())
         },
         valueRange = 0f..duration,
-        enabled = vm.castDuration > 0,
+        enabled = durationMs > 0,
         modifier = Modifier.fillMaxWidth(),
     )
     Text(
-        "${fmtMs((if (showOverride) override.toLong() else vm.castPosition))} / ${fmtMs(vm.castDuration)}",
+        "${fmtMs((if (showOverride) override.toLong() else positionMs))} / ${fmtMs(durationMs)}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

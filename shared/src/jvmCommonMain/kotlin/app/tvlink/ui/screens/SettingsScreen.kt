@@ -98,16 +98,18 @@ fun SettingsScreen(vm: AppViewModel) {
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(8.dp))
+                        val propBusy = vm.sysPropState is AppViewModel.SysPropUiState.Loading
                         FilledTonalButton(
                             onClick = { vm.querySysProp(propKey) },
-                            enabled = propKey.isNotBlank() && !vm.sysPropBusy,
+                            enabled = propKey.isNotBlank() && !propBusy,
                         ) {
-                            Text(if (vm.sysPropBusy) "查询中…" else "查询")
+                            Text(if (propBusy) "查询中…" else "查询")
                         }
                     }
-                    if (vm.sysPropResult.isNotEmpty()) {
+                    val propResult = vm.sysPropState as? AppViewModel.SysPropUiState.Result
+                    if (propResult != null) {
                         Text(
-                            vm.sysPropResult,
+                            "${propResult.key} = ${propResult.value.ifEmpty { "(空)" }}",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
                         )

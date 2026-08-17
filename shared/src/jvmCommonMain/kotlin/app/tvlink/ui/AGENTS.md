@@ -13,7 +13,7 @@ screens, theme, icons, and platform-abstracted widgets.
 | File              | Description                                                                                     |
 |-------------------|-------------------------------------------------------------------------------------------------|
 | `App.kt`          | Root `@Composable` — TvTheme(遥控 tab 恒深)+ BackHandler + Snackbar;DevicePicker / MainShell 分发,提供 AppViewModel |
-| `AppViewModel.kt` | Central state: 连接生命周期/导航/服务代理; 暴露 `connectedIbVer`/`connectedIbSid`(IB 探测诊断信息)  |
+| `AppViewModel.kt` | Central state: 连接生命周期/导航/服务代理; 截屏/属性查询/投屏用密封 UI 状态(`ShotUiState`/`SysPropUiState`/`CastUiState`); 暴露 `connectedIbVer`/`connectedIbSid`  |
 | `MainShell.kt`    | 连接后主壳 — 遥控/投屏/更多三 tab;窄屏 NavigationBar,≥600dp 宽屏 NavigationRail                 |
 
 ## Subdirectories
