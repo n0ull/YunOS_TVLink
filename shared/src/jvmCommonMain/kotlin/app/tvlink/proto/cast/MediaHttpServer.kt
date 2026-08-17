@@ -129,7 +129,11 @@ class MediaHttpServer {
         try {
             client.soTimeout = 10_000
             val allowed = allowedClientIp
-            if (allowed != null && client.inetAddress.hostAddress != allowed) return close(client)
+            if (allowed != null && client.inetAddress.hostAddress != allowed) {
+                // 拒绝须留痕（实际源 vs 期望）：双网卡 TV 从另一接口回拉被误拒时可排障
+                System.err.println("MediaHttpServer: rejected ${client.inetAddress.hostAddress} (allowed: $allowed)")
+                return close(client)
+            }
             val inp = client.getInputStream().bufferedReader(Charsets.ISO_8859_1)
             val requestLine = inp.readLine() ?: return close(client)
             val parts = requestLine.split(' ')

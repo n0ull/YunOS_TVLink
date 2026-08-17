@@ -71,18 +71,41 @@ class MediaHttpServerTest {
     }
 
     @Test
+    fun allowedIpClientIsServed() {
+        // 正向对照：allowedClientIp=本机回环时正常供片——仅有反向拒绝用例时，
+        // IP 比较写反（合法 TV 全被拒）测试照样全绿而无报警
+        val tmp = File.createTempFile("tvlink-test-ip-ok", ".bin")
+        val content = ByteArray(64) { it.toByte() }
+        tmp.writeBytes(content)
+        assertTrue(server.start("127.0.0.1", 8192, allowedClientIp = "127.0.0.1"))
+        server.register("ok", tmp)
+        val conn = URL(server.urlFor("ok")).openConnection() as HttpURLConnection
+        conn.connectTimeout = 3000
+        conn.readTimeout = 3000
+        assertTrue(content.contentEquals(conn.getInputStream().readBytes()))
+        conn.disconnect()
+        tmp.delete()
+    }
+
+    @Test
     fun rejectsClientFromNonAllowedIp() {
         // H1 回归：allowedClientIp 非本机来源时直接关连接，不出数据
         val tmp = File.createTempFile("tvlink-test-ip", ".bin")
         tmp.writeBytes(ByteArray(64) { it.toByte() })
         assertTrue(server.start("127.0.0.1", 8192, allowedClientIp = "192.0.2.1"))
         server.register("guarded", tmp)
+        // 显式超时：未来「挂起型」回归（不应答也不关连）表现为失败而非挂死测试
+        val conn = URL(server.urlFor("guarded")).openConnection() as HttpURLConnection
+        conn.connectTimeout = 3000
+        conn.readTimeout = 3000
         try {
-            URL(server.urlFor("guarded")).readBytes()
+            conn.getInputStream().readBytes()
             throw AssertionError("expected rejection for non-allowed client IP")
         } catch (e: Exception) {
             // 服务器不应答直接关连接 —— 预期
             System.err.println("MediaHttpServerTest: non-allowed IP rejected as expected: ${e.message}")
+        } finally {
+            conn.disconnect()
         }
         tmp.delete()
     }
