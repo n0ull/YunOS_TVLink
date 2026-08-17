@@ -2,6 +2,7 @@ package app.tvlink.proto
 
 import app.tvlink.proto.cast.MediaHttpServer
 import java.io.File
+import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -108,6 +109,25 @@ class MediaHttpServerTest {
             throw AssertionError("expected second full fetch to fail after unregister")
         } catch (e: Exception) {
             System.err.println("MediaHttpServerTest: post-serve fetch rejected as expected: ${e.message}")
+        }
+        tmp.delete()
+    }
+
+    @Test
+    fun malformedRangeGets416() {
+        // RFC 7233 §4.4 回归：from>to / from≥total 的 Range 不可满足 → 416 + Content-Range: bytes */total；
+        // 旧实现解析出 from>to 会写出负数 Content-Length（协议违规输出）
+        val tmp = File.createTempFile("tvlink-test-416", ".bin")
+        tmp.writeBytes(ByteArray(1000) { (it % 251).toByte() })
+        assertTrue(server.start("127.0.0.1", 8192))
+        server.register("ranged", tmp)
+
+        for (bad in listOf("bytes=500-200", "bytes=1000-", "bytes=-0")) {
+            val conn = URL(server.urlFor("ranged")).openConnection() as HttpURLConnection
+            conn.setRequestProperty("Range", bad)
+            assertEquals(416, conn.responseCode, "Range $bad should be 416")
+            assertEquals("bytes */1000", conn.getHeaderField("Content-Range"), "Range $bad Content-Range")
+            conn.disconnect()
         }
         tmp.delete()
     }

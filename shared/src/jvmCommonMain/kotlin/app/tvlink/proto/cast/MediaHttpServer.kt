@@ -140,7 +140,19 @@ class MediaHttpServer {
             val entry = registry[path] ?: return close(client)
             if (!entry.file.exists()) return close(client)
             val total = entry.file.length()
-            writeResponse(client, entry, total, range.present, resolveRange(range, total))
+            val span = resolveRange(range, total)
+            if (range.present && span.first > span.last) {
+                // RFC 7233 §4.4：Range 不可满足（from>to / from≥total / 空后缀）→ 416；
+                // 直接走 writeResponse 会写出负数 Content-Length（协议违规输出）
+                val out = client.getOutputStream()
+                out.write(
+                    "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */$total\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .toByteArray(Charsets.ISO_8859_1),
+                )
+                out.flush()
+                return close(client)
+            }
+            writeResponse(client, entry, total, range.present, span)
             close(client)
             // 完整 200 供片后注销：条目不常驻，收窄投屏文件暴露窗口（私人文件）。
             // 206 分段保留——TV 拉流靠多次 Range，注销会断播；失败重试走 Range 亦不受影响。
