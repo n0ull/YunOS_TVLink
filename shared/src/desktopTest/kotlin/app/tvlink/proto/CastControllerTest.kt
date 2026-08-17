@@ -208,6 +208,43 @@ class CastControllerTest {
     }
 
     /**
+     * Content-Length 超 Int 范围（99999999999）回归：toIntOrNull 失败按 0 处理会把
+     * 后随 body 字节留在流中误解析（永久失步且通道不关闭——负 CL 已快速失败，此处对称补齐）。
+     * 伪响应同负 CL 测试：旧实现误吞后通道存活、play() 成功（回归即被捕获）。
+     */
+    @Test
+    fun hugeContentLengthBeyondIntRangeClosesChannel() {
+        thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { sock ->
+                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
+                    val out = sock.getOutputStream()
+                    readStartLine(reader)
+                    consumeRest(reader)
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 99999999999\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.write("HTTP/1.1 400 JUNK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.flush()
+                    readStartLine(reader)
+                    consumeRest(reader)
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.flush()
+                }
+            }
+        }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        assertTrue(cc.pause(), "huge content-length request failed")
+        var waited = 0L
+        while (cc.state != CastController.State.DISCONNECTED && waited < 3_000) {
+            Thread.sleep(50)
+            waited += 50
+        }
+        assertEquals(CastController.State.DISCONNECTED, cc.state)
+        assertTrue(!cc.play(), "channel should reject requests after out-of-range content-length")
+        cc.disconnect()
+    }
+
+    /**
      * 背靠背请求回归：requestRaw 先武装 waitingResp 再写（reader 不会丢弃响应）；
      * 任何响应丢失都表现为 10s poll 超时后的 false，故总耗时须远小于超时。
      */

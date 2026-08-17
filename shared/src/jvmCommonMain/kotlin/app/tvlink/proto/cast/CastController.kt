@@ -255,13 +255,16 @@ class CastController(
         val startLine = reader.readLine() ?: return false
         if (startLine.isBlank()) return true
         val headers = readHeaders(reader)
-        val rawLen = headers["content-length"]?.toIntOrNull() ?: 0
-        // 负 content-length 是协议违规：coerce 为 0 会把随后的 body 字节留在流中误解析为下一条消息
-        // （比旧实现的崩溃拆连更差）——交付空 body 解开在途请求后关通道快速失败，与超限同策略
-        if (rawLen < 0) {
+        val clHeader = headers["content-length"]
+        val parsedLen = clHeader?.toLongOrNull()
+        // content-length 协议违规（负值/非数字/超 Int 范围如 99999999999）：按 0 处理会把随后的
+        // body 字节留在流中误解析为下一条消息（永久失步且通道不关闭）——交付空 body 解开
+        // 在途请求后关通道快速失败，与超限同策略。header 缺省按 0（TV 响应均带 CL，仅容错）。
+        if (clHeader != null && (parsedLen == null || parsedLen < 0L || parsedLen > Int.MAX_VALUE)) {
             handleMessage(startLine, "")
             return false
         }
+        val rawLen = parsedLen?.toInt() ?: 0
         val len = rawLen.coerceAtMost(MAX_BODY_CHARS)
         // null = 对端声明 len 却提前 EOF（短 body）：帧已损坏，交付截断体会污染解析——关通道
         val body = readBody(reader, len, rawLen) ?: return false
