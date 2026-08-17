@@ -65,6 +65,11 @@ class AsrTextService(
 
     fun stopRecord() = sendSimple("record_stop")
 
+    /** 取消内部 scope（AppViewModel.onCleared 链调用，与 RcController.destroy 同模式）。 */
+    fun destroy() {
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     private fun sendSimple(type: String) {
         val mid = ensureModuleId() ?: return
         deviceManager.sendVConnJson(mid, simpleJson(type))

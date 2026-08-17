@@ -22,15 +22,15 @@ class SysPropService(
     private val _values = MutableSharedFlow<SysPropValue>(extraBufferCapacity = 4)
     val values: SharedFlow<SysPropValue> = _values
 
-    @Volatile
-    private var pendingKey: String? = null
+    /** 在途查询 key 集合（并发查询各自按回显 prop_key 配对响应；同 key 并发合并共享响应）。 */
+    private val pendingKeys =
+        java.util.concurrent.ConcurrentHashMap
+            .newKeySet<String>()
 
     /** Wire into DeviceManager.packets (compose with other consumers at the call site). */
     fun handlePacket(p: IdcPacket) {
         val resp = p as? SysPropResp ?: return
-        val expected = pendingKey ?: return
-        if (resp.propKey != expected) return
-        pendingKey = null
+        if (!pendingKeys.remove(resp.propKey)) return
         _values.tryEmit(SysPropValue(resp.propKey, resp.propVal))
     }
 
@@ -42,7 +42,7 @@ class SysPropService(
         value: String,
     ): Boolean {
         val conn = deviceManager.connection ?: return false
-        pendingKey = key
+        pendingKeys.add(key)
         conn.send(SysPropReq(isGetProp = isGet, propKey = key, propVal = value))
         return true
     }

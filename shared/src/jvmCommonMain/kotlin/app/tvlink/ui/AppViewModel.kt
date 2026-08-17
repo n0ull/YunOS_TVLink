@@ -214,6 +214,8 @@ class AppViewModel : ViewModel() {
     override fun onCleared() {
         rc.destroy()
         rpm.detach()
+        asr.destroy()
+        screenshot.destroy()
         cast.destroy()
         deviceManager.destroy()
         super.onCleared()

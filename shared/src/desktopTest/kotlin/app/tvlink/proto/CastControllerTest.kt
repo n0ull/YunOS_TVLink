@@ -91,4 +91,26 @@ class CastControllerTest {
         assertEquals(12L, g.third)
         cc.disconnect()
     }
+
+    /**
+     * 背靠背请求回归：requestRaw 先武装 waitingResp 再写（reader 不会丢弃响应）；
+     * 任何响应丢失都表现为 10s poll 超时后的 false，故总耗时须远小于超时。
+     */
+    @Test
+    fun backToBackRequestsLoseNoResponses() {
+        thread(isDaemon = true) {
+            runCatching { server.accept().use { serveFakeTv(it) } }
+        }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        val start = System.currentTimeMillis()
+        assertTrue(cc.play(), "play() failed")
+        assertTrue(cc.pause(), "pause() failed")
+        assertTrue(cc.seek(1_000), "seek() failed")
+        assertTrue(cc.volume(5), "volume() failed")
+        assertTrue(cc.rate(2), "rate() failed")
+        val elapsed = System.currentTimeMillis() - start
+        assertTrue(elapsed < 8_000, "requests took ${elapsed}ms — possible lost response (10s timeout path)")
+        cc.disconnect()
+    }
 }

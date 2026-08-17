@@ -38,8 +38,13 @@ class DeviceManager {
     /** 自动重连簿记：仅对「成功连接后异常断开」重试；用户显式 disconnect() 不重连。 */
     @Volatile
     private var explicitDisconnect = false
+
+    /** 以下两个字段在 scope 协程(connect/scheduleReconnect)与 UI 线程(disconnect)间跨线程访问。 */
+    @Volatile
     private var retries = 0
     private var reconnectJob: Job? = null
+
+    @Volatile
     private var reconnectTarget: ConnectedDevice? = null
 
     enum class ConnState { IDLE, SEARCHING, CONNECTING, CONNECTED, FAILED }
@@ -102,6 +107,8 @@ class DeviceManager {
         vConnListeners.remove(l)
     }
 
+    /** scope 协程写入 / reader 线程与 UI 线程读取 — @Volatile 保证跨线程可见性。 */
+    @Volatile
     var connection: IdcConnection? = null
         private set
     private var discoveredProjectionPort = 0

@@ -21,6 +21,9 @@ class CastController(
     companion object {
         /** 投屏控制通道默认端口（ddh/mDNS 均未提供时 AppViewModel 兜底依次试 DEFAULT_PORT/13521）。 */
         const val DEFAULT_PORT = 13520
+
+        /** 控制通道报文体上限（字符）：防对端伪造 content-length 强制大分配。 */
+        private const val MAX_BODY_CHARS = 64 * 1024
     }
 
     enum class State { DISCONNECTED, CONNECTED }
@@ -249,7 +252,8 @@ class CastController(
         val startLine = reader.readLine() ?: return false
         if (startLine.isBlank()) return true
         val headers = readHeaders(reader)
-        val len = headers["content-length"]?.toIntOrNull() ?: 0
+        // content-length 来自对端：上限防故障/恶意对端强制大分配（本通道只携带小 JSON 控制报文）
+        val len = (headers["content-length"]?.toIntOrNull() ?: 0).coerceAtMost(MAX_BODY_CHARS)
         handleMessage(startLine, readBody(reader, len))
         return true
     }

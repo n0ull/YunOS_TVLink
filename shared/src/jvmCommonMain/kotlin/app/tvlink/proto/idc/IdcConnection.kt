@@ -21,6 +21,11 @@ class IdcConnection(
     val host: String,
     val port: Int = IdcConst.TCP_PORT,
 ) {
+    private companion object {
+        /** 单帧总长上限（防对端伪造 totalLen 强制大分配；16MB→1MB 收紧见 R 系列修复）。 */
+        const val MAX_FRAME_BYTES = 1024 * 1024
+    }
+
     enum class State { DISCONNECTED, CONNECTING, ESTABLISHED }
 
     data class ModuleInfo(
@@ -305,7 +310,7 @@ class IdcConnection(
             hb.int // key
             hb.int // packetId
             val total = hb.int
-            if (total < IdcConst.HEADER_LEN || total > 1 * 1024 * 1024) return null
+            if (total < IdcConst.HEADER_LEN || total > MAX_FRAME_BYTES) return null
             val body = ByteArray(total - IdcConst.HEADER_LEN)
             if (body.isNotEmpty()) inp.readFully(body)
             val frame = java.nio.ByteBuffer.allocate(total)
@@ -326,7 +331,9 @@ class IdcConnection(
 
     fun close() {
         if (state == State.DISCONNECTED && socket == null && scheduler == null) return
-        sendExecutor?.shutdown()
+        // shutdownNow 与 scheduler 一致：close 后不再执行排队发送（socket 正在关闭，
+        // 排队任务写出无意义；send() 侧已有 RejectedExecutionException 防护）
+        sendExecutor?.shutdownNow()
         sendExecutor = null
         hbFuture?.cancel(false)
         hbFuture = null

@@ -115,6 +115,7 @@ class CastFeature(
         port: Int,
     ) {
         scope.launch(Dispatchers.IO) {
+            var built: CastController? = null
             // 单飞锁：与并发 connect 串行，防止互断已建好的通道；断旧建新整体在锁内
             connectMutex.withLock {
                 connecting = true
@@ -133,9 +134,9 @@ class CastFeature(
                     if (cc != null) {
                         wireEvents(cc)
                         controller = cc
+                        built = cc
                         // 重建保留旧快照：重连时 TV 往往仍在播放，标题/进度不清零（轮询随后校准）
                         ui = CastUiState.Ready((ui as? CastUiState.Ready)?.status ?: CastStatus())
-                        serverInfo = cc.serverInfo()
                     } else {
                         ui = CastUiState.Unavailable
                     }
@@ -144,6 +145,8 @@ class CastFeature(
                     connecting = false
                 }
             }
+            // serverInfo 是同步 HTTP 请求（秒级）——移出锁外，并发建连尝试不被其阻塞
+            if (built != null) serverInfo = built.serverInfo()
         }
     }
 

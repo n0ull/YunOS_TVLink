@@ -269,7 +269,8 @@ class IbChannel(
     fun disconnect() {
         if (state == State.DISCONNECTED && socket == null) return
         readerRunning = false
-        sendExecutor?.shutdown()
+        // shutdownNow：disconnect 后不再执行排队发送（socket 正在关闭，与 IdcConnection.close 一致）
+        sendExecutor?.shutdownNow()
         sendExecutor = null
         keepaliveThread?.interrupt()
         try {

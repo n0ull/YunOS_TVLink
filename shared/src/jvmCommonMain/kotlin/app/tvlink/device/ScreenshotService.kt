@@ -3,8 +3,13 @@ package app.tvlink.device
 import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.ScreenShotReq
 import app.tvlink.proto.idc.ScreenShotResp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 
 /**
  * TV screenshot over the IDC command channel (20900 -> 21000). See docs/re/04 §6.
@@ -40,22 +45,23 @@ class ScreenshotService(
         return true
     }
 
-    /** 连拍（原 App 长按 300ms/帧 + 上限，docs/re/04 §6）：顺序触发，应答逐张到逐张回调。 */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 连拍（原 App 长按 300ms/帧 + 上限，docs/re/04 §6）：顺序触发，应答逐张到逐张发射。 */
     fun captureBurst(
         count: Int = 5,
         intervalMs: Long = 300,
     ) {
-        Thread(
-            {
-                repeat(count) { i ->
-                    if (!capture()) return@Thread
-                    if (i < count - 1) Thread.sleep(intervalMs)
-                }
-            },
-            "shot-burst",
-        ).apply {
-            isDaemon = true
-            start()
+        scope.launch {
+            repeat(count) { i ->
+                if (!capture()) return@launch
+                if (i < count - 1) delay(intervalMs)
+            }
         }
+    }
+
+    /** 取消内部 scope（AppViewModel.onCleared 链调用）。 */
+    fun destroy() {
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }
 }
