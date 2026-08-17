@@ -44,4 +44,28 @@ class MediaHttpServerTest {
         }
         tmp.delete()
     }
+
+    @Test
+    fun servesLargeFileFullAndMidRange() {
+        // 大文件路径：pumpFile 的 transferTo 零拷贝分支（内容不等长断言防截断/错位）
+        val tmp = File.createTempFile("tvlink-test-large", ".mp3")
+        val content = ByteArray(8 * 1024 * 1024 + 777) { (it * 31 % 253).toByte() }
+        tmp.writeBytes(content)
+        assertTrue(server.start("127.0.0.1", 8192))
+        server.register("audio-item-1", tmp, "audio/mpeg")
+
+        val full = URL(server.urlFor("audio-item-1")).readBytes()
+        assertEquals(content.size, full.size)
+        assertTrue(content.contentEquals(full))
+
+        // 中段 Range（TV 大文件分段拉取）
+        val from = 3 * 1024 * 1024 + 11
+        val to = 5 * 1024 * 1024 - 1
+        val conn = URL(server.urlFor("audio-item-1")).openConnection()
+        conn.setRequestProperty("Range", "bytes=$from-$to")
+        val range = conn.getInputStream().readBytes()
+        assertEquals(to - from + 1, range.size)
+        assertTrue(content.copyOfRange(from, to + 1).contentEquals(range))
+        tmp.delete()
+    }
 }

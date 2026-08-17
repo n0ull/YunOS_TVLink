@@ -6,9 +6,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Android media picker via SAF. Copies the picked content to app cache so the
@@ -20,23 +23,28 @@ actual fun pickMediaFile(
     onResult: (String?) -> Unit,
 ) {
     val context = LocalContext.current
+    // 大文件(几十 MB 音乐/视频)拷贝放 IO 线程：Activity Result 回调跑在主线程，
+    // 同步 copyTo 会冻结 UI 直到拷完
+    val scope = rememberCoroutineScope()
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             if (uri == null) {
                 onResult(null)
                 return@rememberLauncherForActivityResult
             }
-            try {
-                val name = queryDisplayName(context, uri) ?: "media-${System.currentTimeMillis()}"
-                val out = File(context.cacheDir, "cast/$name")
-                out.parentFile?.mkdirs()
-                context.contentResolver.openInputStream(uri)?.use { inp ->
-                    FileOutputStream(out).use { inp.copyTo(it) }
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val name = queryDisplayName(context, uri) ?: "media-${System.currentTimeMillis()}"
+                    val out = File(context.cacheDir, "cast/$name")
+                    out.parentFile?.mkdirs()
+                    context.contentResolver.openInputStream(uri)?.use { inp ->
+                        FileOutputStream(out).use { f -> inp.copyTo(f, bufferSize = COPY_BUFFER_SIZE) }
+                    }
+                    onResult(out.absolutePath)
+                } catch (e: Exception) {
+                    Log.w("PlatformPicker", "copy picked media failed", e)
+                    onResult(null)
                 }
-                onResult(out.absolutePath)
-            } catch (e: Exception) {
-                Log.w("PlatformPicker", "copy picked media failed", e)
-                onResult(null)
             }
         }
     LaunchedEffect(type) {
@@ -49,6 +57,8 @@ actual fun pickMediaFile(
         )
     }
 }
+
+private const val COPY_BUFFER_SIZE = 256 * 1024
 
 private fun queryDisplayName(
     context: android.content.Context,

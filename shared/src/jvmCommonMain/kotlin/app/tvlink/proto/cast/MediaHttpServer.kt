@@ -215,18 +215,49 @@ class MediaHttpServer {
         }
         headers.append("Connection: close\r\n\r\n")
         out.write(headers.toString().toByteArray(Charsets.ISO_8859_1))
-        FileInputStream(entry.file).use { fis ->
-            fis.channel.position(from)
-            val buf = ByteArray(64 * 1024)
+        pumpFile(out, entry.file, from, to)
+        out.flush()
+    }
+
+    /**
+     * 把 [file] 的 from..to 字节写入 [out]。优先 FileChannel.transferTo(sendfile 零拷贝,
+     * 大文件吞吐显著优于流拷贝)；内核/平台不支持时从断点回退到 256KB 缓冲拷贝。
+     */
+    private fun pumpFile(
+        out: OutputStream,
+        file: File,
+        from: Long,
+        to: Long,
+    ) {
+        FileInputStream(file).use { fis ->
+            var pos = from
             var remaining = to - from + 1
-            while (remaining > 0) {
-                val n = fis.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
-                if (n < 0) break
-                out.write(buf, 0, n)
-                remaining -= n
+            var zeroCopyFailed = false
+            try {
+                val dest =
+                    java.nio.channels.Channels
+                        .newChannel(out)
+                while (remaining > 0) {
+                    val n = fis.channel.transferTo(pos, remaining, dest)
+                    if (n <= 0L) throw java.io.IOException("transferTo returned $n")
+                    pos += n
+                    remaining -= n
+                }
+            } catch (e: Exception) {
+                System.err.println("MediaHttpServer: zero-copy failed, fallback to buffer copy: ${e.message}")
+                zeroCopyFailed = true
+            }
+            if (zeroCopyFailed) {
+                fis.channel.position(pos)
+                val buf = ByteArray(COPY_BUFFER_SIZE)
+                while (remaining > 0) {
+                    val n = fis.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    remaining -= n
+                }
             }
         }
-        out.flush()
     }
 
     private fun close(c: Socket) {
@@ -237,6 +268,8 @@ class MediaHttpServer {
     }
 
     companion object {
+        private const val COPY_BUFFER_SIZE = 256 * 1024
+
         private val mimeTypes =
             mapOf(
                 "jpg" to "image/jpeg",
