@@ -93,6 +93,44 @@ class CastControllerTest {
     }
 
     /**
+     * 超大 content-length（>64KB 保留上限）回归：body 必须被完整消耗以保持流同步，
+     * 否则残留字节使下一条响应的 start line 解析失败、协议永久失步（后续请求全部 10s 超时）。
+     */
+    @Test
+    fun oversizedBodyKeepsStreamInSync() {
+        thread(isDaemon = true) {
+            runCatching { server.accept().use { serveOversizedThenNormal(it) } }
+        }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        val start = System.currentTimeMillis()
+        assertTrue(cc.pause(), "oversized-body request failed")
+        assertTrue(cc.play(), "post-oversized request failed — stream desynced")
+        val elapsed = System.currentTimeMillis() - start
+        assertTrue(elapsed < 8_000, "took ${elapsed}ms — possible desync (10s timeout path)")
+        cc.disconnect()
+    }
+
+    /** 首个响应携带 100KB body（超保留上限），之后恢复正常空 body。 */
+    private fun serveOversizedThenNormal(sock: Socket) {
+        val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
+        val out = sock.getOutputStream()
+        var oversized = true
+        while (true) {
+            readStartLine(reader) ?: return
+            consumeRest(reader)
+            val body = if (oversized) "x".repeat(100_000) else ""
+            oversized = false
+            val bytes = body.toByteArray(Charsets.UTF_8)
+            out.write(
+                "HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\n\r\n".toByteArray(Charsets.ISO_8859_1),
+            )
+            if (bytes.isNotEmpty()) out.write(bytes)
+            out.flush()
+        }
+    }
+
+    /**
      * 背靠背请求回归：requestRaw 先武装 waitingResp 再写（reader 不会丢弃响应）；
      * 任何响应丢失都表现为 10s poll 超时后的 false，故总耗时须远小于超时。
      */

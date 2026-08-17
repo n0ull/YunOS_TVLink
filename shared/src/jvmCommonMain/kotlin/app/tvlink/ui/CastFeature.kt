@@ -145,8 +145,13 @@ class CastFeature(
                     connecting = false
                 }
             }
-            // serverInfo 是同步 HTTP 请求（秒级）——移出锁外，并发建连尝试不被其阻塞
-            if (built != null) serverInfo = built.serverInfo()
+            // serverInfo 是同步 HTTP 请求（秒级）——移出锁外，并发建连尝试不被其阻塞。
+            // 期间 built 可能已被并发 connect/onDisconnected 断开并替换：仅在它仍是当前通道时采纳结果，
+            // 否则 serverInfo() 返回 null 会清掉新通道的服务信息（回归防护）。
+            if (built != null) {
+                val info = built.serverInfo()
+                if (controller === built) serverInfo = info
+            }
         }
     }
 

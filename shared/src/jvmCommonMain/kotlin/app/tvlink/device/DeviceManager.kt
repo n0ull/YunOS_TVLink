@@ -6,6 +6,7 @@ import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.parseJsonObject
 import app.tvlink.ui.widgets.KeyValueStore
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,9 +40,9 @@ class DeviceManager {
     @Volatile
     private var explicitDisconnect = false
 
-    /** 以下两个字段在 scope 协程(connect/scheduleReconnect)与 UI 线程(disconnect)间跨线程访问。 */
-    @Volatile
-    private var retries = 0
+    /** 原子重试计数：connect/scheduleReconnect 协程与 UI 线程(disconnect)跨线程读-改-写，
+     *  @Volatile 仅保证可见性不保证原子性，故用 AtomicInteger。 */
+    private val retries = AtomicInteger(0)
     private var reconnectJob: Job? = null
 
     @Volatile
@@ -173,7 +174,7 @@ class DeviceManager {
                         ibVer = ibVer,
                         ibSid = ibSid,
                     )
-                retries = 0
+                retries.set(0)
                 reconnectTarget = dev
                 saveHistory(dev)
                 _connected.value = dev
@@ -181,7 +182,7 @@ class DeviceManager {
             } else {
                 _connState.value = ConnState.FAILED
                 // 重连周期内的失败继续排队下一次重试；用户发起的连接失败不自动重试
-                if (retries in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
+                if (retries.get() in 1 until MAX_RECONNECT && !explicitDisconnect) scheduleReconnect()
             }
         }
     }
@@ -212,7 +213,7 @@ class DeviceManager {
                     ibSid = ibSid,
                     ibOnly = true,
                 )
-            retries = 0
+            retries.set(0)
             reconnectTarget = dev
             saveHistory(dev)
             _connected.value = dev
@@ -246,15 +247,15 @@ class DeviceManager {
     /** 异常断开后按 5s → 15s ×2 自动重连（原 App 策略，docs/re/01 §1）；期间 UI 停在 CONNECTING。 */
     private fun scheduleReconnect() {
         val target = reconnectTarget
-        if (target == null || retries >= MAX_RECONNECT) {
+        if (target == null || retries.get() >= MAX_RECONNECT) {
             _connState.value = ConnState.FAILED
             return
         }
-        retries++
+        retries.incrementAndGet()
         _connState.value = ConnState.CONNECTING
         reconnectJob =
             scope.launch {
-                delay(if (retries == 1) FIRST_RETRY_MS else RETRY_INTERVAL_MS)
+                delay(if (retries.get() == 1) FIRST_RETRY_MS else RETRY_INTERVAL_MS)
                 if (!explicitDisconnect) {
                     connect(target.ip, target.projectionPort, target.ibVer, target.ibSid, target.mac)
                 }
@@ -290,7 +291,7 @@ class DeviceManager {
         explicitDisconnect = true
         reconnectJob?.cancel()
         reconnectJob = null
-        retries = 0
+        retries.set(0)
         reconnectTarget = null
         connection?.shutdown()
         connection = null

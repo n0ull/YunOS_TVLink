@@ -22,8 +22,11 @@ class CastController(
         /** 投屏控制通道默认端口（ddh/mDNS 均未提供时 AppViewModel 兜底依次试 DEFAULT_PORT/13521）。 */
         const val DEFAULT_PORT = 13520
 
-        /** 控制通道报文体上限（字符）：防对端伪造 content-length 强制大分配。 */
+        /** 控制通道报文体保留上限（字符）：防对端伪造 content-length 强制大分配。 */
         private const val MAX_BODY_CHARS = 64 * 1024
+
+        /** 超出保留上限部分的丢弃读取块大小。 */
+        private const val DISCARD_CHUNK_CHARS = 8 * 1024
     }
 
     enum class State { DISCONNECTED, CONNECTED }
@@ -252,8 +255,7 @@ class CastController(
         val startLine = reader.readLine() ?: return false
         if (startLine.isBlank()) return true
         val headers = readHeaders(reader)
-        // content-length 来自对端：上限防故障/恶意对端强制大分配（本通道只携带小 JSON 控制报文）
-        val len = (headers["content-length"]?.toIntOrNull() ?: 0).coerceAtMost(MAX_BODY_CHARS)
+        val len = headers["content-length"]?.toIntOrNull() ?: 0
         handleMessage(startLine, readBody(reader, len))
         return true
     }
@@ -271,19 +273,39 @@ class CastController(
         return headers
     }
 
+    /**
+     * content-length 来自对端：完整消耗 len 个字符保持流同步（截断不读会残留字节，
+     * 下一条 start line 解析失败、协议永久失步），但最多保留 MAX_BODY_CHARS——
+     * 防伪造大 content-length 强制大分配，超出部分读取后丢弃。
+     */
     private fun readBody(
         reader: BufferedReader,
         len: Int,
     ): String {
-        val bodyChars = CharArray(len)
-        var read = 0
-        while (read < len) {
-            val n = reader.read(bodyChars, read, len - read)
+        val bodyChars = CharArray(len.coerceAtMost(MAX_BODY_CHARS))
+        var kept = 0
+        var left = len
+        while (left > 0) {
+            val n = readChunk(reader, bodyChars, kept, left)
             if (n < 0) break
-            read += n
+            if (kept < bodyChars.size) kept += n
+            left -= n
         }
-        return String(bodyChars, 0, read)
+        return String(bodyChars, 0, kept)
     }
+
+    /** 读一段：body 未满则读入 body；已满则读入 scratch 丢弃（保持流同步）。 */
+    private fun readChunk(
+        reader: BufferedReader,
+        body: CharArray,
+        kept: Int,
+        left: Int,
+    ): Int =
+        if (kept < body.size) {
+            reader.read(body, kept, minOf(body.size - kept, left))
+        } else {
+            reader.read(CharArray(DISCARD_CHUNK_CHARS), 0, minOf(DISCARD_CHUNK_CHARS, left))
+        }
 
     private fun handleMessage(
         startLine: String,
