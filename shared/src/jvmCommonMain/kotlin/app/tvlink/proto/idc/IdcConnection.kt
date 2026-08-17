@@ -298,29 +298,40 @@ class IdcConnection(
         }
     }
 
-    /** Read one full frame from the socket. Null on EOF/error. */
+    /** Read one full frame from the socket. Null on EOF/stream corruption.
+     *  单帧 decode 失败（body 解析异常）跳过该帧继续读——帧边界完整（total 已校验并整帧
+     *  读出），TV 重发怪包不应撕毁整条会话（旧行为 → 重连风暴）。 */
     private fun readPacket(): IdcPacket? {
         val inp = dataIn ?: return null
-        return try {
-            val header = ByteArray(IdcConst.HEADER_LEN)
-            inp.readFully(header)
-            val hb = java.nio.ByteBuffer.wrap(header)
-            val magic = hb.int
-            if (magic != IdcConst.MAGIC) return null
-            hb.int // key
-            hb.int // packetId
-            val total = hb.int
-            if (total < IdcConst.HEADER_LEN || total > MAX_FRAME_BYTES) return null
-            val body = ByteArray(total - IdcConst.HEADER_LEN)
-            if (body.isNotEmpty()) inp.readFully(body)
-            val frame = java.nio.ByteBuffer.allocate(total)
-            frame.put(header)
-            frame.put(body)
-            frame.flip()
-            IdcPacket.decode(frame)
+        try {
+            while (true) {
+                val header = ByteArray(IdcConst.HEADER_LEN)
+                inp.readFully(header)
+                val hb = java.nio.ByteBuffer.wrap(header)
+                val magic = hb.int
+                if (magic != IdcConst.MAGIC) return null // 流失步：帧边界已不可信，拆连
+                hb.int // key
+                hb.int // packetId
+                val total = hb.int
+                if (total < IdcConst.HEADER_LEN || total > MAX_FRAME_BYTES) return null
+                val body = ByteArray(total - IdcConst.HEADER_LEN)
+                if (body.isNotEmpty()) inp.readFully(body)
+                val frame = java.nio.ByteBuffer.allocate(total)
+                frame.put(header)
+                frame.put(body)
+                frame.flip()
+                val p =
+                    try {
+                        IdcPacket.decode(frame)
+                    } catch (e: Exception) {
+                        System.err.println("IdcConnection: frame decode failed, skipped: ${e.message}")
+                        null
+                    }
+                if (p != null) return p
+            }
         } catch (e: Exception) {
             System.err.println("IdcConnection: read failed: ${e.message}")
-            null
+            return null
         }
     }
 
