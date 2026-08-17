@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 class ShotFeature(
     private val scope: CoroutineScope,
     private val service: ScreenshotService,
+    private val showNotice: (String) -> Unit,
 ) {
     /** 截屏 UI 状态（密封层级）：Capturing 携带上一帧，截取期间旧图保持显示。 */
     sealed interface ShotUiState {
@@ -36,14 +37,21 @@ class ShotFeature(
     }
 
     fun capture() {
-        if (!service.capture()) return
+        // 断线时曾静默吞掉（无任何提示）
+        if (!service.capture()) {
+            showNotice("未连接电视，无法截屏")
+            return
+        }
         state = ShotUiState.Capturing(currentShot())
         resetCapturingAfter(SINGLE_TIMEOUT_MS)
     }
 
     fun captureBurst() {
+        if (!service.captureBurst()) {
+            showNotice("未连接电视，无法截屏")
+            return
+        }
         state = ShotUiState.Capturing(currentShot())
-        service.captureBurst()
         // 连拍 5 帧 × 300ms 间隔 + 每帧 TV 响应，20s 兜底足够覆盖
         resetCapturingAfter(BURST_TIMEOUT_MS)
     }

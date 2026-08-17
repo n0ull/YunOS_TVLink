@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +50,8 @@ import app.tvlink.ui.icons.AppIcons
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
     var propKey by remember { mutableStateOf("") }
+    // StateFlow 须订阅才重组（.value 直读不订阅，IB 通道状态变化不刷新）
+    val ibReady by vm.rc.ibReady.collectAsState()
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("设置") },
@@ -72,7 +75,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     SettingItem(
                         AppIcons.Link,
                         "IB 快速通道",
-                        if (vm.rc.ibReady.value) "已连接" else "未连接（使用回退通道）",
+                        if (ibReady) "已连接" else "未连接（使用回退通道）",
                     )
                     // 断开 = 结束本次会话；历史直连记录保留（原 App 语义），冷启动仍自动直连
                     FilledTonalButton(

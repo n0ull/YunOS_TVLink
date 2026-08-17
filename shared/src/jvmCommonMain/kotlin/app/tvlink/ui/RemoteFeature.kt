@@ -22,7 +22,7 @@ class RemoteFeature(
     private val deviceManager: DeviceManager,
     private val rc: RcController,
     private val asr: AsrTextService,
-    showNotice: (String) -> Unit,
+    private val showNotice: (String) -> Unit,
 ) {
     var imeActive by mutableStateOf(false)
         private set
@@ -51,7 +51,14 @@ class RemoteFeature(
         }
     }
 
-    fun keyClick(k: RcKey) = rc.keyClick(k)
+    fun keyClick(k: RcKey) {
+        // 双通道（IDC/IB）均不可用时按键曾静默丢弃——断线/重连中给用户反馈
+        if (deviceManager.connection == null && !rc.ibReady.value) {
+            showNotice("未连接电视，按键未发送")
+            return
+        }
+        rc.keyClick(k)
+    }
 
     fun imeCommit() {
         deviceManager.connection?.send(ImeAction(-1))

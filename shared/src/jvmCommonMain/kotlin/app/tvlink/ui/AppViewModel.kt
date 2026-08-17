@@ -76,8 +76,8 @@ class AppViewModel : ViewModel() {
 
     // ---- feature state holders (per-screen) ----
     val cast = CastFeature(viewModelScope) { notice = it }
-    val shot = ShotFeature(viewModelScope, screenshot)
-    val props = SysPropFeature(viewModelScope, sysprop)
+    val shot = ShotFeature(viewModelScope, screenshot) { notice = it }
+    val props = SysPropFeature(viewModelScope, sysprop) { notice = it }
     val remote =
         RemoteFeature(viewModelScope, deviceManager, rc, asr) { notice = it }
     val apps = AppsFeature(viewModelScope, rpm) { notice = it }
@@ -148,6 +148,15 @@ class AppViewModel : ViewModel() {
                     connectedIbSid = ""
                     connectedIbOnly = false
                     cast.onDisconnected()
+                } else if (s == DeviceManager.ConnState.FAILED) {
+                    // 重试窗口内的 FAILED 微秒内回到 CONNECTING；延迟复核仍为 FAILED
+                    // 才是重连耗尽的终态——避免重试周期里 snackbar 闪烁
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(600)
+                        if (deviceManager.connState.value == DeviceManager.ConnState.FAILED) {
+                            notice = "连接失败，请检查网络后重试"
+                        }
+                    }
                 }
             }
         }

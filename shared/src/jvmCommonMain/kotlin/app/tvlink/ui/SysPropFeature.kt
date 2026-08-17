@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 class SysPropFeature(
     private val scope: CoroutineScope,
     private val service: SysPropService,
+    private val showNotice: (String) -> Unit,
 ) {
     /** 系统属性查询 UI 状态（密封层级）：Idle/Loading/Result。 */
     sealed interface SysPropUiState {
@@ -36,7 +37,12 @@ class SysPropFeature(
 
     fun query(key: String) {
         val k = key.trim()
-        if (k.isEmpty() || !service.getProp(k)) return
+        if (k.isEmpty()) return
+        // 断线时曾静默吞掉（无任何提示）
+        if (!service.getProp(k)) {
+            showNotice("未连接电视，无法查询属性")
+            return
+        }
         state = SysPropUiState.Loading
         scope.launch(Dispatchers.Default) {
             kotlinx.coroutines.delay(QUERY_TIMEOUT_MS)

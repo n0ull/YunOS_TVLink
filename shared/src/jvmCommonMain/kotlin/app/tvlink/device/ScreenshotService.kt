@@ -47,17 +47,20 @@ class ScreenshotService(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** 连拍（原 App 长按 300ms/帧 + 上限，docs/re/04 §6）：顺序触发，应答逐张到逐张发射。 */
+    /** 连拍（原 App 长按 300ms/帧 + 上限，docs/re/04 §6）：顺序触发，应答逐张到逐张发射。
+     *  返回 false = 无连接未发出（调用方据此提示）；发出后单帧失败仅截断后续帧。 */
     fun captureBurst(
         count: Int = 5,
         intervalMs: Long = 300,
-    ) {
+    ): Boolean {
+        if (deviceManager.connection == null) return false
         scope.launch {
             repeat(count) { i ->
                 if (!capture()) return@launch
                 if (i < count - 1) delay(intervalMs)
             }
         }
+        return true
     }
 
     /** 取消内部 scope（AppViewModel.onCleared 链调用）。 */
