@@ -19,6 +19,11 @@ import kotlin.test.assertTrue
  * state/duration/position via onEvent (real firmware pushes no POST /event).
  */
 class CastControllerTest {
+    private companion object {
+        /** 超大 body 字符数（超 CastController 的 64KB 保留上限）。 */
+        const val OVERSIZED_BODY_CHARS = 100_000
+    }
+
     private val server = ServerSocket(0)
 
     @AfterTest
@@ -48,18 +53,29 @@ class CastControllerTest {
         }
     }
 
-    private fun serveFakeTv(sock: Socket) {
+    /**
+     * Loopback fake TV：playback-info 返回播放 JSON，其余空 body；
+     * [oversizedFirst]=true 时首个响应携带 100KB body（超 64KB 保留上限），之后恢复正常。
+     */
+    private fun serveFakeTv(
+        sock: Socket,
+        oversizedFirst: Boolean = false,
+    ) {
         val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
         val out = sock.getOutputStream()
+        var first = true
         while (true) {
             val start = readStartLine(reader) ?: return
             consumeRest(reader)
             val body =
-                if (start.startsWith("GET /playback-info")) {
+                if (oversizedFirst && first) {
+                    "x".repeat(OVERSIZED_BODY_CHARS)
+                } else if (start.startsWith("GET /playback-info")) {
                     """{"position":12,"duration":34,"state":"playing","rate":1,"name":"x"}"""
                 } else {
                     ""
                 }
+            first = false
             val bytes = body.toByteArray(Charsets.UTF_8)
             out.write(
                 "HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\n\r\n".toByteArray(Charsets.ISO_8859_1),
@@ -93,41 +109,52 @@ class CastControllerTest {
     }
 
     /**
-     * 超大 content-length（>64KB 保留上限）回归：body 必须被完整消耗以保持流同步，
-     * 否则残留字节使下一条响应的 start line 解析失败、协议永久失步（后续请求全部 10s 超时）。
+     * 超大 content-length（>64KB 保留上限）回归：body 被完整消耗（流同步）使本次响应干净交付，
+     * 随后通道按「超限即对端异常」关闭——后续请求立即失败而非 10s 超时挂起。
      */
     @Test
-    fun oversizedBodyKeepsStreamInSync() {
+    fun oversizedBodyDeliveredThenChannelCloses() {
         thread(isDaemon = true) {
-            runCatching { server.accept().use { serveOversizedThenNormal(it) } }
+            runCatching { server.accept().use { serveFakeTv(it, oversizedFirst = true) } }
         }
         val cc = CastController("127.0.0.1", server.localPort)
         assertTrue(cc.connect(), "connect failed")
-        val start = System.currentTimeMillis()
         assertTrue(cc.pause(), "oversized-body request failed")
-        assertTrue(cc.play(), "post-oversized request failed — stream desynced")
-        val elapsed = System.currentTimeMillis() - start
-        assertTrue(elapsed < 8_000, "took ${elapsed}ms — possible desync (10s timeout path)")
+        // reader 线程交付响应后即关通道，稍等状态落定（回环下为毫秒级）
+        var waited = 0L
+        while (cc.state != CastController.State.DISCONNECTED && waited < 3_000) {
+            Thread.sleep(50)
+            waited += 50
+        }
+        assertEquals(CastController.State.DISCONNECTED, cc.state)
+        assertTrue(!cc.play(), "channel should reject requests after oversized body")
         cc.disconnect()
     }
 
-    /** 首个响应携带 100KB body（超保留上限），之后恢复正常空 body。 */
-    private fun serveOversizedThenNormal(sock: Socket) {
-        val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
-        val out = sock.getOutputStream()
-        var oversized = true
-        while (true) {
-            readStartLine(reader) ?: return
-            consumeRest(reader)
-            val body = if (oversized) "x".repeat(100_000) else ""
-            oversized = false
-            val bytes = body.toByteArray(Charsets.UTF_8)
-            out.write(
-                "HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\n\r\n".toByteArray(Charsets.ISO_8859_1),
-            )
-            if (bytes.isNotEmpty()) out.write(bytes)
-            out.flush()
+    /** 伪造 Content-Length: -1 回归：视为 0（不抛 NegativeArraySizeException），通道存活。 */
+    @Test
+    fun negativeContentLengthTreatedAsZero() {
+        thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { sock ->
+                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
+                    val out = sock.getOutputStream()
+                    readStartLine(reader)
+                    consumeRest(reader)
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.flush()
+                    readStartLine(reader)
+                    consumeRest(reader)
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    out.flush()
+                }
+            }
         }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        assertTrue(cc.pause(), "negative content-length request failed")
+        assertTrue(cc.play(), "channel broken after negative content-length")
+        cc.disconnect()
     }
 
     /**

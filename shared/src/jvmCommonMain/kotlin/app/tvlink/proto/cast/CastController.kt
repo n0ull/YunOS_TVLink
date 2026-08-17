@@ -250,13 +250,17 @@ class CastController(
         }
     }
 
-    /** Reads one HTTP-style message off [reader]. Returns false on EOF, true to keep reading. */
+    /** Reads one HTTP-style message off [reader]. Returns false on EOF/超限报文, true to keep reading. */
     private fun readMessage(reader: BufferedReader): Boolean {
         val startLine = reader.readLine() ?: return false
         if (startLine.isBlank()) return true
         val headers = readHeaders(reader)
-        val len = headers["content-length"]?.toIntOrNull() ?: 0
-        handleMessage(startLine, readBody(reader, len))
+        // content-length 来自对端：coerceIn 同时压负值（防 NegativeArraySizeException）与超大值（限保留上限）
+        val rawLen = headers["content-length"]?.toIntOrNull() ?: 0
+        val len = rawLen.coerceIn(0, MAX_BODY_CHARS)
+        handleMessage(startLine, readBody(reader, len, rawLen.coerceAtLeast(0)))
+        // 超限报文视为对端异常：本次响应已交付（流同步），关闭通道——重连由上层 ensureAlive/onResume 补建
+        if (rawLen > MAX_BODY_CHARS) return false
         return true
     }
 
@@ -274,38 +278,34 @@ class CastController(
     }
 
     /**
-     * content-length 来自对端：完整消耗 len 个字符保持流同步（截断不读会残留字节，
-     * 下一条 start line 解析失败、协议永久失步），但最多保留 MAX_BODY_CHARS——
-     * 防伪造大 content-length 强制大分配，超出部分读取后丢弃。
+     * 读 [keep] 个字符进 body（keep 已在调用方 coerceIn(0, MAX_BODY_CHARS)）；
+     * 剩余 total-keep 个字符用复用缓冲丢弃——维持流同步，让本次响应干净交付，
+     * 之后由调用方关闭连接（超限即对端异常，不再继续解析）。
      */
     private fun readBody(
         reader: BufferedReader,
-        len: Int,
+        keep: Int,
+        total: Int,
     ): String {
-        val bodyChars = CharArray(len.coerceAtMost(MAX_BODY_CHARS))
-        var kept = 0
-        var left = len
-        while (left > 0) {
-            val n = readChunk(reader, bodyChars, kept, left)
+        val bodyChars = CharArray(keep)
+        var read = 0
+        while (read < keep) {
+            val n = reader.read(bodyChars, read, keep - read)
             if (n < 0) break
-            if (kept < bodyChars.size) kept += n
-            left -= n
+            read += n
         }
-        return String(bodyChars, 0, kept)
+        // 超出保留上限的部分读取后丢弃；缓冲分配一次复用（超大 total 下逐次新建会产生 GB 级 churn）
+        var left = total - keep
+        if (left > 0) {
+            val discard = CharArray(DISCARD_CHUNK_CHARS)
+            while (left > 0) {
+                val n = reader.read(discard, 0, minOf(discard.size, left))
+                if (n < 0) break
+                left -= n
+            }
+        }
+        return String(bodyChars, 0, read)
     }
-
-    /** 读一段：body 未满则读入 body；已满则读入 scratch 丢弃（保持流同步）。 */
-    private fun readChunk(
-        reader: BufferedReader,
-        body: CharArray,
-        kept: Int,
-        left: Int,
-    ): Int =
-        if (kept < body.size) {
-            reader.read(body, kept, minOf(body.size - kept, left))
-        } else {
-            reader.read(CharArray(DISCARD_CHUNK_CHARS), 0, minOf(DISCARD_CHUNK_CHARS, left))
-        }
 
     private fun handleMessage(
         startLine: String,
