@@ -142,7 +142,10 @@ class Discovery {
         try {
             submitProbes(pool, prefix, selfIp, myEpoch)
         } finally {
-            pool.shutdown()
+            // shutdownNow + 中断池线程：stop() 的 interrupt() 只覆盖 disc-scan 等外层线程，
+            // 不覆盖池内的 disc-probe 线程。shutdownNow 主动中断池线程，消除
+            // 「running=false 先于 interrupt 到达」竞态下 awaitTermination 阻塞 ~20s 的窗口。
+            pool.shutdownNow()
             try {
                 pool.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
             } catch (_: InterruptedException) {
