@@ -13,7 +13,7 @@ lifecycle from discovery through connected sessions.
 | File                   | Description                                                                                                        |
 |------------------------|--------------------------------------------------------------------------------------------------------------------|
 | `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` + `onModuleAvailability` 回调(Module 在线状态变化) |
-| `Discovery.kt`         | 双通道设备发现: mDNS 组播 + /24 子网双探测(IDC 13511 + IB 3988 并行); 解析 IB hello 响应提取 `ibVer`/`ibSid`; `report()` 用 `?: return` 安全早退(不用 `!!` 断言); `probeHost` 去掉内层 Thread 包装，直接在池内顺序探测; 子网扫描池用 `shutdownNow()` 关闭（消除 stop() 竞态下 awaitTermination 阻塞 ~20s 窗口） |
+| `Discovery.kt`         | 双通道设备发现: mDNS 组播 + /24 子网双探测(IDC 13511 + IB 3988 并行); 解析 IB hello 响应提取 `ibVer`/`ibSid`; `report()` 用 `?: return` 安全早退(不用 `!!` 断言); `probeHost` 去掉内层 Thread 包装，直接在池内顺序探测; 子网扫描池正常路径 `shutdown()`(排队任务全跑完),仅 stop() 中断时 `shutdownNow()`(shutdownNow 会丢弃未启动的排队探测——e7940d2 曾误用于正常路径致 /24 只扫前 ~24 地址,回归见 `DiscoverySubnetScanTest`;测试经 `internal hostProber` 注入无网络假探测） |
 | `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图); 调用侧(`AppViewModel`)经 `ShotUiState.Capturing` + 兜底超时复位，防止截取状态永久 stuck |
 | `RcController.kt`      | Routes key events — IB preferred (needIb313 keys additionally require server ver≥313), IDC OpCmd_Key fallback(真机已验证有效) |
 | `RpmService.kt`        | Remote package management (list/install/uninstall apps); 自动 openVConn(module 在线时) + 挂起请求补发              |

@@ -32,6 +32,9 @@ class Discovery {
     var onDeviceFound: ((FoundDevice) -> Unit)? = null
     var onFinished: (() -> Unit)? = null
 
+    /** 测试注入点:单 host 探测动作,默认走真实网络(probeIdc + probeIb)。 */
+    internal var hostProber: (ip: String, epoch: Int) -> Unit = { ip, epoch -> probeHost(ip, epoch) }
+
     @Volatile
     private var running = false
     private val epoch =
@@ -142,13 +145,15 @@ class Discovery {
         try {
             submitProbes(pool, prefix, selfIp, myEpoch)
         } finally {
-            // shutdownNow + 中断池线程：stop() 的 interrupt() 只覆盖 disc-scan 等外层线程，
-            // 不覆盖池内的 disc-probe 线程。shutdownNow 主动中断池线程，消除
-            // 「running=false 先于 interrupt 到达」竞态下 awaitTermination 阻塞 ~20s 的窗口。
-            pool.shutdownNow()
+            // 正常路径必须 shutdown()(排队任务全部跑完);shutdownNow() 会丢弃未启动的
+            // 排队探测——submitProbes 仅入队即返回,/24 将只剩前 ~24 个地址被扫(e7940d2 回归)。
+            // 取消路径:stop() interrupt 使 awaitTermination 抛 InterruptedException,
+            // 此时再 shutdownNow() 丢弃队列并中断在跑探测,保留 M-2 的快速取消语义。
+            pool.shutdown()
             try {
-                pool.awaitTermination(20, java.util.concurrent.TimeUnit.SECONDS)
+                pool.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)
             } catch (_: InterruptedException) {
+                pool.shutdownNow()
             }
         }
     }
@@ -163,7 +168,7 @@ class Discovery {
             if (!active(myEpoch)) return
             val ip = "$prefix.$i"
             if (ip == selfIp) continue
-            pool.execute { probeHost(ip, myEpoch) }
+            pool.execute { hostProber(ip, myEpoch) }
         }
     }
 
