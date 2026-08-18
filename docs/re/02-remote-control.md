@@ -36,6 +36,14 @@
 [20] byte[size] body = 文本（JSON/数组）
 ```
 
+> **2026-08-18 真机实测**（YunOS TV, ver 3.29）：上述 checksum 公式**仅适用于发送侧**
+> （TV 接受以 `(size+reserve)^sid` 计算的上行帧）。**TV 下行所有帧恒 `reserve=0, checkSum=0`**——
+> hello 应答、`PROTO_CURRENTAPP(274)` 推送、`RSP_MODULEINFO(264)` 应答、keepalive 应答
+> (`0x10000000`)逐一验证均如此，固件从不计算下行 checksum。**接收侧不得校验 checksum**
+> （曾按公式校验导致 hello 应答及全部下行帧被误判损坏、IB 通道必死，已移除）；帧界防护以
+> magic + size 范围检查为准。另实测：hello 应答 JSON 含空格（`{"ver":"3.29", "sid":12345678}`）；
+> `MODULEINFO` 应答 body 为 `{"version":"3.29","dev_name":"TV",...}`(331B);`cur_app` body 以 `\0` 结尾。
+
 ### 2.3 指令消息（body 均为 ASCII 文本）
 
 | type | 名称 | body 格式 | 说明 |

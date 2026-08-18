@@ -46,6 +46,9 @@ class IbChannel(
 
     fun connect(timeoutMs: Int = 6000): Boolean {
         disconnect()
+        // 重置 helloId：否则同实例二次 connect 携带旧 sid,握手期 checksum 门会被旧值
+        // 重新武装,把新 hello 应答误判为损坏帧(当前调用方均新建实例,防御性复位)。
+        helloId = 0
         setState(State.CONNECTING)
         return try {
             val s = Socket()
@@ -183,11 +186,14 @@ class IbChannel(
             val size = b.int
             if (size < 0 || size > 1024 * 1024) return null
             val type = b.int
-            val reserve = b.int
-            val checksum = b.int
-            // 校验和 = (body.size + reserve) xor helloId，与 sendFrame 对称。
-            // 不匹配说明帧损坏（TCP 流错乱/中间人篡改），丢弃该帧。
-            if (checksum != ((size + reserve) xor helloId)) return null
+            b.int // reserve
+            b.int // checksum
+            // 2026-08-18 真机实测(ver 3.29):TV 下行所有帧恒
+            // reserve=0/checksum=0(hello 应答、cur_app、moduleinfo 应答、keepalive
+            // 应答均如此),从不按文档公式计算——接收侧任何 checksum 校验都会把每条
+            // 下行帧误判损坏(f076f90 加的校验因此必杀通道)。校验已移除,帧界防护
+            // 由 magic + size 范围检查承担;发送侧仍按公式 (size+reserve)^helloId
+            // 计算,真机已验证接受。
             val body = ByteArray(size)
             if (size > 0) inp.readFully(body)
             type to body
