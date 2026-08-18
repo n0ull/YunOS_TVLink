@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -126,11 +128,11 @@ fun RemoteScreen(vm: AppViewModel) {
             }
         }
 
-        BottomAppBar {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                app.tvlink.ui.widgets
-                    .VoiceButton(onText = { vm.remote.voiceText(it) })
-            }
+        Spacer(Modifier.height(8.dp))
+        // 原 BottomAppBar 整栏仅放一个语音按钮,白占一截垂直空间;改为底部居中单行
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            app.tvlink.ui.widgets
+                .VoiceButton(onText = { vm.remote.voiceText(it) })
         }
     }
 
@@ -176,8 +178,13 @@ private fun RcButton(
     size: Int = 64,
     onClick: () -> Unit,
 ) {
+    // VirtualKey 触感:Android 真震(跟随系统触感反馈设置,无需 VIBRATE 权限),桌面 no-op
+    val haptic = LocalHapticFeedback.current
     Surface(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+            onClick()
+        },
         modifier = modifier.size(size.dp),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -191,35 +198,36 @@ private fun RcButton(
 
 @Composable
 private fun KeypadPanel(onKey: (RcKey) -> Unit) {
-    Column(
-        Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceEvenly,
-    ) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             RcButton("电源", size = 56) { onKey(RcKey.POWER) }
             RcButton("魔键", size = 56) { onKey(RcKey.MAGIC) }
         }
-        // dpad
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            RcButton("▲") { onKey(RcKey.UP) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RcButton("◀") { onKey(RcKey.LEFT) }
-                Spacer(Modifier.width(12.dp))
-                RcButton("OK", size = 76) { onKey(RcKey.OK) }
-                Spacer(Modifier.width(12.dp))
-                RcButton("▶") { onKey(RcKey.RIGHT) }
+        // 控制区作为整体在剩余空间居中:长窄屏不再出现「电源贴顶/dpad 孤岛/底排贴底」
+        // 三处大空档;各组间距固定,任何屏高下视觉节奏一致
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                RcButton("▲", size = 68) { onKey(RcKey.UP) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RcButton("◀", size = 68) { onKey(RcKey.LEFT) }
+                    Spacer(Modifier.width(16.dp))
+                    RcButton("OK", size = 88) { onKey(RcKey.OK) }
+                    Spacer(Modifier.width(16.dp))
+                    RcButton("▶", size = 68) { onKey(RcKey.RIGHT) }
+                }
+                RcButton("▼", size = 68) { onKey(RcKey.DOWN) }
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    RcButton("返回") { onKey(RcKey.BACK) }
+                    RcButton("主页") { onKey(RcKey.HOME) }
+                    RcButton("菜单") { onKey(RcKey.MENU) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    RcButton("音量−") { onKey(RcKey.VOL_DOWN) }
+                    RcButton("音量+") { onKey(RcKey.VOL_UP) }
+                }
             }
-            RcButton("▼") { onKey(RcKey.DOWN) }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            RcButton("音量−") { onKey(RcKey.VOL_DOWN) }
-            RcButton("音量+") { onKey(RcKey.VOL_UP) }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcButton("主页") { onKey(RcKey.HOME) }
-            RcButton("返回", size = 72) { onKey(RcKey.BACK) }
-            RcButton("菜单") { onKey(RcKey.MENU) }
         }
     }
 }
@@ -272,16 +280,19 @@ private fun TouchpadPanel(
 
 @Composable
 private fun Stick(
-    modifier: Modifier = Modifier,
+    size: Int = 140,
     onRelease: (() -> Unit)? = null,
     onAxis: (x: Int, y: Int) -> Unit,
 ) {
     var knob by remember { mutableStateOf(Offset.Zero) }
+    val knobDp = (size * 0.37f).roundToInt()
+    // 行程 = (盘面 − 摇杆帽)/2:帽沿始终不出界(旧值 50dp 硬编码,帽沿越界 6dp)
+    val travelDp = (size - knobDp) / 2
     Box(
-        modifier
-            .size(140.dp)
+        Modifier
+            .size(size.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
-            .pointerInput(Unit) {
+            .pointerInput(size) {
                 detectDragGestures(
                     onDragEnd = {
                         knob = Offset.Zero
@@ -293,12 +304,12 @@ private fun Stick(
                     },
                 ) { change, drag ->
                     change.consume()
-                    val max = 50.dp.toPx()
+                    val max = travelDp.dp.toPx()
                     val nx = (knob.x + drag.x).coerceIn(-max, max)
                     val ny = (knob.y + drag.y).coerceIn(-max, max)
                     knob = Offset(nx, ny)
 
-                    // map [-50,50]dp -> [0,255], center 128, deadzone -> 128
+                    // map [-travel,travel] -> [0,255], center 128, deadzone -> 128
                     fun map(v: Float): Int {
                         val norm = v / max * 100 // [-100,100]
                         return if (abs(norm) < 5) 128 else ((norm / 100 + 1) * 255 / 2).roundToInt().coerceIn(0, 255)
@@ -310,7 +321,7 @@ private fun Stick(
     ) {
         Box(
             Modifier
-                .size(52.dp)
+                .size(knobDp.dp)
                 .offset { IntOffset(knob.x.roundToInt(), knob.y.roundToInt()) }
                 .background(Brand.accentBrush, CircleShape),
         )
@@ -325,51 +336,59 @@ private fun JoystickPanel(vm: AppViewModel) {
 
     fun send() = vm.rc.joystick(listOf(0 to left.first, 1 to left.second, 2 to right.first, 5 to right.second))
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcButton("LT", size = 52) { vm.remote.keyClick(RcKey.PAD_LT) }
-            RcButton("LB", size = 52) { vm.remote.keyClick(RcKey.PAD_LB) }
-            RcButton("RB", size = 52) { vm.remote.keyClick(RcKey.PAD_RB) }
-            RcButton("RT", size = 52) { vm.remote.keyClick(RcKey.PAD_RT) }
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Stick(
-                onRelease = {
-                    left = 128 to 128
-                    send()
-                },
-            ) { x, y ->
-                left = x to y
-                throttle.trySend { send() }
+    // 窄屏适配:360dp 屏可用宽 ~328dp,默认 140dp 双摇杆 + ABXY 列 ~386dp 必溢出
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxWidth < 400.dp
+        val stickSize = if (compact) 104 else 140
+        val padBtnSize = if (compact) 40 else 48
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                RcButton("LT", size = 52) { vm.remote.keyClick(RcKey.PAD_LT) }
+                RcButton("LB", size = 52) { vm.remote.keyClick(RcKey.PAD_LB) }
+                RcButton("RB", size = 52) { vm.remote.keyClick(RcKey.PAD_RB) }
+                RcButton("RT", size = 52) { vm.remote.keyClick(RcKey.PAD_RT) }
             }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                RcButton("Y", size = 48) { vm.remote.keyClick(RcKey.PAD_Y) }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    RcButton("X", size = 48) { vm.remote.keyClick(RcKey.PAD_X) }
-                    RcButton("B", size = 48) { vm.remote.keyClick(RcKey.PAD_B) }
+                Stick(
+                    size = stickSize,
+                    onRelease = {
+                        left = 128 to 128
+                        send()
+                    },
+                ) { x, y ->
+                    left = x to y
+                    throttle.trySend { send() }
                 }
-                RcButton("A", size = 48) { vm.remote.keyClick(RcKey.PAD_A) }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    RcButton("Y", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_Y) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        RcButton("X", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_X) }
+                        RcButton("B", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_B) }
+                    }
+                    RcButton("A", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_A) }
+                }
+                Stick(
+                    size = stickSize,
+                    onRelease = {
+                        right = 128 to 128
+                        send()
+                    },
+                ) { x, y ->
+                    right = x to y
+                    throttle.trySend { send() }
+                }
             }
-            Stick(
-                onRelease = {
-                    right = 128 to 128
-                    send()
-                },
-            ) { x, y ->
-                right = x to y
-                throttle.trySend { send() }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                RcButton("SELECT", size = 52) { vm.remote.keyClick(RcKey.PAD_SELECT) }
+                RcButton("START", size = 52) { vm.remote.keyClick(RcKey.PAD_START) }
             }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RcButton("SELECT", size = 52) { vm.remote.keyClick(RcKey.PAD_SELECT) }
-            RcButton("START", size = 52) { vm.remote.keyClick(RcKey.PAD_START) }
         }
     }
 }

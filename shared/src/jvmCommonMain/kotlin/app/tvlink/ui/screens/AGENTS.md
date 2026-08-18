@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-07-20 | Updated: 2026-07-24 -->
+<!-- Generated: 2026-07-20 | Updated: 2026-08-18 -->
 
 # screens
 
@@ -13,7 +13,7 @@ state and renders UI — no business logic lives here.
 | File                    | Description                                                                                  |
 |-------------------------|----------------------------------------------------------------------------------------------|
 | `DevicePickerScreen.kt` | Device discovery list — 展示 IB 探测字段(`IB v3.29`、`sid=xxx`),IB-only 设备标"电视 (IB 通道)" |
-| `RemoteScreen.kt`       | Remote control — 五模式切换:按键/触控板/手柄/方向盘/体感,经 RcController(IB 优先,IDC 兜底)      |
+| `RemoteScreen.kt`       | Remote control — 五模式切换:按键/触控板/手柄/方向盘/体感,经 RcController(IB 优先,IDC 兜底);按键页=经典遥控分区(电源/魔键贴顶,dpad+导航+音量作为整体居中,间距固定不随屏高漂移);手柄页窄屏自适应(<400dp 摇杆 140→104/ABXY 48→40,`Stick` 行程=(盘−帽)/2 防帽沿越界);所有 `RcButton` 点击经 `LocalHapticFeedback` 发 VirtualKey 触感(Android 真震免权限,桌面 no-op);语音按钮为底部居中单行(原 BottomAppBar 空栏已删) |
 | `CastScreen.kt`         | Local media projection — file pick, play/pause/seek, playback status                         |
 | `MoreScreen.kt`         | "更多" tab — ListItem 菜单:截屏/应用/(Android)魔投配网/设置,进入 MoreSub 子屏                  |
 | `ScreenshotScreen.kt`   | TV screenshot capture and display/save                                                       |
