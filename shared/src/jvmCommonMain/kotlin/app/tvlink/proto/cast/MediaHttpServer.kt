@@ -202,7 +202,7 @@ class MediaHttpServer {
         // 超限：丢弃剩余至行尾
         while (true) {
             val c = inp.read()
-            if (c.toChar() == '\n' || c == -1) break
+            if (c == -1 || c.toChar() == '\n') break
         }
         return null
     }
