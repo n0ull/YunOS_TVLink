@@ -175,16 +175,21 @@ class DeviceManager {
                 val conn = IdcConnection(ip, IdcConst.TCP_PORT)
                 wireCallbacks(conn)
                 val ok = conn.connect(LoginReq(devName = "TVLink-Client"))
+                // 成功即装回：reader 回调的 `connection === conn` 判据在此之后才有效——
+                // 若装回前 reader 已判死，回调因 connection 仍为 null 而遗漏，UI 停在
+                // CONNECTED 但通道已死，需等心跳（最坏 ~60s）才能自愈。早装回后世代守卫
+                // 负责撤销（见下），窗口收窄至 conn.connect 内部（reader 启动后至返回前）。
+                if (ok) connection = conn
                 // 世代守卫不分成败：建连（锁内阻塞最坏 ~16s）期间出现更新意图则放弃——
-                // 成功不装回；失败也不把 FAILED 覆写到更新状态上（显式断开已置 IDLE，
-                // 覆写会让 AppViewModel 复核后误弹"连接失败"）。失败侧 connect 内部已
-                // close，shutdown 幂等
+                // 成功不装回（撤销早装回）；失败也不把 FAILED 覆写到更新状态上（显式断开
+                // 已置 IDLE，覆写会让 AppViewModel 复核后误弹"连接失败"）。失败侧 connect
+                // 内部已 close，shutdown 幂等
                 if (generation.get() != gen) {
                     conn.shutdown()
+                    if (connection === conn) connection = null
                     return@withLock
                 }
                 if (ok) {
-                    connection = conn
                     val di = conn.deviceInfo
                     // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)
                     val ddhPort =
