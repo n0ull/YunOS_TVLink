@@ -135,8 +135,7 @@ class MediaHttpServer {
                 return close(client)
             }
             val inp = client.getInputStream().bufferedReader(Charsets.ISO_8859_1)
-            val requestLine = inp.readLine() ?: return close(client)
-            if (requestLine.length > MAX_REQUEST_LINE_CHARS) return close(client)
+            val requestLine = readLimitedLine(inp, MAX_REQUEST_LINE_CHARS) ?: return close(client)
             val parts = requestLine.split(' ')
             if (parts.size < 2) return close(client)
             val path = parts[1].removePrefix("/")
@@ -174,6 +173,30 @@ class MediaHttpServer {
         val start: Long,
         val end: Long,
     )
+
+    /** 读取一行，最多 [limit] 个字符；超限丢弃至行尾并返回 null。
+     *  逐字符读取（请求行通常 < 200 字符，开销可忽略），避免 readLine() 先分配整行再检查长度。 */
+    private fun readLimitedLine(inp: BufferedReader, limit: Int): String? {
+        val sb = StringBuilder(limit)
+        while (sb.length < limit) {
+            val c = inp.read()
+            if (c == -1) return if (sb.isEmpty()) null else sb.toString()
+            if (c == '\n') return sb.toString()
+            if (c == '\r') {
+                inp.mark(1)
+                val next = inp.read()
+                if (next != '\n' && next != -1) inp.reset()
+                return sb.toString()
+            }
+            sb.append(c.toChar())
+        }
+        // 超限：丢弃剩余至行尾
+        while (true) {
+            val c = inp.read()
+            if (c == '\n' || c == -1) break
+        }
+        return null
+    }
 
     private fun readRange(inp: BufferedReader): HttpRange {
         var rangeStart = -1L
