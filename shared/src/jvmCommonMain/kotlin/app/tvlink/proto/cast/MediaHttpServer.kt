@@ -136,6 +136,7 @@ class MediaHttpServer {
             }
             val inp = client.getInputStream().bufferedReader(Charsets.ISO_8859_1)
             val requestLine = inp.readLine() ?: return close(client)
+            if (requestLine.length > MAX_REQUEST_LINE_CHARS) return close(client)
             val parts = requestLine.split(' ')
             if (parts.size < 2) return close(client)
             val path = parts[1].removePrefix("/")
@@ -297,6 +298,9 @@ class MediaHttpServer {
 
     companion object {
         private const val COPY_BUFFER_SIZE = 256 * 1024
+
+        /** 请求行字符上限：防对端伪造超长请求行强制大分配（allowedClientIp 已兜底，仅 TV 可访问）。 */
+        private const val MAX_REQUEST_LINE_CHARS = 8 * 1024
 
         private val mimeTypes =
             mapOf(
