@@ -117,6 +117,24 @@ POST /preload（图片预览预载下一张，docs/re/04 §3）——本项目�
 
 ## 已归档（完成）
 
+- [x] **复审修复（2026-08-18，三轮 code review 零问题闭环）**：
+  - **M-1** 建连早装回 + 世代守卫撤销分支（`30dbcd7`，AGENTS.md `6baaf36`）：`conn.connect()` 成功后
+    立即 `connection = conn`（原在世代守卫之后），关闭 reader 回调 `connection === conn` 判据在装回前
+    遗漏的窗口；世代守卫增加撤销分支（`connection === conn` 时置 null）。窗口收窄至 `conn.connect()`
+    内部（reader 启动后至返回前）。**M-1'**（`d8a83f7`，AGENTS.md `2f6023c`）：失败分支纳入世代守卫
+    （失败也不把 FAILED 覆写到更新状态）；`connect()` 锁顶闸（等锁期间出现更新意图则放弃）；投屏
+    清旧从供片后挪至下次投屏通道就绪后（`CastFeature.file()` 先 `clear()` 再注册）。
+  - **M-2** Discovery 子网扫描池 `shutdownNow()` 关闭（`e7940d2`，AGENTS.md `e4af076`）：消除
+    `stop()` 竞态下（`running=false` 先于 `interrupt()` 到达池线程）`awaitTermination` 阻塞 ~20 s 窗口；
+    所有探测 I/O 已有 1200 ms 超时，中断安全。
+  - **LOW-1/1'/1''/1'''** MediaHttpServer 请求行限长（`c58318a/6c972f8/c93de09/ece3799`，
+    AGENTS.md `42e0024/20f248a`）：`readLine()` 先分配整行再检查 → `readLimitedLine()` 逐字符读取、
+    8 KB 上限、超限丢弃至行尾返回 null；边界语义对齐原 `length > limit`（恰好 limit 字符接受）；
+    `BufferedReader.read()` 返回 Int，统一 `c.toChar() == '\n'/'\r'` 比较（`ece3799` 补编译验证）；
+    drain-loop EOF 判断顺序对齐（`faefdce`）。边界测试（`9449d09/9449d09/d0d79c8`）：raw socket
+    发送恰好 8 KB 请求行（接受，200 + body 匹配）与 8193 字符请求行（直接关连），socket 用 `.use {}`
+    管理生命周期。
+
 - [x] **README 瘦身 + 排版规范（2026-08-06）**：README 仅保留结果（功能、机制、状态），验证过程
       与诊断叙述从 README 移除，以本文件档案为准（既有档案已全覆盖，无信息丢失）；两文件按
       document-style-guide 统一排版（全角引号、～范围连接号、单位前空格、行内代码后全角括号）
