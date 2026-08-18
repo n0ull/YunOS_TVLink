@@ -13,7 +13,7 @@ state and renders UI — no business logic lives here.
 | File                    | Description                                                                                  |
 |-------------------------|----------------------------------------------------------------------------------------------|
 | `DevicePickerScreen.kt` | Device discovery list — 展示 IB 探测字段(`IB v3.29`、`sid=xxx`),IB-only 设备标"电视 (IB 通道)" |
-| `RemoteScreen.kt`       | Remote control — 五模式切换:按键/触控板/手柄/方向盘/体感,经 RcController(IB 优先,IDC 兜底);按键页=经典遥控分区(电源/魔键贴顶,dpad+导航+音量作为整体居中,间距固定不随屏高漂移);手柄页窄屏自适应(<400dp 摇杆 140→104/ABXY 48→40,`Stick` 行程=(盘−帽)/2 防帽沿越界);所有 `RcButton` 点击经 `keyVibrate()`(Vibrator 直振,EFFECT_CLICK 29+,不受系统「触摸反馈」开关抑制;曾用 LocalHapticFeedback/VirtualKey 被该开关吞掉);语音按钮为底部居中单行(原 BottomAppBar 空栏已删) |
+| `RemoteScreen.kt`       | Remote control — 五模式切换:按键/触控板/手柄/方向盘/体感,经 RcController(IB 优先,IDC 兜底);按键页=经典遥控分区(电源/魔键贴顶,dpad+导航+音量作为整体居中,间距固定不随屏高漂移);手柄页=Xbox 手柄映射(肩键交错 LB/RB 外 LT/RT 内,左列 L 摇杆+十字键、右列 ABXY 菱形+R 摇杆,SELECT/START 为 `PillButton` 胶囊键;LS/RS 协议无键码不布局);触控板无跟随圆点;`Stick` 行程=(盘−帽)/2 防帽沿越界;所有 `RcButton`/`PillButton` 点击经 `keyVibrate()`(Vibrator 直振,EFFECT_CLICK 29+,不受系统「触摸反馈」开关抑制;曾用 LocalHapticFeedback/VirtualKey 被该开关吞掉);语音按钮为底部居中单行(原 BottomAppBar 空栏已删) |
 | `CastScreen.kt`         | Local media projection — file pick, play/pause/seek, playback status                         |
 | `MoreScreen.kt`         | "更多" tab — ListItem 菜单:截屏/应用/(Android)魔投配网/设置,进入 MoreSub 子屏                  |
 | `ScreenshotScreen.kt`   | TV screenshot capture and display/save                                                       |

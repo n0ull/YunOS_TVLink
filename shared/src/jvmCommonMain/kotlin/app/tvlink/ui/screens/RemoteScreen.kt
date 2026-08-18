@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -193,6 +194,29 @@ private fun RcButton(
     }
 }
 
+/** 胶囊形功能键(SELECT/START):Xbox 菜单键的非圆形变体。 */
+@Composable
+private fun PillButton(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = {
+            app.tvlink.ui.widgets
+                .keyVibrate()
+            onClick()
+        },
+        modifier = Modifier.width(76.dp).height(34.dp),
+        shape = RoundedCornerShape(percent = 50),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 2.dp,
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
 @Composable
 private fun KeypadPanel(onKey: (RcKey) -> Unit) {
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -236,7 +260,6 @@ private fun TouchpadPanel(
     vm: AppViewModel,
     onKey: (RcKey) -> Unit,
 ) {
-    var cursor by remember { mutableStateOf(Offset(200f, 200f)) }
     val throttle = remember { SendThrottle() }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
@@ -247,20 +270,12 @@ private fun TouchpadPanel(
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
-                        cursor += drag
                         throttle.trySend { vm.rc.mouseMove(drag.x.roundToInt(), drag.y.roundToInt()) }
                     }
                 }.pointerInput(Unit) {
                     detectTapGestures(onTap = { vm.rc.mouseClick() })
                 },
-        ) {
-            Box(
-                Modifier
-                    .size(18.dp)
-                    .offset { IntOffset(cursor.x.roundToInt() - 9, cursor.y.roundToInt() - 9) }
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-            )
-        }
+        )
         // ponytail: 相对鼠标板无法滚动（IB 接口无 scroll 事件），长列表依赖电视侧光标/按键
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             RcButton("▲", size = 48) { onKey(RcKey.UP) }
@@ -333,58 +348,96 @@ private fun JoystickPanel(vm: AppViewModel) {
 
     fun send() = vm.rc.joystick(listOf(0 to left.first, 1 to left.second, 2 to right.first, 5 to right.second))
 
-    // 窄屏适配:360dp 屏可用宽 ~328dp,默认 140dp 双摇杆 + ABXY 列 ~386dp 必溢出
+    // 窄屏适配:双列布局每列 ~150dp 宽,摇杆可放到 120dp(旧单排双摇杆 140dp 必溢出)
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxWidth < 400.dp
-        val stickSize = if (compact) 104 else 140
+        val stickSize = if (compact) 120 else 140
         val padBtnSize = if (compact) 40 else 48
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                RcButton("LT", size = 52) { vm.remote.keyClick(RcKey.PAD_LT) }
-                RcButton("LB", size = 52) { vm.remote.keyClick(RcKey.PAD_LB) }
-                RcButton("RB", size = 52) { vm.remote.keyClick(RcKey.PAD_RB) }
-                RcButton("RT", size = 52) { vm.remote.keyClick(RcKey.PAD_RT) }
-            }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Stick(
-                    size = stickSize,
-                    onRelease = {
-                        left = 128 to 128
-                        send()
-                    },
-                ) { x, y ->
-                    left = x to y
-                    throttle.trySend { send() }
-                }
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    RcButton("Y", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_Y) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        RcButton("X", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_X) }
-                        RcButton("B", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_B) }
+        val dpadSize = if (compact) 36 else 44
+        Column(Modifier.fillMaxSize()) {
+            // Xbox 布局(实体手柄映射):肩键交错——LB/RB 居上靠外,LT/RT 下沉内移;
+            // SELECT/START 收小居中;左列=L 摇杆+十字键,右列=ABXY 菱形+R 摇杆;
+            // LS/RS 协议无键码,不布局
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    RcButton("LB", size = 52) { vm.remote.keyClick(RcKey.PAD_LB) }
+                    Row {
+                        Spacer(Modifier.width(40.dp))
+                        RcButton("LT", size = 44) { vm.remote.keyClick(RcKey.PAD_LT) }
                     }
-                    RcButton("A", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_A) }
                 }
-                Stick(
-                    size = stickSize,
-                    onRelease = {
-                        right = 128 to 128
-                        send()
-                    },
-                ) { x, y ->
-                    right = x to y
-                    throttle.trySend { send() }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PillButton("SELECT") { vm.remote.keyClick(RcKey.PAD_SELECT) }
+                    PillButton("START") { vm.remote.keyClick(RcKey.PAD_START) }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    RcButton("RB", size = 52) { vm.remote.keyClick(RcKey.PAD_RB) }
+                    Row {
+                        RcButton("RT", size = 44) { vm.remote.keyClick(RcKey.PAD_RT) }
+                        Spacer(Modifier.width(40.dp))
+                    }
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                RcButton("SELECT", size = 52) { vm.remote.keyClick(RcKey.PAD_SELECT) }
-                RcButton("START", size = 52) { vm.remote.keyClick(RcKey.PAD_START) }
+            // 主区双列整体居中:左列 L 摇杆在上、十字键在下;右列 ABXY 在上、R 摇杆在下。
+            // 列内间距固定,不随屏高漂移
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        Stick(
+                            size = stickSize,
+                            onRelease = {
+                                left = 128 to 128
+                                send()
+                            },
+                        ) { x, y ->
+                            left = x to y
+                            throttle.trySend { send() }
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            RcButton("▲", size = dpadSize) { vm.remote.keyClick(RcKey.UP) }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RcButton("◀", size = dpadSize) { vm.remote.keyClick(RcKey.LEFT) }
+                                Spacer(Modifier.width(dpadSize.dp))
+                                RcButton("▶", size = dpadSize) { vm.remote.keyClick(RcKey.RIGHT) }
+                            }
+                            RcButton("▼", size = dpadSize) { vm.remote.keyClick(RcKey.DOWN) }
+                        }
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            RcButton("Y", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_Y) }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RcButton("X", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_X) }
+                                Spacer(Modifier.width(padBtnSize.dp))
+                                RcButton("B", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_B) }
+                            }
+                            RcButton("A", size = padBtnSize) { vm.remote.keyClick(RcKey.PAD_A) }
+                        }
+                        Stick(
+                            size = stickSize,
+                            onRelease = {
+                                right = 128 to 128
+                                send()
+                            },
+                        ) { x, y ->
+                            right = x to y
+                            throttle.trySend { send() }
+                        }
+                    }
+                }
             }
         }
     }
