@@ -175,7 +175,8 @@ class MediaHttpServer {
     )
 
     /** 读取一行，最多 [limit] 个字符；超限丢弃至行尾并返回 null。
-     *  逐字符读取（请求行通常 < 200 字符，开销可忽略），避免 readLine() 先分配整行再检查长度。 */
+     *  逐字符读取（请求行通常 < 200 字符，开销可忽略），避免 readLine() 先分配整行再检查长度。
+     *  恰好 limit 字符的行予以接受（与原 `length > limit` 语义一致）。 */
     private fun readLimitedLine(inp: BufferedReader, limit: Int): String? {
         val sb = StringBuilder(limit)
         while (sb.length < limit) {
@@ -185,10 +186,18 @@ class MediaHttpServer {
             if (c == '\r') {
                 inp.mark(1)
                 val next = inp.read()
-                if (next != '\n' && next != -1) inp.reset()
-                return sb.toString()
+                if (next == '\n') return sb.toString()  // \r\n 行尾
+                if (next != -1) inp.reset()             // \r 在行中：回退 next，\r 由下方 append
+                else return sb.toString()                // EOF
             }
             sb.append(c.toChar())
+        }
+        // 达到 limit 字符：peek 下一字符，若是行尾则接受（恰好 limit 字符）
+        val next = inp.read()
+        if (next == '\n' || next == -1) return sb.toString()
+        if (next == '\r') {
+            val afterCr = inp.read()
+            if (afterCr == '\n' || afterCr == -1) return sb.toString()
         }
         // 超限：丢弃剩余至行尾
         while (true) {
