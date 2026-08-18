@@ -183,28 +183,42 @@ class MediaHttpServer {
             val c = inp.read()
             if (c == -1) return if (sb.isEmpty()) null else sb.toString()
             if (c.toChar() == '\n') return sb.toString()
-            if (c.toChar() == '\r') {
-                inp.mark(1)
-                val next = inp.read()
-                if (next.toChar() == '\n') return sb.toString()  // \r\n 行尾
-                if (next != -1) inp.reset()                      // \r 在行中：回退 next，\r 由下方 append
-                else return sb.toString()                         // EOF
-            }
+            if (c.toChar() == '\r' && isLineEndAfterCr(inp)) return sb.toString()
             sb.append(c.toChar())
         }
         // 达到 limit 字符：peek 下一字符，若是行尾则接受（恰好 limit 字符）
+        if (isLineEndAhead(inp)) return sb.toString()
+        // 超限：丢弃剩余至行尾
+        discardToLineEnd(inp)
+        return null
+    }
+
+    /** \r 之后 peek：\n 或 EOF 则行结束（消费之）；否则 mark/reset 回退（\r 视为行内字符，由调用方 append）。 */
+    private fun isLineEndAfterCr(inp: BufferedReader): Boolean {
+        inp.mark(1)
         val next = inp.read()
-        if (next.toChar() == '\n' || next == -1) return sb.toString()
+        if (next == -1 || next.toChar() == '\n') return true
+        inp.reset()
+        return false
+    }
+
+    /** 恰好读满 limit 后的行尾判定：\n / \r\n / EOF 接受；判否时消费的字符等同于超限丢弃的前缀。 */
+    private fun isLineEndAhead(inp: BufferedReader): Boolean {
+        val next = inp.read()
+        if (next == -1 || next.toChar() == '\n') return true
         if (next.toChar() == '\r') {
             val afterCr = inp.read()
-            if (afterCr.toChar() == '\n' || afterCr == -1) return sb.toString()
+            if (afterCr == -1 || afterCr.toChar() == '\n') return true
         }
-        // 超限：丢弃剩余至行尾
+        return false
+    }
+
+    /** 丢弃至 \n 或 EOF（含）。 */
+    private fun discardToLineEnd(inp: BufferedReader) {
         while (true) {
             val c = inp.read()
             if (c == -1 || c.toChar() == '\n') break
         }
-        return null
     }
 
     private fun readRange(inp: BufferedReader): HttpRange {
@@ -291,33 +305,52 @@ class MediaHttpServer {
         to: Long,
     ) {
         FileInputStream(file).use { fis ->
-            var pos = from
-            var remaining = to - from + 1
-            var zeroCopyFailed = false
-            try {
-                val dest =
-                    java.nio.channels.Channels
-                        .newChannel(out)
-                while (remaining > 0) {
-                    val n = fis.channel.transferTo(pos, remaining, dest)
-                    if (n <= 0L) throw java.io.IOException("transferTo returned $n")
-                    pos += n
-                    remaining -= n
-                }
-            } catch (e: Exception) {
-                System.err.println("MediaHttpServer: zero-copy failed, fallback to buffer copy: ${e.message}")
-                zeroCopyFailed = true
+            val resume = tryZeroCopy(fis, out, from, to) ?: return
+            bufferCopy(fis, out, resume.first, resume.last - resume.first + 1)
+        }
+    }
+
+    /** 零拷贝泵 [from]..[to]；返回 null = 全部发完，否则返回未发区间（断点续传给缓冲拷贝，不重发已发字节）。 */
+    private fun tryZeroCopy(
+        fis: FileInputStream,
+        out: OutputStream,
+        from: Long,
+        to: Long,
+    ): LongRange? {
+        var pos = from
+        var remaining = to - from + 1
+        return try {
+            val dest =
+                java.nio.channels.Channels
+                    .newChannel(out)
+            while (remaining > 0) {
+                val n = fis.channel.transferTo(pos, remaining, dest)
+                if (n <= 0L) throw java.io.IOException("transferTo returned $n")
+                pos += n
+                remaining -= n
             }
-            if (zeroCopyFailed) {
-                fis.channel.position(pos)
-                val buf = ByteArray(COPY_BUFFER_SIZE)
-                while (remaining > 0) {
-                    val n = fis.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
-                    if (n < 0) break
-                    out.write(buf, 0, n)
-                    remaining -= n
-                }
-            }
+            null
+        } catch (e: Exception) {
+            System.err.println("MediaHttpServer: zero-copy failed, fallback to buffer copy: ${e.message}")
+            pos..(pos + remaining - 1)
+        }
+    }
+
+    /** 缓冲拷贝兜底：从 [pos] 起续传 [remaining] 字节到 [out]。 */
+    private fun bufferCopy(
+        fis: FileInputStream,
+        out: OutputStream,
+        pos: Long,
+        remaining: Long,
+    ) {
+        fis.channel.position(pos)
+        val buf = ByteArray(COPY_BUFFER_SIZE)
+        var left = remaining
+        while (left > 0) {
+            val n = fis.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+            if (n < 0) break
+            out.write(buf, 0, n)
+            left -= n
         }
     }
 

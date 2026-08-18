@@ -190,24 +190,7 @@ class DeviceManager {
                     return@withLock
                 }
                 if (ok) {
-                    val di = conn.deviceInfo
-                    // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)
-                    val ddhPort =
-                        di
-                            ?.ddhParams
-                            ?.get("mediaprojection")
-                            ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
-                    val dev =
-                        ConnectedDevice(
-                            ip = ip,
-                            name = di?.name ?: ip,
-                            model = di?.model ?: "",
-                            uuid = di?.uuid ?: "",
-                            mac = mac,
-                            projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
-                            ibVer = ibVer,
-                            ibSid = ibSid,
-                        )
+                    val dev = buildConnectedDevice(conn, ip, mac, ibVer, ibSid)
                     retries.set(0)
                     reconnectTarget = dev
                     saveHistory(dev)
@@ -220,6 +203,32 @@ class DeviceManager {
                 }
             }
         }
+    }
+
+    /** 建连成功后组装 ConnectedDevice。投影端口优先 ddhParams > mDNS 发现 > 0（AppViewModel 兜底时依次试 13520/13521）。 */
+    private fun buildConnectedDevice(
+        conn: IdcConnection,
+        ip: String,
+        mac: String,
+        ibVer: String,
+        ibSid: String,
+    ): ConnectedDevice {
+        val di = conn.deviceInfo
+        val ddhPort =
+            di
+                ?.ddhParams
+                ?.get("mediaprojection")
+                ?.let { parseJsonObject(String(it, Charsets.UTF_8)).int("projectionport") } ?: 0
+        return ConnectedDevice(
+            ip = ip,
+            name = di?.name ?: ip,
+            model = di?.model ?: "",
+            uuid = di?.uuid ?: "",
+            mac = mac,
+            projectionPort = ddhPort.takeIf { it > 0 } ?: discoveredProjectionPort,
+            ibVer = ibVer,
+            ibSid = ibSid,
+        )
     }
 
     /** IB-only 连接：仅建 IB 通道(3988)，不经 IDC。适用于子网扫描发现 IB 但 IDC 未开放的设备。

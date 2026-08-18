@@ -260,7 +260,7 @@ class CastController(
         // content-length 协议违规（负值/非数字/超 Int 范围如 99999999999）：按 0 处理会把随后的
         // body 字节留在流中误解析为下一条消息（永久失步且通道不关闭）——交付空 body 解开
         // 在途请求后关通道快速失败，与超限同策略。header 缺省按 0（TV 响应均带 CL，仅容错）。
-        if (clHeader != null && (parsedLen == null || parsedLen < 0L || parsedLen > Int.MAX_VALUE)) {
+        if (isInvalidContentLength(clHeader, parsedLen)) {
             handleMessage(startLine, "")
             return false
         }
@@ -273,6 +273,12 @@ class CastController(
         if (rawLen > MAX_BODY_CHARS) return false
         return true
     }
+
+    /** content-length 协议违规判定：header 在但值非法（非数字/负值/超 Int 范围）。header 缺省不算（按 0 容错）。 */
+    private fun isInvalidContentLength(
+        clHeader: String?,
+        parsedLen: Long?,
+    ): Boolean = clHeader != null && (parsedLen == null || parsedLen < 0L || parsedLen > Int.MAX_VALUE)
 
     private fun readHeaders(reader: BufferedReader): Map<String, String> {
         val headers = LinkedHashMap<String, String>()
