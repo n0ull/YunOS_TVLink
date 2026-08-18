@@ -13,7 +13,7 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 | File                 | Description                                                                                                            |
 |----------------------|------------------------------------------------------------------------------------------------------------------------|
 | `CastController.kt`  | TCP control channel: setmedia/play/pause/seek/volume commands; play() 后 1s 轮询 `GET /playback-info` 驱动播放状态回调; `DEFAULT_PORT = 13520` 为公共常量; content-length 负值/非数字/超 Int 范围=协议违规→交付空 body 后关通道 |
-| `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back; `allowedClientIp` 仅服务已连 TV(拒绝留痕); 畸形 Range 回 416; 请求行上限 8KB; 条目存续至下次投屏被清 |
+| `MediaHttpServer.kt` | Embedded HTTP server (port 8192+): serves local files with Range support for TV pull-back; `allowedClientIp` 仅服务已连 TV(拒绝留痕); 畸形 Range 回 416; 请求行 `readLimitedLine()` 分配前限长 8KB; 条目存续至下次投屏被清 |
 
 ## For AI Agents
 
