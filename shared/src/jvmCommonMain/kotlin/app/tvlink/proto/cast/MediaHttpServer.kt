@@ -182,27 +182,27 @@ class MediaHttpServer {
         while (sb.length < limit) {
             val c = inp.read()
             if (c == -1) return if (sb.isEmpty()) null else sb.toString()
-            if (c == '\n') return sb.toString()
-            if (c == '\r') {
+            if (c.toChar() == '\n') return sb.toString()
+            if (c.toChar() == '\r') {
                 inp.mark(1)
                 val next = inp.read()
-                if (next == '\n') return sb.toString()  // \r\n 行尾
-                if (next != -1) inp.reset()             // \r 在行中：回退 next，\r 由下方 append
-                else return sb.toString()                // EOF
+                if (next.toChar() == '\n') return sb.toString()  // \r\n 行尾
+                if (next != -1) inp.reset()                      // \r 在行中：回退 next，\r 由下方 append
+                else return sb.toString()                         // EOF
             }
             sb.append(c.toChar())
         }
         // 达到 limit 字符：peek 下一字符，若是行尾则接受（恰好 limit 字符）
         val next = inp.read()
-        if (next == '\n' || next == -1) return sb.toString()
-        if (next == '\r') {
+        if (next.toChar() == '\n' || next == -1) return sb.toString()
+        if (next.toChar() == '\r') {
             val afterCr = inp.read()
-            if (afterCr == '\n' || afterCr == -1) return sb.toString()
+            if (afterCr.toChar() == '\n' || afterCr == -1) return sb.toString()
         }
         // 超限：丢弃剩余至行尾
         while (true) {
             val c = inp.read()
-            if (c == '\n' || c == -1) break
+            if (c.toChar() == '\n' || c == -1) break
         }
         return null
     }
