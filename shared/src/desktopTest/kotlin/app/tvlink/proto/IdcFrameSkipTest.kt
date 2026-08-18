@@ -103,7 +103,13 @@ class IdcFrameSkipTest {
     private fun readFrame(inp: DataInputStream) {
         val header = ByteArray(IdcConst.HEADER_LEN)
         inp.readFully(header)
-        val total = ByteBuffer.wrap(header).run { int; int; int; int }
+        val total =
+            ByteBuffer.wrap(header).run {
+                int
+                int
+                int
+                int
+            }
         if (total > IdcConst.HEADER_LEN) inp.readFully(ByteArray(total - IdcConst.HEADER_LEN))
     }
 

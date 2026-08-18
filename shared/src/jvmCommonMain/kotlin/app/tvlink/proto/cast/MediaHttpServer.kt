@@ -177,7 +177,10 @@ class MediaHttpServer {
     /** 读取一行，最多 [limit] 个字符；超限丢弃至行尾并返回 null。
      *  逐字符读取（请求行通常 < 200 字符，开销可忽略），避免 readLine() 先分配整行再检查长度。
      *  恰好 limit 字符的行予以接受（与原 `length > limit` 语义一致）。 */
-    private fun readLimitedLine(inp: BufferedReader, limit: Int): String? {
+    private fun readLimitedLine(
+        inp: BufferedReader,
+        limit: Int,
+    ): String? {
         val sb = StringBuilder(limit)
         while (sb.length < limit) {
             val c = inp.read()

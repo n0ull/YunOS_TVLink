@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
  * embedded HTTP server can serve it as a plain file.
  */
 @Composable
+// 一次性文件拷贝回调，无需为单个 dispatcher 引入 DI（项目无 DI 框架）
+@Suppress("InjectDispatcher")
 actual fun pickMediaFile(
     type: String,
     onResult: (String?) -> Unit,

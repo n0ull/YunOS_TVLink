@@ -12,7 +12,6 @@ import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** IbChannel 回归（该模块此前 0 测试）。假 IB 服务绑固定端口（IbChannel 写死 IbConst.PORT）。 */
@@ -75,7 +74,9 @@ class IbChannelTest {
         }
         val ch = IbChannel("127.0.0.1")
         val done = CountDownLatch(1)
-        val result = java.util.concurrent.atomic.AtomicReference<Boolean?>(null)
+        val result =
+            java.util.concurrent.atomic
+                .AtomicReference<Boolean?>(null)
         thread(isDaemon = true) {
             result.set(ch.connect(timeoutMs = 800))
             done.countDown()

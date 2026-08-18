@@ -17,7 +17,9 @@ import kotlinx.coroutines.cancel
  * controller 装回/重启媒体服务/复活 UI（幽灵投屏通道 + HTTP 服务残留）。
  * 假投屏服务只 accept（connect 仅 TCP 握手即成）；旧实现 onDisconnected 不进锁，
  * 在途 connect 在其清空后完成装回 → 终态 channelAlive=true（本测试钉死终态不变量）。
+ * 测试 scope 直接用 Dispatchers.IO（无 DI 框架），故抑制 InjectDispatcher。
  */
+@Suppress("InjectDispatcher")
 class CastFeatureDisconnectTest {
     private val server = ServerSocket(0) // 端口由系统分配，onHostConnected 显式传入（不占用真实 13520）
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

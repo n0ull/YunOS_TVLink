@@ -15,7 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
-/** UI 静默失败回归（M9）：断线时截屏/连拍/属性查询/按键必须给用户提示而非静默吞掉。 */
+/** UI 静默失败回归（M9）：断线时截屏/连拍/属性查询/按键必须给用户提示而非静默吞掉。
+ *  测试 scope 直接用 Dispatchers.Default（无 DI 框架），故抑制 InjectDispatcher。 */
+@Suppress("InjectDispatcher")
 class UiSilentFailureTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val dm = DeviceManager() // 无连接：所有通道不可用

@@ -69,7 +69,13 @@ class DeviceManagerConnectTest {
             val inp = DataInputStream(s.getInputStream())
             val header = ByteArray(IdcConst.HEADER_LEN)
             inp.readFully(header)
-            val total = ByteBuffer.wrap(header).run { int; int; int; int }
+            val total =
+                ByteBuffer.wrap(header).run {
+                    int
+                    int
+                    int
+                    int
+                }
             if (total > IdcConst.HEADER_LEN) inp.readFully(ByteArray(total - IdcConst.HEADER_LEN))
             Thread.sleep(delayMs)
             val resp = ByteBuffer.allocate(IdcConst.HEADER_LEN + 12)

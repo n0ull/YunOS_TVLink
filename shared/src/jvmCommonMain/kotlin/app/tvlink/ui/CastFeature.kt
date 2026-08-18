@@ -8,6 +8,7 @@ import app.tvlink.proto.cast.MediaHttpServer
 import app.tvlink.proto.mdns.Mdns
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -74,7 +75,7 @@ class CastFeature(
     /** 生命周期世代号：connect/onDisconnected 发起即递增。在途 connect 装回前校验世代未变
      *  （期间发生显式断开则放弃装回，防幽灵通道复活）；onDisconnected 的异步清理同样校验——
      *  之后已有新建连意图时由新 connect 接管清理，避免陈旧清理误杀新会话。 */
-    private val generation = java.util.concurrent.atomic.AtomicInteger(0)
+    private val generation = AtomicInteger(0)
 
     /** 控制通道存活（供 AppViewModel.onResume 判断是否需补建）。 */
     val channelAlive: Boolean

@@ -67,19 +67,19 @@ class CastControllerTest {
     ) {
         val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
         val out = sock.getOutputStream()
-        var first = true
+        var isFirst = true
         while (true) {
             val start = readStartLine(reader) ?: return
             consumeRest(reader)
             val body =
-                if (oversizedFirst && first) {
+                if (oversizedFirst && isFirst) {
                     "x".repeat(OVERSIZED_BODY_CHARS)
                 } else if (start.startsWith("GET /playback-info")) {
                     """{"position":12,"duration":34,"state":"playing","rate":1,"name":"x"}"""
                 } else {
                     ""
                 }
-            first = false
+            isFirst = false
             val bytes = body.toByteArray(Charsets.UTF_8)
             out.write(
                 "HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\n\r\n".toByteArray(Charsets.ISO_8859_1),
