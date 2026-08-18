@@ -136,4 +136,32 @@ class DeviceManagerConnectTest {
             dm.destroy()
         }
     }
+
+    @Test
+    fun failedInflightConnectDoesNotOverwriteExplicitDisconnect() {
+        // M-1' 回归：锁内建连的【失败】落在显式断开之后时，失败分支不得把 FAILED 覆写
+        // 到 IDLE 上（旧实现：断开后 connState 停 FAILED，AppViewModel 600ms 复核后
+        // 误弹"连接失败" snackbar——用户显式断开后被告知连接失败）
+        val dm = DeviceManager()
+        try {
+            dm.connect("127.0.0.1")
+            assertTrue(firstAccepted.await(5, TimeUnit.SECONDS), "connect never reached fake TV")
+            Thread.sleep(200) // 确保 conn 已进入假 TV 登录等待（锁内阻塞中）
+            dm.disconnect()
+
+            // 服务端掐线 → 锁内登录读 EOF → connect() 立即返回 false（失败落在断开之后）
+            requireNotNull(sock1) { "fake TV never accepted" }.close()
+
+            // 失败分支充分落地（EOF 即时，2s 余量）
+            Thread.sleep(2_000)
+            assertTrue(dm.connection == null, "connection present after explicit disconnect")
+            assertEquals(
+                DeviceManager.ConnState.IDLE,
+                dm.connState.value,
+                "failure branch overwrote IDLE with FAILED after explicit disconnect",
+            )
+        } finally {
+            dm.destroy()
+        }
+    }
 }

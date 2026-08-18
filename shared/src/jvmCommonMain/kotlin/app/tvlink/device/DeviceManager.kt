@@ -163,6 +163,9 @@ class DeviceManager {
         scope.launch {
             // 单飞锁串行化重叠建连（范本：CastFeature.connectMutex）
             connectMutex.withLock {
+                // 等锁期间出现更新意图（显式断开/另一次建连）：放弃——不杀更新的会话、
+                // 不白跑最坏 ~16s 阻塞登录（同 connectIbOnly 锁顶闸）
+                if (generation.get() != gen) return@withLock
                 // kill any previous session before replacing it。
                 // 先置 null 再 shutdown：旧会话 close() 触发的 DISCONNECTED 回调经
                 // `connection === conn` 判据自然落空，不会误判为异常断开而排队自动重连
@@ -172,12 +175,15 @@ class DeviceManager {
                 val conn = IdcConnection(ip, IdcConst.TCP_PORT)
                 wireCallbacks(conn)
                 val ok = conn.connect(LoginReq(devName = "TVLink-Client"))
+                // 世代守卫不分成败：建连（锁内阻塞最坏 ~16s）期间出现更新意图则放弃——
+                // 成功不装回；失败也不把 FAILED 覆写到更新状态上（显式断开已置 IDLE，
+                // 覆写会让 AppViewModel 复核后误弹"连接失败"）。失败侧 connect 内部已
+                // close，shutdown 幂等
+                if (generation.get() != gen) {
+                    conn.shutdown()
+                    return@withLock
+                }
                 if (ok) {
-                    if (generation.get() != gen) {
-                        // 锁内建连期间出现更新意图（显式断开/另一次建连）：放弃装回
-                        conn.shutdown()
-                        return@withLock
-                    }
                     connection = conn
                     val di = conn.deviceInfo
                     // Prefer ddhParams port > mDNS-discovered port > 0 (AppViewModel 兜底时依次试 13520/13521)

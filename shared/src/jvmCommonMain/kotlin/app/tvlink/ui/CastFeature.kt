@@ -236,9 +236,6 @@ class CastFeature(
             showNotice("媒体服务未就绪")
             return
         }
-        // 同时只播一个媒体：注册新条目前清掉上一次投屏的旧条目（含旧封面），
-        // 收窄注册表暴露窗口；本条目的媒体+封面随后一并注册，互不影响
-        mediaServer.clear()
         // UUID 媒体 ID：毫秒时间戳可枚举（同网段可爆破拉走私人文件），UUID 不可猜测
         val id =
             when (type) {
@@ -246,8 +243,6 @@ class CastFeature(
                 "audio" -> "audio-${UUID.randomUUID()}"
                 else -> "image-${UUID.randomUUID()}"
             }
-        mediaServer.register(id, file)
-        val url = mediaServer.urlFor(id)
         scope.launch(Dispatchers.IO) {
             val cc =
                 // 建连在途时等其完成（点击投屏恰逢自动建连的竞态），而非立即判失败
@@ -255,6 +250,11 @@ class CastFeature(
                     showNotice("投屏通道未就绪，请稍后重试")
                     return@launch
                 }
+            // 同时只播一个媒体：通道就绪后才清旧条目（含旧封面）再注册新条目——
+            // 在 awaitChannel 之前 clear 会让通道未就绪的失败投屏误杀在播媒体
+            mediaServer.clear()
+            mediaServer.register(id, file)
+            val url = mediaServer.urlFor(id)
             updateStatus { it.copy(title = title) }
             // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：Android 经 MediaStore 取封面
             // 拷入缓存后按注册制供片（不走原 App 的绝对路径回退），失败则无封面投屏

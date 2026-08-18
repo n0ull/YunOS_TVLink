@@ -64,6 +64,28 @@ Racct 账号/支付（asoToken 在原 App 即空实现，docs/re/05 §7.3）、�
 PROTO_MULTITOUCH（IB 272）/ IDC OpCmdMultitouch（11200）（原 App 亦无 UI 调用方）；
 POST /preload（图片预览预载下一张，docs/re/04 §3）——本项目为单片选取模型，无画廊/幻灯片流，预载无消费方。
 
+## 审查排期（2026-08-18 两轮复审搁置项，条件触发再动）
+
+- **多网卡 TV 误拒**：媒体服务器按已连 TV IP 全等比对（`MediaHttpServer`），双网卡 TV 从另一接口
+  回拉会被拒。拒绝路径已留日志（`487e301`）——真机若见「投屏无声失败 + 日志源 IP 为另一接口」，
+  再改 /24 宽容比对
+- **mDNS 乱序丢 projectionPort**：TXT/A 先于 PTR 到达时记录被丢弃（`Mdns.parse` 单趟扫描），下次
+  通告自愈；双趟解析不值。真机若见投影端口发现延迟再动（测试名已定
+  `txtBeforePtrKeepsProjectionPort`，写了会先红）
+- **测试豁免**：`staleCleanupDoesNotKillNewSession`——需强制「清理协程排在新建连之后获锁」的
+  反向调度，公开 API 无注入点；守卫本身已在（`887ff34` 锁顶校验 + `CastFeature` 世代跳过）
+- **测试缺口**：`nextCastEvictsPreviousEntries`——投 A→投 B 后 A-URL 失效 + B 可用 + 封面同清，
+  钉 `CastFeature.file()` 的清旧契约（clear 被删/挪位目前无报警）
+- **世代机制固有纳秒窗**（接受，不修）：装回校验与赋值之间 disconnect 可交错（彻底闭合需
+  disconnect 入锁、最坏阻塞 ~16 s，更差）；重连 job 点火与断开纳秒竞态（scheduleReconnect 捕获
+  世代可闭合，窗口纳秒级）
+- **startMediaServer 起服失败留陈旧 url**：`localLanAddress()`=null 或端口全占时服务器已停但
+  `mediaServerUrl` 留旧值，`file()` 守卫被绕过——触发苛刻（纯 VPN 等无 site-local IPv4 网络），
+  真机见到再修
+- **LOW 批量**：0.0.0.0 绑定 / readLine 无上限 / 线程池无界队列（IP 校验已兜底）、IDC 跳帧日志
+  节流、CastController connect 失败 fd 泄漏、重复 Content-Length last-wins、captureBurst 窄窗口
+  假忙、onDisconnected 等锁 UI 停滞（最长 ~20 s）
+
 ## 已知天花板
 
 - **ver=1 加密会话不可复刻**：body AES 可复刻（KDF = 固定种子 `a31c5c871c597d133cb15cd68fefdc1a`
