@@ -177,6 +177,7 @@ class MediaHttpServer {
     /** 读取一行，最多 [limit] 个字符；超限丢弃至行尾并返回 null。
      *  逐字符读取（请求行通常 < 200 字符，开销可忽略），避免 readLine() 先分配整行再检查长度。
      *  恰好 limit 字符的行予以接受（与原 `length > limit` 语义一致）。 */
+    @Suppress("CyclomaticComplexMethod") // 逐字符解析需同时覆盖 CR/LF/EOF/超限分支
     private fun readLimitedLine(inp: BufferedReader, limit: Int): String? {
         val sb = StringBuilder(limit)
         while (sb.length < limit) {
@@ -284,6 +285,7 @@ class MediaHttpServer {
      * 把 [file] 的 from..to 字节写入 [out]。优先 FileChannel.transferTo(sendfile 零拷贝,
      * 大文件吞吐显著优于流拷贝)；内核/平台不支持时从断点回退到 256KB 缓冲拷贝。
      */
+    @Suppress("NestedBlockDepth") // 先走零拷贝，失败后在同一资源作用域回退流拷贝
     private fun pumpFile(
         out: OutputStream,
         file: File,

@@ -148,6 +148,7 @@ class DeviceManager {
         connect(device.ip, device.projectionPort, device.ibVer, device.ibSid, device.mac)
     }
 
+    @Suppress("CyclomaticComplexMethod") // 建连序列需保持锁、世代守卫与状态写入的原子顺序
     fun connect(
         ip: String,
         projectionPort: Int = 0,
