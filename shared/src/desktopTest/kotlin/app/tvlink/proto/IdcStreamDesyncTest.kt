@@ -27,7 +27,15 @@ class IdcStreamDesyncTest {
                     val inp = DataInputStream(sock.getInputStream())
                     val header = ByteArray(IdcConst.HEADER_LEN)
                     inp.readFully(header)
-                    val total = ByteBuffer.wrap(header).run { int; int; int; int }
+                    val total =
+                        ByteBuffer
+                            .wrap(header)
+                            .run {
+                                int
+                                int
+                                int
+                                int
+                            }
                     if (total > IdcConst.HEADER_LEN) inp.readFully(ByteArray(total - IdcConst.HEADER_LEN))
                     // loginResp
                     val resp = ByteBuffer.allocate(IdcConst.HEADER_LEN + 12)
