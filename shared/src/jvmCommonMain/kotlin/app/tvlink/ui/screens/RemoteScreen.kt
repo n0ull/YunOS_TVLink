@@ -40,9 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -178,11 +176,10 @@ private fun RcButton(
     size: Int = 64,
     onClick: () -> Unit,
 ) {
-    // VirtualKey 触感:Android 真震(跟随系统触感反馈设置,无需 VIBRATE 权限),桌面 no-op
-    val haptic = LocalHapticFeedback.current
     Surface(
         onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+            app.tvlink.ui.widgets
+                .keyVibrate()
             onClick()
         },
         modifier = modifier.size(size.dp),

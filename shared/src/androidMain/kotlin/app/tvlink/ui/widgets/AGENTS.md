@@ -13,8 +13,8 @@ system speech recognition, and the BLE dongle pairing screen.
 
 | File                          | Description                                                                                     |
 |-------------------------------|-------------------------------------------------------------------------------------------------|
-| `AndroidPlatform.android.kt`  | `object AndroidPlatform` — 持有 applicationContext 的平台服务入口(由 MainActivity.init 注入)       |
-| `Platform.android.kt`         | `actual platformName = "android"` + `BackHandler`(委托 `androidx.activity.compose.BackHandler`)  |
+| `AndroidPlatform.android.kt`  | `object AndroidPlatform` — 持有 applicationContext 的平台服务入口(由 MainActivity.init 注入);`isInitialized` 外露(lateinit 判空仅对象内部可见) |
+| `Platform.android.kt`         | `actual platformName = "android"` + `BackHandler`(委托 `androidx.activity.compose.BackHandler`) + `keyVibrate`(Vibrator 直振 EFFECT_CLICK 29+,不被系统触摸反馈开关抑制) |
 | `PlatformImage.android.kt`    | `actual ByteArrayImage`(BitmapFactory 解码 → ImageBitmap)与 `saveShot`(保存截图)                 |
 | `PlatformPicker.android.kt`   | `actual pickMediaFile` — SAF `GetContent`,选中内容拷贝到 app cache 供内嵌 HTTP 服务器以普通文件提供 |
 | `MotionSensor.android.kt`     | `actual MotionSensor` — SensorManager 加速度/陀螺仪,约 20Hz 节流,按协议缩放(docs/re/02 §4.4)    |

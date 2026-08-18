@@ -37,6 +37,9 @@ actual class MotionSensor actual constructor() {
     }
 }
 
+// 桌面端无震动马达，有意空实现
+actual fun keyVibrate() {}
+
 // Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
