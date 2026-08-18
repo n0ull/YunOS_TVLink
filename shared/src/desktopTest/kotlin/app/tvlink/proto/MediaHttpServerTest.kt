@@ -167,18 +167,18 @@ class MediaHttpServerTest {
         assertTrue(server.start("127.0.0.1", 8192)) // 不设 allowedClientIp，任意来源可连
         server.register("ok", tmp)
 
-        val socket = Socket("127.0.0.1", server.port)
-        val out = socket.getOutputStream()
-        val inp = socket.getInputStream()
-        // 请求行内容（不含 \r\n）= 8193 字符，超出 MAX_REQUEST_LINE_CHARS
-        val overPath = "x".repeat(8193)
-        out.write("GET /$overPath HTTP/1.1\r\n\r\n".toByteArray(Charsets.US_ASCII))
-        out.flush()
-        socket.soTimeout = 3000
-        // 服务器应直接关连接，read 返回 -1
-        val r = runCatching { inp.read() }.getOrDefault(-2)
-        assertEquals(-1, r, "over-limit request line should close connection without response")
-        socket.close()
+        Socket("127.0.0.1", server.port).use { socket ->
+            val out = socket.getOutputStream()
+            val inp = socket.getInputStream()
+            // 请求行内容（不含 \r\n）= 8193 字符，超出 MAX_REQUEST_LINE_CHARS
+            val overPath = "x".repeat(8193)
+            out.write("GET /$overPath HTTP/1.1\r\n\r\n".toByteArray(Charsets.US_ASCII))
+            out.flush()
+            socket.soTimeout = 3000
+            // 服务器应直接关连接，read 返回 -1
+            val r = runCatching { inp.read() }.getOrDefault(-2)
+            assertEquals(-1, r, "over-limit request line should close connection without response")
+        }
         tmp.delete()
     }
 
@@ -196,16 +196,22 @@ class MediaHttpServerTest {
         val path = "x".repeat(pathLen)
         server.register(path, tmp)
 
-        val socket = Socket("127.0.0.1", server.port)
-        val out = socket.getOutputStream()
-        val inp = socket.getInputStream()
-        out.write("GET /$path HTTP/1.1\r\n\r\n".toByteArray(Charsets.US_ASCII))
-        out.flush()
-        socket.soTimeout = 3000
-        val response = runCatching { inp.readBytes() }.getOrNull()
-        assertNotNull(response, "exactly-limit request line should be accepted and served")
-        assertTrue(response.isNotEmpty(), "response should contain HTTP headers + body")
-        socket.close()
+        Socket("127.0.0.1", server.port).use { socket ->
+            val out = socket.getOutputStream()
+            val inp = socket.getInputStream()
+            out.write("GET /$path HTTP/1.1\r\n\r\n".toByteArray(Charsets.US_ASCII))
+            out.flush()
+            socket.soTimeout = 3000
+            val response = runCatching { inp.readBytes() }.getOrNull()
+            assertNotNull(response, "exactly-limit request line should be accepted and served")
+            val statusLine = String(response, Charsets.US_ASCII).lineSequence().first()
+            assertTrue(statusLine.startsWith("HTTP/1.1 200"), "expected 200 OK, got: $statusLine")
+            // body 在 headers 之后，校验末尾 64 字节与注册文件内容一致
+            val bodyStart = String(response, Charsets.US_ASCII).indexOf("\r\n\r\n") + 4
+            assertTrue(response.size >= bodyStart + content.size, "response should include full body")
+            val body = response.copyOfRange(bodyStart, response.size)
+            assertTrue(content.contentEquals(body), "body should match registered file content")
+        }
         tmp.delete()
     }
 }
