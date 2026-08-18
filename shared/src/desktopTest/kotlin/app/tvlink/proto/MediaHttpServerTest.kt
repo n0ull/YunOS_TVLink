@@ -3,10 +3,12 @@ package app.tvlink.proto
 import app.tvlink.proto.cast.MediaHttpServer
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.Socket
 import java.net.URL
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class MediaHttpServerTest {
@@ -154,6 +156,56 @@ class MediaHttpServerTest {
             assertEquals("bytes */1000", conn.getHeaderField("Content-Range"), "Range $bad Content-Range")
             conn.disconnect()
         }
+        tmp.delete()
+    }
+
+    @Test
+    fun requestLineOverLimitConnectionClosed() {
+        // LOW-1 回归：请求行超过 8KB 上限时服务器直接关连接，不分配大 StringBuilder
+        val tmp = File.createTempFile("tvlink-test-limit", ".bin")
+        tmp.writeBytes(ByteArray(64) { it.toByte() })
+        assertTrue(server.start("127.0.0.1", 8192)) // 不设 allowedClientIp，任意来源可连
+        server.register("ok", tmp)
+
+        val socket = Socket("127.0.0.1", server.port)
+        val out = socket.getOutputStream()
+        val inp = socket.getInputStream()
+        // 请求行内容（不含 \r\n）= 8193 字符，超出 MAX_REQUEST_LINE_CHARS
+        val overPath = "x".repeat(8193)
+        out.write("GET /$overPath HTTP/1.1\r\n\r\n".toByteArray(Charsets.US_ASCII))
+        out.flush()
+        socket.soTimeout = 3000
+        // 服务器应直接关连接，read 返回 -1
+        val r = runCatching { inp.read() }.getOrDefault(-2)
+        assertEquals(-1, r, "over-limit request line should close connection without response")
+        socket.close()
+        tmp.delete()
+    }
+
+    @Test
+    fun requestLineExactlyAtLimitServed() {
+        // LOW-1'' 回归：请求行恰好 8KB（= limit）时予以接受，正常供片——
+        // 与原 `length > limit` 语义一致（恰好 limit 字符不拒）
+        val tmp = File.createTempFile("tvlink-test-exact", ".bin")
+        val content = ByteArray(64) { it.toByte() }
+        tmp.writeBytes(content)
+        assertTrue(server.start("127.0.0.1", 8192))
+        // 请求行内容（不含 \r\n）需恰好 8192 字符：
+        // "GET /" = 5，path，" HTTP/1.1" = 10 → path = 8192 - 15 = 8177
+        val pathLen = 8 * 1024 - "GET /".length - " HTTP/1.1".length
+        val path = "x".repeat(pathLen)
+        server.register(path, tmp)
+
+        val socket = Socket("127.0.0.1", server.port)
+        val out = socket.getOutputStream()
+        val inp = socket.getInputStream()
+        out.write("GET /$path HTTP/1.1\r\n\r\n".toByteArray(Charsets.US_ASCII))
+        out.flush()
+        socket.soTimeout = 3000
+        val response = runCatching { inp.readBytes() }.getOrNull()
+        assertNotNull(response, "exactly-limit request line should be accepted and served")
+        assertTrue(response.isNotEmpty(), "response should contain HTTP headers + body")
+        socket.close()
         tmp.delete()
     }
 }
