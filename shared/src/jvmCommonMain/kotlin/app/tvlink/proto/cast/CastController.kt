@@ -209,6 +209,10 @@ class CastController(
                 } finally {
                     waitingResp = false
                 }
+            // 无响应(IO 异常或 10s 超时)= 通道已死/对端异常:判死断开,上层
+            // (CastFeature.file 自愈/ensureAlive)据此重建——旧实现保持 CONNECTED,
+            // 后续每次请求都以同样方式失败,通道永不恢复(用户真机音频投屏回归)。
+            if (resp == null) disconnect()
             return@synchronized resp
         }
 
@@ -423,6 +427,9 @@ class CastController(
 
     fun disconnect() {
         stopPolling()
+        // 释放在途请求:断开后 requestRaw 的 10s poll 不应干等——投入伪响应
+        // (状态码为空,不命中 200)让等待方立即失败返回(TV 杀会话时用户点击不再卡 10s)
+        if (waitingResp) respQueue.offer("" to "")
         try {
             socket?.close()
         } catch (_: Exception) {

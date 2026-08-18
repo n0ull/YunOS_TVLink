@@ -63,6 +63,18 @@ class ScreenshotService(
         return true
     }
 
+    /**
+     * 应答超时后的僵尸处置：对当前连接主动 ping 探活——活着（TV 只是慢/丢帧）返回
+     * false 不动连接；死了（TCP 半开）立即 shutdown，DeviceManager 断线回调据此走
+     * 自动重连，把恢复从「等心跳周期最坏 ~60s」压到 ~13s（用户真机截屏偶发失败回归）。
+     */
+    fun dropConnectionIfUnresponsive(): Boolean {
+        val conn = deviceManager.connection ?: return false
+        if (conn.ping()) return false
+        conn.shutdown()
+        return true
+    }
+
     /** 取消内部 scope（AppViewModel.onCleared 链调用）。 */
     fun destroy() {
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()

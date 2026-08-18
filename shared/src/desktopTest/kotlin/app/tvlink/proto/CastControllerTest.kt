@@ -244,6 +244,31 @@ class CastControllerTest {
         cc.disconnect()
     }
 
+    /** 对端杀会话不回响应（TV 双会话归属错乱时杀旧通道的真实行为,2026-07-25 实证）：
+     *  旧实现 poll 干等 10s 且 state 停留 CONNECTED——通道半死,后续请求全部同方式失败。
+     *  修复后:reader EOF → disconnect 释放在途 poll,请求快速 false 且状态落 DISCONNECTED。 */
+    @Test
+    fun peerSessionKillFailsFastAndMarksDead() {
+        thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { sock ->
+                    // 读一个请求后沉默关闭(不响应)——模拟 TV 杀掉旧会话
+                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
+                    readStartLine(reader)
+                    consumeRest(reader)
+                }
+            }
+        }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        val start = System.currentTimeMillis()
+        assertTrue(!cc.pause(), "request to killed session must fail")
+        val elapsed = System.currentTimeMillis() - start
+        assertTrue(elapsed < 3_000, "request hung ${elapsed}ms — in-flight poll not released on disconnect")
+        assertEquals(CastController.State.DISCONNECTED, cc.state, "channel must be marked dead after failure")
+        cc.disconnect()
+    }
+
     /**
      * 背靠背请求回归：requestRaw 先武装 waitingResp 再写（reader 不会丢弃响应）；
      * 任何响应丢失都表现为 10s poll 超时后的 false，故总耗时须远小于超时。

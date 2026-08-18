@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import app.tvlink.proto.cast.CastController
 import app.tvlink.proto.cast.MediaHttpServer
 import app.tvlink.proto.mdns.Mdns
+import app.tvlink.ui.widgets.albumArtFile
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -72,6 +73,10 @@ class CastFeature(
     @Volatile
     private var connecting = false
 
+    /** 最近一次建连目标：通道死亡(TV 杀会话/半开)时 file() 自愈重建用。 */
+    @Volatile
+    private var lastTarget: Pair<String, Int>? = null
+
     /** 生命周期世代号：connect/onDisconnected 发起即递增。在途 connect 装回前校验世代未变
      *  （期间发生显式断开则放弃装回，防幽灵通道复活）；onDisconnected 的异步清理同样校验——
      *  之后已有新建连意图时由新 connect 接管清理，避免陈旧清理误杀新会话。 */
@@ -132,12 +137,15 @@ class CastFeature(
     ) {
         // 请求时取号（非协程内）：协程调度延迟会让后发的 onDisconnected 先递增，
         // 请求顺序即世代顺序才能保证「建连期间断过连」判定不错漏
+        lastTarget = ip to port
+        // connecting 同步置位(非协程内):file() 的 awaitChannel 依此等待——协程调度
+        // 延迟会把「即将建连」误判为「无在途建连」而提前返回 null
+        connecting = true
         val gen = generation.incrementAndGet()
         scope.launch(Dispatchers.IO) {
             var built: CastController? = null
             // 单飞锁：与并发 connect 串行，防止互断已建好的通道；断旧建新整体在锁内
             connectMutex.withLock {
-                connecting = true
                 try {
                     // 等锁期间已出现更新意图（断开/另一次建连）：直接退出——
                     // 无条件断旧会杀掉新 connect 刚建好的通道（M4）
@@ -208,17 +216,25 @@ class CastFeature(
         }
     }
 
-    /** 等待在途建连完成并返回通道；无在途建连且通道为空时立即返回 null（不空等）。 */
+    /** 等待在途建连完成并返回 CONNECTED 通道；无在途建连且无活通道时立即返回 null（不空等）。
+     *  死通道(DISCONNECTED)不算数——照常返回会让 setMedia 必败(用户真机音频投屏回归)。 */
     private suspend fun awaitChannel(): CastController? {
         // 上限覆盖兜底端口依次尝试（13520 超时 → 13521）的最坏耗时
         var waited = 0L
         while (waited <= AWAIT_CHANNEL_TIMEOUT_MS) {
-            controller?.let { return it }
+            controller?.takeIf { it.state == CastController.State.CONNECTED }?.let { return it }
             if (!connecting) return null
             kotlinx.coroutines.delay(AWAIT_POLL_MS)
             waited += AWAIT_POLL_MS
         }
         return null
+    }
+
+    /** 通道死亡时按最近目标重建一次（TV 杀会话/半开自愈）；返回新通道或 null。 */
+    private suspend fun healChannel(): CastController? {
+        val t = lastTarget ?: return null
+        connect(t.first, t.second)
+        return awaitChannel()
     }
 
     /** 仅在 Ready 时更新投屏快照（Unavailable 无通道，丢弃事件）。 */
@@ -233,7 +249,7 @@ class CastFeature(
         type: String,
     ) {
         val file = File(path)
-        if (!file.exists() || mediaServerUrl.isEmpty()) {
+        if (!file.exists()) {
             showNotice("媒体服务未就绪")
             return
         }
@@ -244,34 +260,63 @@ class CastFeature(
                 "audio" -> "audio-${UUID.randomUUID()}"
                 else -> "image-${UUID.randomUUID()}"
             }
-        scope.launch(Dispatchers.IO) {
-            val cc =
-                // 建连在途时等其完成（点击投屏恰逢自动建连的竞态），而非立即判失败
-                awaitChannel() ?: run {
-                    showNotice("投屏通道未就绪，请稍后重试")
-                    return@launch
-                }
-            // 同时只播一个媒体：通道就绪后才清旧条目（含旧封面）再注册新条目——
-            // 在 awaitChannel 之前 clear 会让通道未就绪的失败投屏误杀在播媒体
-            mediaServer.clear()
-            mediaServer.register(id, file)
-            val url = mediaServer.urlFor(id)
-            updateStatus { it.copy(title = title) }
-            // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：Android 经 MediaStore 取封面
-            // 拷入缓存后按注册制供片（不走原 App 的绝对路径回退），失败则无封面投屏
-            val thumbnail =
-                if (type == "audio") {
-                    app.tvlink.ui.widgets.albumArtFile(path)?.let { cover ->
-                        val coverId = "cover-${UUID.randomUUID()}"
-                        mediaServer.register(coverId, cover, "image/jpeg")
-                        mediaServer.urlFor(coverId)
-                    }
-                } else {
-                    null
-                }
-            val ok = cc.setMedia(type, url, title, thumbnail)
-            if (ok) cc.play() else showNotice("投屏失败")
+        scope.launch(Dispatchers.IO) { castFile(id, file, title, type) }
+    }
+
+    private suspend fun castFile(
+        id: String,
+        file: File,
+        title: String,
+        type: String,
+    ) {
+        val cc =
+            awaitChannel() ?: healChannel() ?: run {
+                showNotice("投屏通道未就绪，请稍后重试")
+                return
+            }
+        if (mediaServerUrl.isEmpty()) {
+            showNotice("媒体服务未就绪")
+            return
         }
+        // 音乐封面（原 App 传 thumbnail_url，docs/re/04 §3）：提前取一次,失败自愈重试时复用；
+        // Android 经 MediaStore 取封面拷入缓存后按注册制供片,失败则无封面投屏
+        val coverFile = if (type == "audio") albumArtFile(file.absolutePath) else null
+        val coverId = "cover-${UUID.randomUUID()}"
+        updateStatus { it.copy(title = title) }
+        val (url, thumbnail) = registerMedia(id, file, coverId, coverFile)
+        if (cc.setMedia(type, url, title, thumbnail)) {
+            cc.play()
+            return
+        }
+        // 通道活着被非 200 拒绝 = 真失败;通道已死(TV 杀会话/半开竞态) = 自愈重建重试一次
+        if (cc.state == CastController.State.CONNECTED) {
+            showNotice("投屏失败")
+            return
+        }
+        val cc2 =
+            healChannel() ?: run {
+                showNotice("投屏通道未就绪，请稍后重试")
+                return
+            }
+        val (url2, thumbnail2) = registerMedia(id, file, coverId, coverFile) // 重建会重启媒体服务(注册表清空、端口可能变),须重注册
+        if (cc2.setMedia(type, url2, title, thumbnail2)) cc2.play() else showNotice("投屏失败")
+    }
+
+    /** 清旧条目并注册媒体(+可选封面),返回媒体 URL 与封面 URL——同时只播一个媒体,通道就绪后才清。 */
+    private fun registerMedia(
+        id: String,
+        file: File,
+        coverId: String,
+        coverFile: File?,
+    ): Pair<String, String?> {
+        mediaServer.clear()
+        mediaServer.register(id, file)
+        val thumbnail =
+            coverFile?.let {
+                mediaServer.register(coverId, it, "image/jpeg")
+                mediaServer.urlFor(coverId)
+            }
+        return mediaServer.urlFor(id) to thumbnail
     }
 
     fun seek(ms: Long) {

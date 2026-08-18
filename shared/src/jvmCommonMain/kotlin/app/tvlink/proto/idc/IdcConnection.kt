@@ -264,7 +264,9 @@ class IdcConnection(
 
     private fun dispatch(p: IdcPacket) {
         when (p) {
-            is HeartBeat -> lastHbAck = p.seq
+            // maxOf 防回退:周期心跳与 ping() 并发时 ACK 可能乱序到达,
+            // 旧值回写会放大 lag 计数,把健康连接误判死亡
+            is HeartBeat -> lastHbAck = maxOf(lastHbAck, p.seq)
             is ModuleAvailability -> {
                 if (p.online) {
                     modules[p.moduleId] =
@@ -338,6 +340,24 @@ class IdcConnection(
     private fun setState(s: State) {
         state = s
         onStateChanged?.invoke(s)
+    }
+
+    /**
+     * 主动活性探测：业务应答超时（截图等）疑似 TCP 半开僵尸时快速判死——发一次心跳，
+     * [timeoutMs] 内无任何新 ACK 即 false。调用方据此 close() 走正常重连，
+     * 不必等心跳周期（20s×2 拍,最坏 ~60s）才发现连接已死。
+     */
+    fun ping(timeoutMs: Long = 3_000): Boolean {
+        if (state != State.ESTABLISHED) return false
+        val ackBefore = lastHbAck
+        send(HeartBeat(hbSeq.getAndIncrement()))
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (lastHbAck > ackBefore) return true
+            if (state != State.ESTABLISHED) return false
+            Thread.sleep(50)
+        }
+        return false
     }
 
     fun close() {

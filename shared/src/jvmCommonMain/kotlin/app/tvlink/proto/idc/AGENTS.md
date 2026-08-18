@@ -13,7 +13,7 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 
 | File               | Description                                                                                                                                           |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved); 提供 `onModuleChanged`/`openVConn` 管理 VConn 生命周期; `readPacket` 帧上限 1MB;单帧 decode 异常跳过该帧续读(magic/total 失步才拆连) |
+| `IdcConnection.kt` | TCP session management: connect, login, reader thread, heartbeat; `send()` queues onto single-thread executor (`idc-send`, FIFO preserved); 提供 `onModuleChanged`/`openVConn` 管理 VConn 生命周期; `readPacket` 帧上限 1MB;单帧 decode 异常跳过该帧续读(magic/total 失步才拆连); `ping()` 主动探活(业务应答超时疑似半开时 ~3s 判死,不等心跳周期 ~60s);`lastHbAck` 用 maxOf 赋值防 ping 与周期心跳并发乱序回退 |
 | `IdcPackets.kt`    | `IdcConst` wire constants (ports 13510/13511, magic 130311, packet IDs), packet data classes, LPString/LPBytes primitives, JSON utilities (`parseJsonObject`/`FlatJson` via kotlinx.serialization, `jsonEscape`) |
 
 ## For AI Agents

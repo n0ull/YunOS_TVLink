@@ -58,12 +58,17 @@ class ShotFeature(
 
     private fun currentShot(): ByteArray? = (state as? ShotUiState.Success)?.jpeg
 
-    /** 兜底超时后仍在 Capturing（TV 未应答/连拍应答不足）则回退上一帧/Idle，防止按钮永久禁用。 */
+    /** 兜底超时后仍在 Capturing（TV 未应答/连拍应答不足）则回退上一帧/Idle，防止按钮永久禁用。
+     *  超时疑似僵尸连接（TCP 半开,心跳最坏 ~60s 才判死——期间反复失败只能重启 App）：
+     *  主动 ping 探活,死了立即断开走自动重连并告知用户。 */
     private fun resetCapturingAfter(timeoutMs: Long) {
-        scope.launch(Dispatchers.Default) {
+        scope.launch(Dispatchers.IO) {
             kotlinx.coroutines.delay(timeoutMs)
             val s = state as? ShotUiState.Capturing ?: return@launch
             state = s.previous?.let { ShotUiState.Success(it) } ?: ShotUiState.Idle
+            if (service.dropConnectionIfUnresponsive()) {
+                showNotice("电视连接已断开，正在自动重连")
+            }
         }
     }
 
