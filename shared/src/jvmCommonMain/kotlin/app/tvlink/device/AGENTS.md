@@ -12,7 +12,7 @@ lifecycle from discovery through connected sessions.
 
 | File                   | Description                                                                                                        |
 |------------------------|--------------------------------------------------------------------------------------------------------------------|
-| `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` + `onModuleAvailability` 回调(Module 在线状态变化) |
+| `DeviceManager.kt`     | Facade over Discovery + active IDC session; exposes `StateFlow<ConnState>` + `addModuleListener` 回调(Module 在线状态变化) |
 | `Discovery.kt`         | 双通道设备发现: mDNS 组播 + /24 子网双探测(IDC 13511 + IB 3988 并行); 解析 IB hello 响应提取 `ibVer`/`ibSid`; `report()` 用 `?: return` 安全早退(不用 `!!` 断言); `probeHost` 去掉内层 Thread 包装，直接在池内顺序探测; 子网扫描池正常路径 `shutdown()`(排队任务全跑完),仅 stop() 中断时 `shutdownNow()`(shutdownNow 会丢弃未启动的排队探测——e7940d2 曾误用于正常路径致 /24 只扫前 ~24 地址,回归见 `DiscoverySubnetScanTest`;测试经 `internal hostProber` 注入无网络假探测） |
 | `ScreenshotService.kt` | TV screenshot capture: IDC Cmd 20900→21000, Cmd 帧格式已修正(真机已验证出图); 调用侧(`AppViewModel`)经 `ShotUiState.Capturing` + 兜底超时复位，防止截取状态永久 stuck; `dropConnectionIfUnresponsive()` 应答超时探活判死走自动重连(半开僵尸 ~13s 恢复,不等心跳 ~60s) |
 | `RcController.kt`      | Routes key events — IB preferred (needIb313 keys additionally require server ver≥313), IDC OpCmd_Key fallback(真机已验证有效) |
@@ -28,7 +28,7 @@ lifecycle from discovery through connected sessions.
 - Each service takes `DeviceManager` as its connection source
 - VConn callbacks: `CopyOnWriteArrayList` multicast — services `addVConnListener`/`removeVConnListener` (RpmService uses
   attach/detach)
-- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.onModuleAvailability` 回调 → `onAppStoreModule()` 在 module(`MODULE_NAME` = "com.yunos.idc.appstore",线上名,见 `IdcConstant.java:6`)上线时经 `openVConnAndFlushPending()` 主动 `openVConn()` 并补发挂起请求; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
+- **VConn 自动打开**: `RpmService.attach()` 注册 `DeviceManager.addModuleListener` 回调 → `onAppStoreModule()` 在 module(`MODULE_NAME` = "com.yunos.idc.appstore",线上名,见 `IdcConstant.java:6`)上线时经 `openVConnAndFlushPending()` 主动 `openVConn()` 并补发挂起请求; `getAppList()` 在 module 未就绪时缓存请求待 VConn 打开后补发
 - **模块唤醒**: module 离线时首个 RPM 请求经 `wakeModuleIfNeeded()` 发一次 `CmdLaunchSth`(launch_type=1/service, action="yunos.appstore.startprocessservice";`RpmObserver.java:74-77` 原流程),module 下线/detach 复位; `ModuleAvailability.m_name` 兼容 `{"name","category"}` 字符串化 JSON(`IDC.java:360-368`); `parseAppArray` 兼容 `apps` 单对象(`IdcPacket_GetListResponse.java:62-65`,回归见 `RpmFixTest`)
 - `DeviceManager.ConnState` drives the entire app's connection lifecycle
 - **建连单飞 + 世代守卫 + 早装回**：`connect()`/`connectIbOnly()` 经 `connectMutex` 串行化（重叠 connect 曾泄漏落败方整条 IDC 会话）;替换会话时先 `connection = null` 再 `shutdown()` 旧会话——旧会话 DISCONNECTED 回调经 `connection === conn` 判据落空，不误判异常断开排队伪重连;世代号(`AtomicInteger generation`)在请求时取号。**早装回（30dbcd7）**：`conn.connect()` 成功后立即 `connection = conn`（原在世代守卫之后），使 reader 回调的 `connection === conn` 判据在装回后即可命中——装回前判死回调因 connection 仍为 null 而遗漏，UI 停在 CONNECTED 但通道已死需等心跳最坏 ~60s 自愈。世代守卫增加撤销分支（`connection === conn` 时置 null），窗口收窄至 conn.connect 内部（reader 启动后至返回前）。`disconnect()` 递增世代使在途建连自弃

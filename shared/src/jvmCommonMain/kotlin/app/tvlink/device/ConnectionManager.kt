@@ -115,6 +115,8 @@ class ConnectionManager {
         _connState.value = state
     }
 
+    /** connect 调用线程写入 / 建连协程读取 — 与兄弟字段一致以 @Volatile 保证跨线程可见性。 */
+    @Volatile
     private var discoveredProjectionPort = 0
 
     fun connect(

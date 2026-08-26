@@ -4,6 +4,7 @@ import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,9 +16,8 @@ import kotlinx.coroutines.launch
  *
  * 公共 API 签名与原实现完全一致（服务层与测试零修改）；实现委托给两个子模块。
  *
- * ConnState / ConnectedDevice 为同包顶层类型（定义于 ConnectionManager.kt），
- * 以 DeviceManager.ConnState / DeviceManager.ConnectedDevice 形式引用仍有效
- * （Kotlin 允许通过同文件顶层声明的简单名访问）。
+ * ConnState / ConnectedDevice 为本类嵌套类型（见下方声明）；ConnectionManager / DiscoveryAgent
+ * 同包引用时写作 DeviceManager.ConnState 形式。
  */
 class DeviceManager {
     enum class ConnState { IDLE, SEARCHING, CONNECTING, CONNECTED, FAILED }
@@ -42,6 +42,10 @@ class DeviceManager {
     private val connectionManager = ConnectionManager()
     private val discoveryAgent = DiscoveryAgent()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** ScanState.DONE → ConnState.IDLE 的桥接收集器；全程单实例（审查 #1：原每次 startDiscovery
+     *  都 launch 新 collect 且永不取消，N 次扫描泄漏 N 个常驻协程）。 */
+    private var scanStateBridge: Job? = null
 
     fun addModuleListener(l: (name: String, moduleId: Int, online: Boolean) -> Unit) =
         connectionManager.addModuleListener(l)
@@ -73,12 +77,15 @@ class DeviceManager {
         // 与原实现一致：扫描开始置 SEARCHING；Discovery.onFinished 且仍在 SEARCHING 时回 IDLE。
         if (connectionManager.connState.value == ConnState.IDLE) {
             connectionManager.setConnStateForFacade(ConnState.SEARCHING)
-            scope.launch {
-                discoveryAgent.scanState.collect { s ->
-                    if (s == DiscoveryAgent.ScanState.DONE &&
-                        connectionManager.connState.value == ConnState.SEARCHING
-                    ) {
-                        connectionManager.setConnStateForFacade(ConnState.IDLE)
+            // 单实例桥接（见 scanStateBridge 注）：复用常驻 collect，不再每次扫描新挂一个。
+            if (scanStateBridge?.isActive != true) {
+                scanStateBridge = scope.launch {
+                    discoveryAgent.scanState.collect { s ->
+                        if (s == DiscoveryAgent.ScanState.DONE &&
+                            connectionManager.connState.value == ConnState.SEARCHING
+                        ) {
+                            connectionManager.setConnStateForFacade(ConnState.IDLE)
+                        }
                     }
                 }
             }
