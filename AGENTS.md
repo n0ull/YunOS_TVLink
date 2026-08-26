@@ -65,7 +65,7 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 - **Socket writes never run on the caller thread** (Android kills with NetworkOnMainThreadException) — `IdcConnection.send`/`IbChannel.sendBody` queue onto per-connection single-thread executors (`idc-send`/`ib-send`, FIFO preserved)
 - UI state via Compose `mutableStateOf` / `StateFlow` in ViewModels; updates use `Dispatchers.Default` (thread-safe snapshot state)
 - VConn callbacks: `CopyOnWriteArrayList` multicast in DeviceManager (services add/remove listeners)
-- **VConn 自动打开**: service 通过 `onModuleAvailability` 感知 module 上线后主动 `openVConn()`,打破 moduleId 死锁
+- **VConn 自动打开**: service 通过 `DeviceManager.addModuleListener` 感知 module 上线后主动 `openVConn()`,打破 moduleId 死锁
 - **BackHandler**: `expect/actual` 跨平台抽象,Android 接 `androidx.activity.compose.BackHandler`,桌面空实现
 - Lifecycle: `AppViewModel.onCleared()` → `DeviceManager.destroy()` → `IdcConnection.close()` chain
 - Frame formats: big-endian, length-prefixed; see `docs/re/` for byte layouts
@@ -81,5 +81,19 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 - androidx.lifecycle ViewModel 2.8.7
 - AndroidX Activity Compose 1.10.1 (Android target)
 - ktlint 12.1.2 + detekt 1.23.8 (code quality, build-time only)
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily). See `docs/agents/domain.md`.
 
 <!-- MANUAL: -->

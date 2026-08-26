@@ -30,13 +30,12 @@
 
 ### P1 — 真机扫尾（现有硬件即可：TV-A + PC + Android 手机）
 
-- [ ] **方向盘模式**（桌面+Android）：与鼠标移动同帧 `[2,0,dx,dy,0]`（docs/re/02 §4.2），低风险
-- [ ] **体感模式**（仅 Android）：IB 257/260 + 缩放系数（加速度 x*2000/y*-2000/z*1000，陀螺仪 *286.47888）
-      + 50 ms/类节流（docs/re/02 §4.4）
-- [ ] **音乐投屏真机验证**：audio setmedia 基路 + 封面回拉——封面已实现并改注册制供片
-      （`893c3b2`，Android MediaStore 取封面拷缓存；刻意不走原 App 绝对路径回退），未实测
-- [ ] **播控残项真机验证**：`/seek`（已实现已验）、`/rate`（`04fa4e7` 已实现未验）、图片 `/zoom`
-      （未实现，需求驱动；`/preload` 已判不做，见“明确不做”）
+- [ ] **方向盘模式** → 工单 `.scratch/steering-wheel-mode/spec.md`（桌面+Android，低风险）
+- [ ] **体感模式** → 工单 `.scratch/motion-mode/spec.md`（仅 Android）
+- [ ] **音乐投屏真机验证** → 工单 `.scratch/music-cast-verification/spec.md`
+- [ ] **播控残项真机验证** → 工单 `.scratch/playback-control-verification/spec.md`
+
+（以上四项 2026-08-26 建单迁入 `.scratch/`，条目细节随单迁移；完工后回此处打钩）
 - 以上打完即发 v1.0：README 功能矩阵除硬件依赖项全绿
 
 ### P2 — 硬件依赖挂起（代码全部就绪，只等设备）

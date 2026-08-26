@@ -27,7 +27,7 @@ fallback, RPM, screenshot, ASR) ride on IDC frames.
 - **LaunchSth empirical semantics** (launch_probe 2026-07-25): `extra_str` is treated TV-side as an **intent data URI** (`Uri.parse`), not package/component — lt=2 + VIEW/MAIN + URI pops the TV "open with" chooser; `ACTION_DIAGNOSTIC` has no matching activity on M638_ALI firmware; service-type with an invalid action kills the connection (WinError 10053)
 - `IdcConnection` callbacks fire on the reader thread — callers must dispatch to UI thread
 - **VConn 生命周期**: `openVConn(moduleId)` 发 `VConnSyn` 打开虚拟连接 → `sendVConnData()` 收发数据 → `closeVConn()` 关闭; `ModuleAvailability` 包更新 `modules` map 并触发 `onModuleChanged(moduleId, name, online)` 回调
-- **Module 在线感知**: 上层 service(RpmService)通过 `DeviceManager.onModuleAvailability` 感知 module 上线后主动 `openVConn()`,打破"需 moduleId 才能发 VConnSyn、需发 VConnSyn 模块才在线"的死锁
+- **Module 在线感知**: 上层 service(RpmService)通过 `DeviceManager.addModuleListener` 感知 module 上线后主动 `openVConn()`,打破"需 moduleId 才能发 VConnSyn、需发 VConnSyn 模块才在线"的死锁
 - Reference: `docs/re/01-device-discovery.md`, `docs/re/02-remote-control.md`
 
 ### Testing Requirements
