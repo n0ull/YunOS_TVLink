@@ -82,4 +82,18 @@ reverse-engineering analysis — original code, no assets or trademarks from the
 - AndroidX Activity Compose 1.10.1 (Android target)
 - ktlint 12.1.2 + detekt 1.23.8 (code quality, build-time only)
 
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily). See `docs/agents/domain.md`.
+
 <!-- MANUAL: -->
