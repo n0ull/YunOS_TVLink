@@ -4,6 +4,7 @@ import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -40,7 +41,7 @@ class DeviceManager {
 
     private val connectionManager = ConnectionManager()
     private val discoveryAgent = DiscoveryAgent()
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun addModuleListener(l: (name: String, moduleId: Int, online: Boolean) -> Unit) =
         connectionManager.addModuleListener(l)
@@ -71,13 +72,13 @@ class DeviceManager {
     fun startDiscovery() {
         // 与原实现一致：扫描开始置 SEARCHING；Discovery.onFinished 且仍在 SEARCHING 时回 IDLE。
         if (connectionManager.connState.value == ConnState.IDLE) {
-            connectionManager._setConnStateForFacade(ConnState.SEARCHING)
+            connectionManager.setConnStateForFacade(ConnState.SEARCHING)
             scope.launch {
                 discoveryAgent.scanState.collect { s ->
                     if (s == DiscoveryAgent.ScanState.DONE &&
                         connectionManager.connState.value == ConnState.SEARCHING
                     ) {
-                        connectionManager._setConnStateForFacade(ConnState.IDLE)
+                        connectionManager.setConnStateForFacade(ConnState.IDLE)
                     }
                 }
             }

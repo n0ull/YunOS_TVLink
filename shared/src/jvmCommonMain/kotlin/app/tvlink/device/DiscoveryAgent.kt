@@ -1,6 +1,5 @@
 package app.tvlink.device
 
-import app.tvlink.proto.idc.IdcPacket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 

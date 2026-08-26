@@ -111,7 +111,7 @@ class ConnectionManager {
     }
 
     /** 门面专用：startDiscovery 时把 connState 置为 SEARCHING（Discovery 生命周期不由 ConnectionManager 持有）。 */
-    internal fun _setConnStateForFacade(state: DeviceManager.ConnState) {
+    internal fun setConnStateForFacade(state: DeviceManager.ConnState) {
         _connState.value = state
     }
 
