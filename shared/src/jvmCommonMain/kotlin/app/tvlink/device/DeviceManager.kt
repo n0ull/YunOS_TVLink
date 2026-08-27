@@ -79,15 +79,16 @@ class DeviceManager {
             connectionManager.setConnStateForFacade(ConnState.SEARCHING)
             // 单实例桥接（见 scanStateBridge 注）：复用常驻 collect，不再每次扫描新挂一个。
             if (scanStateBridge?.isActive != true) {
-                scanStateBridge = scope.launch {
-                    discoveryAgent.scanState.collect { s ->
-                        if (s == DiscoveryAgent.ScanState.DONE &&
-                            connectionManager.connState.value == ConnState.SEARCHING
-                        ) {
-                            connectionManager.setConnStateForFacade(ConnState.IDLE)
+                scanStateBridge =
+                    scope.launch {
+                        discoveryAgent.scanState.collect { s ->
+                            if (s == DiscoveryAgent.ScanState.DONE &&
+                                connectionManager.connState.value == ConnState.SEARCHING
+                            ) {
+                                connectionManager.setConnStateForFacade(ConnState.IDLE)
+                            }
                         }
                     }
-                }
             }
         }
         discoveryAgent.startDiscovery()

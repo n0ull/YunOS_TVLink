@@ -30,13 +30,24 @@
 
 ### P1 — 真机扫尾（现有硬件即可：TV-A + PC + Android 手机）
 
-- [ ] **方向盘模式** → 工单 `.scratch/steering-wheel-mode/spec.md`（桌面+Android，低风险）
-- [ ] **体感模式** → 工单 `.scratch/motion-mode/spec.md`（仅 Android）
-- [ ] **音乐投屏真机验证** → 工单 `.scratch/music-cast-verification/spec.md`
-- [ ] **播控残项真机验证** → 工单 `.scratch/playback-control-verification/spec.md`
+> 2026-08-27 代码侧审查完成：四份工单的代码均已存在于代码库（`WheelPanel`/`MotionPanel` 在 initial commit `d4eb0af` 写入，`MotionSensor.android.kt` 早已实现），协议合规性逐项核对 `docs/re/02`、`docs/re/04` 通过。剩余工作为**真机实测**，需 Android 手机 + TV-A 操作。
+
+- [x] **方向盘模式**（代码侧就绪）→ 工单 `.scratch/steering-wheel-mode/spec.md`
+  - 协议合规：`mouseMove(-drag.x, -drag.y)` 对齐原 App `sendMouseMoveIf(-dx,-dy)` → `[2,0,dx,dy,0]`（`docs/re/02` §4.2）
+  - **待真机**：TV-A 实测方向控制生效、无闪退
+- [x] **体感模式**（代码侧就绪）→ 工单 `.scratch/motion-mode/spec.md`
+  - 协议合规：50ms/类节流 + 缩放系数（加速度计 x×2000/y×−2000/z×1000，陀螺仪 ×286.47888）全部到位（`docs/re/02` §4.4）
+  - **待真机**：Android 真机开启后 TV 端随姿态响应，长时间晃动不丢连接
+- [x] **音乐投屏真机验证**（代码侧就绪）→ 工单 `.scratch/music-cast-verification/spec.md`
+  - `audio` 类型 setmedia + `albumArtFile` 注册制封面均已实现
+  - **待真机**：手机选曲 → TV 出声 + 封面正常显示
+- [x] **播控残项真机验证**（代码侧就绪）→ 工单 `.scratch/playback-control-verification/spec.md`
+  - `/rate`：`CastController.rate(r: Int)` 整数约束已实现，注释已标注小数挂死风险（`docs/re/04` §4）
+  - `/zoom`：决定**不实现**，迁入「明确不做」（见下方）
+  - **待真机**：`/rate` 变速生效、UI 状态一致
 
 （以上四项 2026-08-26 建单迁入 `.scratch/`，条目细节随单迁移；完工后回此处打钩）
-- 以上打完即发 v1.0：README 功能矩阵除硬件依赖项全绿
+- 以上真机验证打完即发 v1.0：README 功能矩阵除硬件依赖项全绿
 
 ### P2 — 硬件依赖挂起（代码全部就绪，只等设备）
 
@@ -62,6 +73,8 @@
 Racct 账号/支付（asoToken 在原 App 即空实现，docs/re/05 §7.3）、弹幕 MTOP、TV 搜索（依赖已停服云端）；
 PROTO_MULTITOUCH（IB 272）/ IDC OpCmdMultitouch（11200）（原 App 亦无 UI 调用方）；
 POST /preload（图片预览预载下一张，docs/re/04 §3）——本项目为单片选取模型，无画廊/幻灯片流，预载无消费方。
+POST /zoom（图片缩放，docs/re/04 §4：`POST /zoom?scale=<f>&cx=<f>&cy=<f>`）——图片投屏为次要场景，
+单片选取模型无画廊/幻灯片流，缩放需双指缩放手势 UI，v1.0 功能矩阵未覆盖；真机若出现明确需求信号再排期（2026-08-27 决策）。
 
 ## 审查排期（2026-08-18 两轮复审搁置项，条件触发再动）
 
