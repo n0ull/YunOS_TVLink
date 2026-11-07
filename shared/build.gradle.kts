@@ -15,27 +15,13 @@ kotlin {
     jvm("desktop")
 
     sourceSets {
-        val commonMain =
-            getByName("commonMain") {
-                dependencies {
-                    implementation(compose.runtime)
-                    implementation(compose.foundation)
-                    implementation(compose.material3)
-                    implementation(compose.ui)
-                    implementation(compose.components.resources)
-                    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-                    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-                    implementation("androidx.lifecycle:lifecycle-viewmodel:2.8.7")
-                    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-                }
+        val commonMain = getByName("commonMain")
+        getByName("commonTest") {
+            dependencies {
+                implementation(kotlin("test"))
             }
-        val commonTest =
-            getByName("commonTest") {
-                dependencies {
-                    implementation(kotlin("test"))
-                }
-            }
-        // Both targets are JVM-based: socket/IO code lives here using plain java.net.
+        }
+        // Socket, protocol and Compose code share this JVM-only source set.
         val jvmCommonMain by creating {
             dependsOn(commonMain)
             dependencies {
@@ -44,6 +30,10 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("androidx.lifecycle:lifecycle-viewmodel:2.8.7")
+                implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
             }
         }
         getByName("androidMain").apply {

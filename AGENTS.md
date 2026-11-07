@@ -1,99 +1,47 @@
-<!-- Generated: 2026-07-20 | Updated: 2026-07-28 -->
-
 # TVLink
 
-## Purpose
+Kotlin Multiplatform LAN client for YunOS TVs/boxes. Original implementation based on reverse-engineering `com.yunos.tvhelper` v5.2.2; no original assets, trademarks, or cloud features.
 
-Kotlin Multiplatform (Android + Desktop) LAN control client for YunOS TV/boxes.
-Re-implements the local-network protocol stack of `com.yunos.tvhelper` v5.2.2 from
-reverse-engineering analysis — original code, no assets or trademarks from the original app.
+## Architecture
 
-## Key Files
+- `androidApp` and `desktopApp` are thin shells entering `app.tvlink.ui.App()`.
+- `shared/src/commonMain`: pure data only.
+- `shared/src/jvmCommonMain`: protocols, device coordination, Compose UI, and platform `expect` declarations.
+- `shared/src/androidMain` / `desktopMain`: real platform adapters.
+- `app.tvlink.platform`: persistent key-value storage and Android application context.
+- `DeviceManager` owns discovery, the active IDC session, reconnects, and module/VConn callback distribution.
+- `RcController` owns IB; `CastFeature` owns Cast + HTTP; individual services open their own VConn.
+- Keep one implementation behind each seam. Do not add facade/delegation layers or generic socket base classes without multiple real variants.
 
-| File | Description |
-|------|-------------|
-| `settings.gradle.kts` | Root project "TVLink"; includes `:shared`, `:androidApp`, `:desktopApp` |
-| `build.gradle.kts` | Root build config: plugin versions + ktlint 12.1.2 / detekt 1.23.8 |
-| `gradle.properties` | JVM args, Kotlin style, `applyDefaultHierarchyTemplate=false` |
-| `.editorconfig` | ktlint_official code style (line width 120, import layout); `[**/build/**]` 段排除生成代码 |
-| `detekt.yml` | detekt static analysis rules (complexity, naming, coroutines, exceptions) |
-| `local.properties` | Android SDK path (machine-specific, gitignored) |
-| `.gitignore` | Ignores build/, .gradle/, .idea/, .omc/, local.properties, 反编译参考物(jadx_out/, apktool_out/, *.apk), media/, tools/(本地工具,仅 AGENTS.md 锚点入库) |
-| `README.md` | Feature matrix, build instructions, protocol summary (Chinese) |
-| `TODO.md` | 真机验证档案 + 待办清单:P0/3988 探测已归档;P1 首项为 RPM 修复计划 R1–R4(2026-07-21 反编译复核定位模块名/唤醒/解析三缺陷,证据见 `docs/re/05` §3) |
+Protocol behavior must agree with `docs/re/`. Those documents are the protocol source of truth; README does not duplicate frame layouts or ports.
 
-## Subdirectories
+## Invariants
 
-| Directory | Purpose |
-|-----------|---------|
-| `shared/` | Protocol stack + shared Compose UI — KMP library (see `shared/AGENTS.md`) |
-| `androidApp/` | Android application shell (see `androidApp/AGENTS.md`) |
-| `desktopApp/` | Compose Desktop application shell (see `desktopApp/AGENTS.md`) |
-| `docs/` | Reverse-engineering reports and protocol specs (see `docs/AGENTS.md`) |
-| `.github/` | GitHub Actions CI — Build & Test 工作流 (see `.github/AGENTS.md`) |
-| `tools/` | 本地参考验证工具(Python;gitignored 不入库,仅 AGENTS.md 锚点被强制跟踪;see `tools/AGENTS.md`) |
-| `gradle/` | Gradle wrapper JAR and properties |
-| `apktool_out/` | Decompiled APK resources (reference only, not compiled) |
-| `jadx_out/` | Decompiled APK Java source (reference only, not compiled) |
-| `media/` | 本地真机测试媒体(gitignored,勿提交) |
+- Use blocking sockets with the established reader/writer model. Steady-state `IdcConnection.send` and `IbChannel.sendBody` preserve FIFO on their per-connection writers; handshake/keepalive paths are documented in `docs/adr/0001-io-threading-model.md`.
+- Keep socket work off the Android main thread.
+- Preserve `DeviceManager` connection serialization, generation checks, and callback installation order.
+- UI state uses Compose snapshot state or StateFlow. Resource-owning modules are destroyed through `AppViewModel.onCleared()`.
+- Use `expect/actual` only when platform implementations differ.
 
-## For AI Agents
+## Build and verification
 
-### Working In This Directory
-
-- **Language**: Kotlin 2.1.20, Compose Multiplatform 1.8.0, targeting JVM 11+
-- **Build**: `./gradlew` (wrapper 8.11.1); JDK 17+ required, Android SDK via `local.properties`
-- **Architecture**: shared KMP module with `jvmCommonMain` (java.net sockets), `commonMain` (Compose UI), platform `actual` implementations
-- **Code style**: ktlint_official enforced via `.editorconfig`; run `./gradlew ktlintFormat` before committing
-- **Pre-commit gate**: `.git/hooks/pre-commit` runs `./gradlew ktlintFormat` + `./gradlew check` before every commit (machine-local, not in VCS; bypass with `git commit --no-verify`)
-- **Protocol reference**: always cross-check `docs/re/` when touching protocol code
-- **No cloud APIs**: this project is LAN-only; cloud features are out of scope
-
-### Build & Test Commands
+Use JDK 17 and Android SDK 36. Windows: `gradlew.bat`; Unix: `./gradlew`.
 
 ```bash
-./gradlew :androidApp:assembleDebug   # Android APK
-./gradlew :desktopApp:run             # Run desktop app
-./gradlew :shared:desktopTest         # Protocol unit tests
-./gradlew check                       # 统一门禁：单元测试 + ktlint + detekt + Android lint（CI 入口）
-./gradlew ktlintFormat                # Auto-format to ktlint_official style
+./gradlew :shared:desktopTest
+./gradlew :androidApp:assembleDebug
+./gradlew :desktopApp:run
+./gradlew check
+./gradlew ktlintFormat
 ```
 
-### Common Patterns
+`check` runs tests, ktlint, detekt, and Android lint. Style comes from `.editorconfig`; detekt rules come from `detekt.yml`.
 
-- Protocol classes use blocking `java.net.Socket` + reader threads (not coroutines for IO)
-- **Socket writes never run on the caller thread** (Android kills with NetworkOnMainThreadException) — `IdcConnection.send`/`IbChannel.sendBody` queue onto per-connection single-thread executors (`idc-send`/`ib-send`, FIFO preserved)
-- UI state via Compose `mutableStateOf` / `StateFlow` in ViewModels; updates use `Dispatchers.Default` (thread-safe snapshot state)
-- VConn callbacks: `CopyOnWriteArrayList` multicast in DeviceManager (services add/remove listeners)
-- **VConn 自动打开**: service 通过 `DeviceManager.addModuleListener` 感知 module 上线后主动 `openVConn()`,打破 moduleId 死锁
-- **BackHandler**: `expect/actual` 跨平台抽象,Android 接 `androidx.activity.compose.BackHandler`,桌面空实现
-- Lifecycle: `AppViewModel.onCleared()` → `DeviceManager.destroy()` → `IdcConnection.close()` chain
-- Frame formats: big-endian, length-prefixed; see `docs/re/` for byte layouts
-- JSON parsing: `parseJsonObject()` returns `FlatJson` facade over kotlinx.serialization `JsonObject`
+## Project documentation
 
-## Dependencies
-
-### External
-
-- Kotlin Multiplatform 2.1.20 + Compose Multiplatform 1.8.0 (JetBrains)
-- kotlinx-coroutines 1.10.2
-- kotlinx-serialization-json 1.8.1
-- androidx.lifecycle ViewModel 2.8.7
-- AndroidX Activity Compose 1.10.1 (Android target)
-- ktlint 12.1.2 + detekt 1.23.8 (code quality, build-time only)
-
-## Agent skills
-
-### Issue tracker
-
-Issues live as local markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily). See `docs/agents/domain.md`.
-
-<!-- MANUAL: -->
+- `README.md`: user entry, current architecture, build and usage.
+- `TODO.md`: active work and historical device-validation references.
+- `docs/re/`: protocol and reverse-engineering evidence.
+- `docs/adr/`: architectural constraints that are not obvious from code.
+- `.scratch/<feature-slug>/`: local markdown issues; see `docs/agents/issue-tracker.md`.
+- Triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`; see `docs/agents/triage-labels.md`.

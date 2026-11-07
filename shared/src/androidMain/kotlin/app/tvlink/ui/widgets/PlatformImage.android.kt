@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import app.tvlink.platform.AndroidPlatform
 
 // Compose 约定可组合函数为 PascalCase；expect/actual 及各调用点均依赖此名
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")

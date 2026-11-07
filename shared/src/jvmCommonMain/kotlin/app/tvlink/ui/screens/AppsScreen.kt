@@ -25,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,9 +45,10 @@ fun AppsScreen(vm: AppViewModel) {
     var installPkg by remember { mutableStateOf("") }
     var showInstall by remember { mutableStateOf(false) }
     var uninstallTarget by remember { mutableStateOf<RpmService.TvApp?>(null) }
+    val tvApps by vm.rpm.appList.collectAsState()
 
-    // 进屏即拉列表:module 未就绪时该请求同时触发 R2 唤醒,模块上线后经挂起补发回填
-    LaunchedEffect(Unit) { vm.apps.refresh() }
+    // Entering the screen is the only automatic list-refresh trigger.
+    LaunchedEffect(Unit) { vm.rpm.getAppList() }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -57,7 +59,7 @@ fun AppsScreen(vm: AppViewModel) {
                 }
             },
             actions = {
-                IconButton(onClick = { vm.apps.refresh() }) {
+                IconButton(onClick = { vm.rpm.getAppList() }) {
                     Icon(AppIcons.Refresh, contentDescription = "刷新")
                 }
                 IconButton(onClick = { showInstall = true }) {
@@ -67,13 +69,13 @@ fun AppsScreen(vm: AppViewModel) {
         )
 
         Text(
-            "共 ${vm.apps.tvApps.size} 个应用",
+            "共 ${tvApps.size} 个应用",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
-        if (vm.apps.tvApps.isEmpty()) {
+        if (tvApps.isEmpty()) {
             Text(
                 "列表为空——电视的应用管理模块(com.yunos.idc.appstore)未就绪；部分固件不提供该模块。",
                 style = MaterialTheme.typography.bodyMedium,
@@ -86,7 +88,7 @@ fun AppsScreen(vm: AppViewModel) {
             Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(vm.apps.tvApps, key = { it.packageName }) { app ->
+            items(tvApps, key = { it.packageName }) { app ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),

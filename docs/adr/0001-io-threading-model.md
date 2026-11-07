@@ -1,47 +1,9 @@
-# ADR-0001 — IO 线程模型：阻塞 Socket + per-connection 写 FIFO
+# 阻塞 Socket 与稳态写 FIFO
 
-> **状态：现状记录（observed, pending deliberate confirmation）**
-> 产出方式：`/grill-with-docs` 全项目 grilling（2026-08-27）。
-> 作者：n0ull（经 grilling 确认）。
+**状态：accepted**
 
----
+IDC、IB 等长连接使用阻塞 `java.net.Socket` 和专属 reader 线程。Android 禁止主线程网络 IO，协议又要求帧顺序，因此稳态写入必须保持现有的每连接单线程 FIFO：`IdcConnection.send` 使用 `idc-send`，`IbChannel.sendBody` 使用 `ib-send`。
 
-## Context
+该约束不虚构“所有 socket 写都经过 FIFO”：连接建立阶段的握手由建连线程直接写入，IB keepalive 由其保活线程发送。这些路径已有明确线程所有者，不与 UI 的稳态写入交叉。
 
-TVLink 的协议栈需要与 TV 端维持多个长连接（IDC 命令通道、IB 遥控通道、VConn 大数据通道）。Android 平台禁止在主线程执行网络 IO（`NetworkOnMainThreadException`），且协议帧需要保序。
-
-## 现状（observed）
-
-- 协议类使用**阻塞 `java.net.Socket` + reader 线程**，不用 coroutine IO（`Channel`/`await` 等）。
-- Socket 写操作**永不在调用线程**执行：`IdcConnection.send` / `IbChannel.sendBody` 将写请求入队到 per-connection 单线程 FIFO（`idc-send` / `ib-send`），由专属 writer 线程顺序消费。
-- 效果：FIFO 保序 + 主线程安全。
-
-## 决策
-
-**暂未 deliberate 确认。** 当前实现是历史演化的结果，不是经过显式权衡的选择。
-
-## 待确认问题
-
-1. **D1（reader 线程 vs coroutine IO）**：当前阻塞 reader 线程模型是否值得保留？coroutine IO 能否带来可观测的收益（资源占用、代码简洁度）？
-2. **D2（per-connection 单线程写 FIFO）**：是否值得保留？多连接并发写是否会出现 writer 线程成为瓶颈？
-
-## 翻转条件
-
-若以下任一成立，重新 deliberate 本 ADR：
-
-- 连接数显著增长（>10 并发），writer 线程出现可测量的排队延迟。
-- 有明确的 coroutine IO 迁移收益（代码量减少、错误处理简化）。
-- Android 平台网络 IO 限制变化。
-
-## 约束（不得破坏）
-
-在 deliberate 确认之前，以下行为约束必须保持：
-
-- 🔴 Socket 写永不在调用线程（Android `NetworkOnMainThreadException` 红线）。
-- 🔴 帧保序（FIFO）。
-
-## 相关链接
-
-- `shared/src/jvmCommonMain/kotlin/app/tvlink/proto/idc/IdcConnection.kt`
-- `shared/src/jvmCommonMain/kotlin/app/tvlink/proto/ib/IbChannel.kt`
-- `AGENTS.md`「Common Patterns」节
+不抽取通用 Socket 基类。IDC、IB、Cast 的握手、帧格式、响应配对和活性判定不同；共享基类只会把差异变成额外参数与回调。若未来修改线程模型，必须验证 Android 主线程安全、帧顺序和断连清理。

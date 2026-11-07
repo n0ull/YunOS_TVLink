@@ -30,6 +30,6 @@ Android 宿主 Activity 层。唯一的 Activity 负责：初始化 `AndroidPlat
 
 ### Internal
 
-- `shared` 的 `app.tvlink.ui.App`（Compose 根）、`app.tvlink.ui.widgets.AndroidPlatform`
+- `shared` 的 `app.tvlink.ui.App`（Compose 根）、`app.tvlink.platform.AndroidPlatform`
 
 <!-- MANUAL: -->

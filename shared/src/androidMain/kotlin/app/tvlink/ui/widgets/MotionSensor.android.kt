@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import app.tvlink.platform.AndroidPlatform
 
 actual class MotionSensor actual constructor() {
     private var sm: SensorManager? = null

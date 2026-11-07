@@ -52,6 +52,7 @@ fun SettingsScreen(vm: AppViewModel) {
     var propKey by remember { mutableStateOf("") }
     // StateFlow 须订阅才重组（.value 直读不订阅，IB 通道状态变化不刷新）
     val ibReady by vm.rc.ibReady.collectAsState()
+    val device = vm.connectedDevice
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("设置") },
@@ -65,12 +66,12 @@ fun SettingsScreen(vm: AppViewModel) {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column {
                     GroupHeader("当前连接")
-                    SettingItem(AppIcons.Tv, "设备", vm.connectedName)
-                    SettingItem(AppIcons.Memory, "型号", vm.connectedModel.ifEmpty { "未知" })
-                    SettingItem(AppIcons.Wifi, "IP", vm.connectedIp)
-                    SettingItem(AppIcons.Link, "MAC", vm.connectedMac.ifEmpty { "未获取（仅 mDNS 发现携带）" })
-                    SettingItem(AppIcons.Memory, "IB 版本", vm.connectedIbVer.ifEmpty { "未探测（手动连接）" })
-                    SettingItem(AppIcons.Link, "IB sid", vm.connectedIbSid.ifEmpty { "未探测（手动连接）" })
+                    SettingItem(AppIcons.Tv, "设备", device?.name.orEmpty())
+                    SettingItem(AppIcons.Memory, "型号", fieldValue(device?.model, "未知"))
+                    SettingItem(AppIcons.Wifi, "IP", device?.ip.orEmpty())
+                    SettingItem(AppIcons.Link, "MAC", fieldValue(device?.mac, "未获取（仅 mDNS 发现携带）"))
+                    SettingItem(AppIcons.Memory, "IB 版本", fieldValue(device?.ibVer, "未探测（手动连接）"))
+                    SettingItem(AppIcons.Link, "IB sid", fieldValue(device?.ibSid, "未探测（手动连接）"))
                     SettingItem(AppIcons.Wifi, "媒体服务", vm.cast.mediaServerUrl.ifEmpty { "未启动" })
                     SettingItem(
                         AppIcons.Link,
@@ -134,11 +135,10 @@ fun SettingsScreen(vm: AppViewModel) {
                 Column {
                     GroupHeader("关于")
                     SettingItem(AppIcons.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
-                    if (vm.connectedIbOnly) {
-                        // IB-only 连接：无 cast 通道，展示 IB 版本供诊断
-                        SettingItem(AppIcons.Link, "IB 通道", vm.connectedIbVer.ifEmpty { "未知" })
-                        if (vm.connectedIbSid.isNotEmpty()) {
-                            SettingItem(AppIcons.Info, "IB sid", vm.connectedIbSid)
+                    if (device?.ibOnly == true) {
+                        SettingItem(AppIcons.Link, "IB 通道", device.ibVer.ifEmpty { "未知" })
+                        if (device.ibSid.isNotEmpty()) {
+                            SettingItem(AppIcons.Info, "IB sid", device.ibSid)
                         }
                         SettingItem(AppIcons.Cast, "投屏", "不可用（IDC 未开放）")
                     } else {

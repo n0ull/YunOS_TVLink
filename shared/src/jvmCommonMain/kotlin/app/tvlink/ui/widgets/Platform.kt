@@ -27,11 +27,6 @@ expect class MotionSensor() {
     fun stop()
 }
 
-/** Voice capture button. Android: hold-to-talk via SpeechRecognizer; desktop: text dialog. */
-@Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
-@Composable
-expect fun VoiceButton(onText: (String) -> Unit)
-
 /**
  * 遥控按键震动。Android 走 Vibrator 直振(API 29+ EFFECT_CLICK),不受系统
  * 「触摸反馈」开关抑制——LocalHapticFeedback/VirtualKey 被该开关静默吞掉
@@ -43,17 +38,3 @@ expect fun keyVibrate()
 @Suppress("FunctionNaming", "ktlint:standard:function-naming") // Compose 约定可组合函数为 PascalCase
 @Composable
 expect fun DongleScreen(vm: AppViewModel)
-
-/** 平台键值存储（持久化设置/历史）：desktop = java.util.prefs，android = SharedPreferences。 */
-expect class KeyValueStore(
-    name: String,
-) {
-    fun getString(key: String): String?
-
-    fun putString(
-        key: String,
-        value: String,
-    )
-
-    fun remove(key: String)
-}

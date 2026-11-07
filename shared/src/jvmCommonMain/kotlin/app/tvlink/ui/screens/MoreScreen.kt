@@ -50,11 +50,7 @@ fun MoreScreen(vm: AppViewModel) {
                     trailingContent = {
                         Icon(AppIcons.KeyboardArrowRight, contentDescription = null)
                     },
-                    modifier =
-                        Modifier.clickable {
-                            if (item.sub == AppViewModel.MoreSub.APPS) vm.apps.refresh()
-                            vm.navMore(item.sub)
-                        },
+                    modifier = Modifier.clickable { vm.navMore(item.sub) },
                 )
             }
         }

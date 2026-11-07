@@ -51,7 +51,7 @@ fun MainShell(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
-        val dests = visibleTabs(vm.connectedIbOnly)
+        val dests = visibleTabs(vm.connectedDevice?.ibOnly == true)
         Row(Modifier.fillMaxSize()) {
             if (wide) {
                 NavigationRail {

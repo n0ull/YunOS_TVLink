@@ -4,8 +4,8 @@ import android.net.wifi.WifiManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import app.tvlink.platform.AndroidPlatform
 import app.tvlink.ui.App
-import app.tvlink.ui.widgets.AndroidPlatform
 
 class MainActivity : ComponentActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null

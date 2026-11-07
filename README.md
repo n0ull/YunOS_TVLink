@@ -2,266 +2,88 @@
 
 [![Build & Test](https://github.com/n0ull/YunOS_TVLink/actions/workflows/build.yml/badge.svg)](https://github.com/n0ull/YunOS_TVLink/actions/workflows/build.yml)
 
-YunOS 电视/盒子的跨平台局域网控制客户端（Android + Windows 桌面）。
+TVLink 是 YunOS 电视/盒子的局域网控制客户端，支持 Android 与 Windows 桌面。项目依据 `com.yunos.tvhelper` v5.2.2 的逆向分析编写原创实现，不包含原 App 的代码、素材或商标。
 
-基于对 `com.yunos.tvhelper` v5.2.2 的逆向分析（见 [`docs/REPORT.md`](docs/REPORT.md) 与 [`docs/re/`](docs/re/)），以原创代码重新实现其局域网协议栈与功能。**不包含**原 App 的任何代码、素材与商标。
+## 功能与验证
 
----
+| 功能 | Android | Desktop | 真机状态 |
+|---|:---:|:---:|---|
+| mDNS + /24 子网发现（IDC 13511、IB 3988） | 支持 | 支持 | 已通过 |
+| 按键、触控板、手柄、方向盘 | 支持 | 支持 | 已通过 |
+| 体感遥控 | 支持 | — | 已通过 |
+| 远程文字输入 | 支持 | 支持 | 测试固件无此能力 |
+| 本地媒体投屏与播放控制 | 支持 | 支持 | 已通过 |
+| 电视截屏、显示与手动保存 | 支持 | 支持 | 已通过 |
+| 应用列表、打开、卸载、URL 推装 | 支持 | 支持 | 测试固件无 appstore 模块 |
+| 文本语音指令（电视端 NLU） | 支持 | 支持 | 已通过 |
+| MagicCast BLE 配网 | 支持 | — | 未验证 |
 
-## 目录
+“支持”表示代码路径已实现，不代表所有固件均提供对应能力。设备型号、测试记录和阻塞原因见 [`TODO.md`](TODO.md)。
 
-- [功能特性](#功能特性)
-- [环境要求](#环境要求)
-- [安装与构建](#安装与构建)
-- [CI（GitHub Actions）](#cigithub-actions)
-- [使用方法](#使用方法)
-- [项目结构](#项目结构)
-- [协议要点](#协议要点)
-- [真机验证状态](#真机验证状态)
-- [配置说明](#配置说明)
-- [代码质量检查（ktlint / detekt）](#代码质量检查ktlint--detekt)
-- [免责声明与许可证](#免责声明与许可证)
+## 架构
 
----
+两个应用壳只负责平台启动与生命周期，均进入共享的 `App()`：
 
-## 功能特性
+```text
+androidApp / desktopApp
+        ↓
+App → AppViewModel → Feature / device service → protocol
+```
 
-| 功能 | Android | 桌面端 | 说明 |
-|------|:-------:|:------:|------|
-| 设备发现 | ✅ | ✅ | mDNS（`_alitv_remote_control._tcp.local`）+ /24 子网 TCP 13511 遍历 |
-| 遥控（按键/触控板/手柄/方向盘） | ✅ | ✅ | IB 快速通道 TCP 3988 + IDC 回退（OpCmd_Key） |
-| 体感遥控 | ✅ | — | 陀螺仪/加速度经 IB 通道发送 |
-| 远程文字输入（挂起：测试机固件无此能力） | ✅ | ✅ | 电视 IME 激活自动弹出（IDC 10600～10900） |
-| 本地投屏 | ✅ | ✅ | 内嵌 HTTP 服务（8192+，Range），电视回拉；控制通道 ddhParams 优先，兜底依次试 13520/13521；播放状态/进度轮询 playback-info |
-| 电视截屏 | ✅ | ✅ | IDC Cmd 20900→21000，JPEG 回传保存（无需加密通道） |
-| 应用管理（挂起：测试机固件无此模块） | ✅ | ✅ | 列表/打开/卸载/按 URL 推装（RPM over VConn） |
-| 语音指令 | ✅ | ✅ | 双端统一文本输入，经 `asr_streaming` 全会话帧转发 |
-| 魔投 BLE 配网（未测试） | ✅ | — | MagicCast 扫描 + GATT 写入 SSID/密码 |
+- `AppViewModel` 负责导航、模块装配、跨功能连接生命周期和全局通知。
+- `DeviceManager` 直接拥有设备发现、当前 IDC 会话、连接状态、重连以及模块/VConn 回调分发。
+- `RcController` 拥有 IB 会话；`CastFeature` 拥有投屏控制会话和 HTTP 媒体服务。
+- `RpmService`、`DongleSettingService`、`AsrTextService` 各自管理业务模块的 VConn 打开策略。
+- `ShotFeature`、`SysPropFeature`、`RemoteFeature` 持有对应 UI 状态；应用列表直接由 `RpmService.appList` 提供。
+- 协议编解码分别归 `proto/idc`、`proto/ib`、`proto/cast`、`proto/mdns`，不共用虚构的通用 Socket 基类。
 
----
+源码集与职责：
 
-## 环境要求
+| 源集/目录 | 职责 |
+|---|---|
+| `shared/src/commonMain` | 纯平台无关数据；当前为 IB 常量与键码 |
+| `shared/src/jvmCommonMain` | 协议、设备协调、共享 Compose UI、平台能力 `expect` |
+| `shared/src/androidMain` | Android `actual`、BLE、传感器与系统能力 |
+| `shared/src/desktopMain` | Desktop `actual`、AWT/Skia 与系统存储 |
+| `shared/src/*/kotlin/app/tvlink/platform` | 跨平台持久化及 Android application context |
+| `shared/src/desktopTest` | JVM 协议与状态行为测试 |
 
-| 依赖 | 版本 |
-|------|------|
-| JDK | 17+ |
-| Kotlin | 2.1.20 |
-| Compose Multiplatform | 1.8.0 |
-| Gradle | 8.11.1（wrapper 自带） |
-| Android SDK | compileSdk 36（`local.properties` 指向；build-tools 36.0.0） |
-| Android 设备 | API 21+（Android 5.0） |
+只有真实平台差异使用 `expect/actual`。双端一致的 UI（包括文本语音指令）直接放在 `jvmCommonMain`。
 
----
+## 构建与运行
 
-## 安装与构建
+要求：JDK 17、Android SDK 36。Android SDK 路径写入本机 `local.properties` 的 `sdk.dir`。
 
-### 1. 克隆项目
+Windows 使用 `gradlew.bat`；Unix 使用 `./gradlew`。以下示例使用 Unix 形式：
 
 ```bash
-git clone <repo-url> YunOS_TVLink
-cd YunOS_TVLink
+./gradlew :androidApp:assembleDebug   # Android APK
+./gradlew :desktopApp:run             # 运行桌面端
+./gradlew :desktopApp:distribNoJre    # Windows 便携包，不含 JRE
+./gradlew :shared:desktopTest         # JVM 行为测试
+./gradlew check                       # 测试 + ktlint + detekt + Android lint
+./gradlew ktlintFormat                # 格式化
 ```
 
-### 2. 配置 Android SDK
+CI 与本地均使用 `check` 作为质量门禁；工作流见 [`.github/workflows/build.yml`](.github/workflows/build.yml)。
 
-在项目根目录创建 `local.properties`（已 gitignore）：
+## 使用
 
-```properties
-sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
-```
+1. 让手机/电脑与电视处于同一局域网。
+2. 无可用历史连接时进入设备页，点击搜索；也可手动输入 IP。启动时不会自动扫描。
+3. 同时发现 IDC 与 IB 的设备使用完整功能；仅 IB 可达的设备可遥控，但不能使用 IDC/投屏能力。
+4. 投屏时选择本地媒体，电视通过内置 HTTP 服务回拉。
+5. 截屏先显示在页面中，点击“保存”后才写入本地。
 
-> macOS 示例：`sdk.dir=/Users/<you>/Library/Android/sdk`
+## 文档
 
-### 3. 构建
+- [`docs/re/`](docs/re/)：协议与逆向分析基准；修改协议行为前必须核对。
+- [`docs/adr/`](docs/adr/)：少量持续有效的架构约束。
+- [`TODO.md`](TODO.md)：活跃待办、固件限制与历史真机验证索引。
+- [`docs/field-test-2026-07-15.md`](docs/field-test-2026-07-15.md)：历史测试记录。
 
-```bash
-# Android APK
-./gradlew :androidApp:assembleDebug
+## 范围与许可
 
-# 桌面端运行（开发模式）
-./gradlew :desktopApp:run
+仅实现局域网内可闭环的能力；账号、支付、云端搜索与推送不在范围内。
 
-# 桌面端打包（不含 JRE 的便携 fat jar，用户自备 Java 17+）
-./gradlew :desktopApp:distribNoJre
-```
-
-### 4. 运行测试
-
-```bash
-# 协议层单元测试
-./gradlew :shared:desktopTest
-```
-
----
-
-## CI（GitHub Actions）
-
-推送/PR 到 `main` 触发 [`.github/workflows/build.yml`](.github/workflows/build.yml)，三个 job：
-
-| Job | 内容 | 产物 |
-|-----|------|------|
-| Test & Code Quality | `./gradlew check`（单元测试 + ktlint + detekt + Android lint 统一门禁） | 测试报告 |
-| Android APK | `:androidApp:assembleDebug`（门禁通过后） | `androidApp-debug.apk`（保留 14 天） |
-| Desktop (Windows) | `:desktopApp:distribNoJre`（门禁通过后） | `TVLink-no-jre/` 便携目录（fat jar + 启动 bat，保留 14 天） |
-
-> 桌面端仅 Windows runner；产物为不含 JRE 的便携 fat jar，用户需自备 Java 17+。
-
----
-
-## 使用方法
-
-### 连接电视
-
-1. 确保手机/电脑与电视在**同一局域网**
-2. 启动 App → 自动扫描（mDNS + 子网遍历）
-3. 点击发现的设备 → 连接
-
-> 也可手动输入电视 IP 地址连接。
-
-### 遥控
-
-连接后进入遥控页面，顶部切换五种模式：
-- **按键**：方向键 / OK / 返回 / 主页 / 菜单 / 音量（IB 快速通道，低延迟；IB 不可用时自动回退 IDC）
-- **触控板**：拖动移动电视光标，单击确认（鼠标模式）
-- **手柄**：双摇杆 + ABXY/LB/RB/START/SELECT（游戏手柄键码）
-- **方向盘**：大圆盘拖动控制光标
-- **体感**（仅 Android）：陀螺仪/加速度实时转发
-- **文字输入（挂起：测试机固件无此能力）**：电视激活 IME 后自动弹出输入框
-
-### 投屏
-
-1. 进入“投屏”页面
-2. 选择本地视频/音频/图片文件
-3. 点击播放 → 电视通过 HTTP 回拉媒体；播放状态、总时长与进度每秒刷新
-
-### 截屏
-
-进入“截屏”页面 → 点击“截取”→ JPEG 保存到本地。
-
-### 应用管理
-
-进入“应用”页面：查看已安装应用、打开、卸载、通过 APK URL 推装。
-
----
-
-## 项目结构
-
-```
-YunOS_TVLink/
-├── shared/                      # 协议栈 + 共享 UI（Kotlin Multiplatform 库）
-│   ├── src/commonMain/          #   平台无关代码（IB 键码常量）
-│   ├── src/jvmCommonMain/       #   JVM 共用：协议实现 + Compose UI
-│   │   └── kotlin/app/tvlink/
-│   │       ├── device/          #     设备服务层（Discovery、DeviceManager、RcController 等）
-│   │       ├── proto/           #     协议实现
-│   │       │   ├── idc/         #       IDC 控制协议（TCP 13510）
-│   │       │   ├── ib/          #       IB 快速输入通道（TCP 3988）
-│   │       │   ├── cast/        #       投屏控制（TCP 13520）+ HTTP 媒体服务
-│   │       │   └── mdns/        #       mDNS 设备发现
-│   │       └── ui/              #     Compose UI（screens, theme, widgets）
-│   ├── src/androidMain/         #   Android actual（BLE 配网、传感器、语音、SAF）
-│   ├── src/desktopMain/         #   Desktop actual（AWT 对话框、截图保存）
-│   └── src/desktopTest/         #   单元测试
-├── androidApp/                  # Android 应用壳（权限、MulticastLock）
-├── desktopApp/                  # Compose Desktop 壳（便携 fat jar，不含 JRE）
-├── docs/                        # 逆向分析文档
-│   ├── REPORT.md                #   总报告
-│   └── re/                      #   分模块协议细节（01～06）
-├── .github/                     # GitHub Actions CI（Build & Test 工作流）
-├── apktool_out/                 # 原 App 反编译资源（逆向参考，只读，已 gitignore）
-├── jadx_out/                    # 原 App 反编译源码（逆向参考，只读，已 gitignore）
-├── media/                       # 本地真机测试媒体（已 gitignore）
-├── tools/                       # 本地研究工具（tvhelper_tool 探针脚本，已 gitignore）
-├── TODO.md                      # 真机验证档案与待办清单（经 jadx 反编译复核）
-└── AGENTS.md                    # AI 代理导航文档（层级结构）
-```
-
----
-
-## 协议要点
-
-> 逆向所得，仅用于互操作。详见 [`docs/re/`](docs/re/)。
-
-| 协议 | 端口 | 帧格式 |
-|------|------|--------|
-| IDC | TCP 13510 | 16 B 大端头（magic=130311 / key / packetId / totalLen）+ 包体 |
-| IB | TCP 3988 | 20 B 头（magic=0x11228899 / size / type / reserve / checksum）+ 文本包体 |
-| 投屏控制 | TCP ddhParams 优先，兜底依次试 13520/13521 | HTTP/1.1 风格文本，`yunos-session-id` + `yunos-device-id` 头 |
-| 媒体服务 | TCP 8192+ | 标准 HTTP/1.1 + Range（电视回拉） |
-| mDNS | UDP 5353 | `_alitv_remote_control._tcp.local` 查询 |
-| DETECT | TCP 13511 | IDC 握手子集（设备发现用） |
-
-**关键细节：**
-
-- 字符串与字节数组均为 4 B 长度前缀 + UTF-8
-- 登录后 `connKey` 作为后续帧的 key 字段（每帧必带，否则 TV 拒收）
-- 本客户端以 `encryption_algorithm_ver=0` 走明文会话（原协议支持的合法分支）
-- Cmd 类包（截屏/SysProp 等）body = `LPString({"cmdReqID":N})` + `LPString({参数})`；`Cmd_LaunchSth` 为单段 LPString
-- IB checksum = `(size + reserve) ^ helloId`
-- 投屏播放状态：固件（server_vers 3.2.0）不推 `POST /event`，需轮询 `GET /playback-info`（自带 state 字段）
-- 所有 socket 写均在后台发送线程执行（Android 主线程网络 IO 会崩溃）
-
----
-
-## 真机验证状态
-
-功能矩阵中的 ✅ 项均在 YunOS TV（M638_ALI 系列）真机实测通过；标注挂起/未测试的项
-受制于测试机硬件能力或缺对应设备，代码侧已按协议就绪。验证档案与待办清单见 [`TODO.md`](TODO.md)。
-
----
-
-## 配置说明
-
-| 文件 | 用途 | 是否入库 |
-|------|------|:--------:|
-| `local.properties` | Android SDK 路径 | ❌ gitignored |
-| `gradle.properties` | JVM 参数、Kotlin 代码风格 | ✅ |
-| `settings.gradle.kts` | 模块声明（shared / androidApp / desktopApp） | ✅ |
-| `.editorconfig` | ktlint 代码风格（`ktlint_official`、行宽 120、导入布局） | ✅ |
-| `detekt.yml` | detekt 静态分析规则集（复杂度/命名/协程/异常等） | ✅ |
-
-> 本项目为纯局域网应用，**无云端配置、无账号系统、无 API Key**。
-
----
-
-## 代码质量检查
-
-**ktlint**（格式）与 **detekt**（静态分析）分别负责代码风格与静态质量，二者职责分离、规则不冲突：
-
-- **ktlint** 负责格式（缩进、换行、尾随逗号、导入顺序、行宽、文件末尾换行等），遵循 Kotlin 官方编码规范（`ktlint_official`）。
-- **detekt** 负责静态分析（命名、复杂度、潜在缺陷、协程、性能、异常等），不启用 `formatting` 规则集，因此不会与 ktlint 重复检查。
-
-### 配置文件
-
-| 文件 | 作用 |
-|------|------|
-| `.editorconfig` | ktlint 官方风格配置；`expect/actual` 平台文件已关闭 `filename` 规则 |
-| `detekt.yml` | 在 detekt 默认规则集之上叠加自定义规则（`buildUponDefaultConfig`） |
-
-### 常用命令
-
-```bash
-# CI 统一入口：运行全部子模块的单元测试 + ktlintCheck + detekt + Android lint
-./gradlew check
-
-# 按 .editorconfig 自动格式化全部源码（可修正的格式问题一键修复）
-./gradlew ktlintFormat
-
-# 仅运行 detekt 静态分析
-./gradlew detekt
-```
-
-### 说明
-
-- 报告输出：`*/build/reports/ktlint/`（各源集 HTML）与 `*/build/reports/detekt/`（按源集分文件 HTML/SARIF）。
-- 构建产物与生成代码（`build/`、`build/generated/...`）已排除，不参与检查。
-- `./gradlew check` 默认在发现任何问题时失败（`ignoreFailures = false`、`maxIssues = 0`）。运行 `./gradlew ktlintFormat` 可自动修正大部分格式问题；剩余的命名/复杂度等问题需人工处理。
-
----
-
-## 免责声明与许可证
-
-本项目仅用于学习协议与私人设备的互操作控制。与原 App 厂商无任何关联。
-云端业务（影视内容、账号、推送）依赖厂商闭源签名组件，不在本项目范围内。
-
-**私人学习用途，未开源许可。** 未经授权不得用于商业分发。
+本项目用于学习协议与私人设备互操作，与原 App 厂商无关联。私人学习用途，未开源许可；未经授权不得用于商业分发。

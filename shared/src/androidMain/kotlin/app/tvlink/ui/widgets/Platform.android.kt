@@ -5,6 +5,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.runtime.Composable
+import app.tvlink.platform.AndroidPlatform
 
 actual val platformName: String = "android"
 
@@ -16,25 +17,6 @@ actual fun BackHandler(
     onBack: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(enabled = enabled, onBack = onBack)
-}
-
-actual class KeyValueStore actual constructor(
-    name: String,
-) {
-    private val prefs = AndroidPlatform.appContext.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
-
-    actual fun getString(key: String): String? = prefs.getString(key, null)
-
-    actual fun putString(
-        key: String,
-        value: String,
-    ) {
-        prefs.edit().putString(key, value).apply()
-    }
-
-    actual fun remove(key: String) {
-        prefs.edit().remove(key).apply()
-    }
 }
 
 /** Vibrator 直振:EFFECT_CLICK(29+)/oneShot 40ms(26+)/legacy(21+)。需 VIBRATE 权限(androidApp manifest)。 */

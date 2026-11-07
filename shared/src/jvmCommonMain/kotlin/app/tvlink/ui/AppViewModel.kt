@@ -20,9 +20,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 /**
- * App 级协调者：导航、设备连接生命周期、服务注册表与各屏幕功能状态持有者
- * （[cast]/[shot]/[props]/[remote]/[apps]，随本 ViewModel 构造与清理）的装配。
- * 功能状态与动作已下沉到各 Feature 类；本类只做跨功能编排。
+ * App 级协调者：导航、设备连接生命周期与功能模块的装配。
+ * 功能状态由 Cast/Shot/SysProp/Remote Feature 持有。
  */
 class AppViewModel : ViewModel() {
     // ---- navigation ----
@@ -66,52 +65,32 @@ class AppViewModel : ViewModel() {
     }
 
     // ---- services ----
-    val deviceManager = DeviceManager()
+    private val deviceManager = DeviceManager()
     val rc = RcController(deviceManager)
     val rpm = RpmService(deviceManager)
-    val asr = AsrTextService(deviceManager)
-    val screenshot = ScreenshotService(deviceManager)
-    val sysprop = SysPropService(deviceManager)
+    private val asr = AsrTextService(deviceManager)
+    private val screenshot = ScreenshotService(deviceManager)
+    private val sysprop = SysPropService(deviceManager)
     val dongleSettings = DongleSettingService(deviceManager)
 
-    // ---- feature state holders (per-screen) ----
     val cast = CastFeature(viewModelScope) { notice = it }
     val shot = ShotFeature(viewModelScope, screenshot) { notice = it }
     val props = SysPropFeature(viewModelScope, sysprop) { notice = it }
-    val remote =
-        RemoteFeature(viewModelScope, deviceManager, rc, asr) { notice = it }
-    val apps = AppsFeature(viewModelScope, rpm) { notice = it }
+    val remote = RemoteFeature(viewModelScope, deviceManager, rc, asr) { notice = it }
 
-    // ---- auto-reconnect ----
-
-    /** 最近一次成功连接的设备(显式 disconnect 时清空);后台→前台掉线时按需自动重连。 */
-    private var lastDevice: DeviceManager.ConnectedDevice? = null
-
-    /**
-     * 前台恢复时的兜底复活(事件驱动的 IDC/IB 自动重连之外的第二层):
-     * ① 重连重试耗尽(5s→15s×2 全败)后回前台 → 无条件再给一轮(新网络环境=新用户意图);
-     * ② cast 通道单独死亡(IDC/IB 活着)→ 唯一补建入口,其他机制看不见这条 TCP。
-     * 用户显式断开后 lastDevice=null,不重连。
-     */
     fun onResume() {
-        val d = lastDevice ?: return
+        val device = connectedDevice ?: return
         if (connState == DeviceManager.ConnState.CONNECTING) return
         if (connState != DeviceManager.ConnState.CONNECTED) {
-            deviceManager.connect(d.ip, d.projectionPort, d.ibVer, d.ibSid)
+            deviceManager.connect(device.ip, device.projectionPort, device.ibVer, device.ibSid)
             return
         }
-        cast.ensureAlive(d.ip, d.projectionPort)
+        cast.ensureAlive(device.ip, device.projectionPort)
     }
 
-    // ---- connection state ----
     var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
-    var connectedName by mutableStateOf("")
-    var connectedIp by mutableStateOf("")
-    var connectedModel by mutableStateOf("")
-    var connectedMac by mutableStateOf("")
-    var connectedIbVer by mutableStateOf("")
-    var connectedIbSid by mutableStateOf("")
-    var connectedIbOnly by mutableStateOf(false)
+    var connectedDevice by mutableStateOf<DeviceManager.ConnectedDevice?>(null)
+        private set
     val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
 
     // ---- dongle settings (module com.ali.ott.dongle.setting) ----
@@ -126,27 +105,12 @@ class AppViewModel : ViewModel() {
             deviceManager.connState.collect { s ->
                 connState = s
                 if (s == DeviceManager.ConnState.CONNECTED) {
-                    val c = deviceManager.connected.value
-                    connectedName = c?.name ?: ""
-                    connectedIp = c?.ip ?: ""
-                    connectedModel = c?.model ?: ""
-                    connectedMac = c?.mac ?: ""
-                    connectedIbVer = c?.ibVer ?: ""
-                    connectedIbSid = c?.ibSid ?: ""
-                    connectedIbOnly = c?.ibOnly ?: false
-                    lastDevice = c
-                    onConnected()
-                    // 重连不重置页面：已在 Main（任意 tab）时保持当前页，
-                    // 否则自动重连会把用户从投屏/设置等页面弹回默认遥控 tab
+                    connectedDevice = deviceManager.connected.value
+                    onConnected(connectedDevice)
+                    // Reconnecting must not reset the user's current page.
                     if (screen !is Screen.Main) screen = Screen.Main()
                 } else if (s == DeviceManager.ConnState.IDLE) {
-                    connectedName = ""
-                    connectedIp = ""
-                    connectedModel = ""
-                    connectedMac = ""
-                    connectedIbVer = ""
-                    connectedIbSid = ""
-                    connectedIbOnly = false
+                    connectedDevice = null
                     cast.onDisconnected()
                 } else if (s == DeviceManager.ConnState.FAILED) {
                     // 重试窗口内的 FAILED 微秒内回到 CONNECTING；延迟复核仍为 FAILED
@@ -169,6 +133,18 @@ class AppViewModel : ViewModel() {
         deviceManager.packets.collectInVm { p -> handlePacket(p) }
         dongleSettings.moduleOnline.collectInVm { online -> dongleOnline = online }
         dongleSettings.sysInfo.collectInVm { info -> dongleInfo = info }
+        rpm.installProgress.collectInVm { progress ->
+            notice = "安装 ${progress.packageName}: ${progress.progress}%"
+        }
+        rpm.opResults.collectInVm { result ->
+            notice =
+                if (result.errorCode == 0) {
+                    "${result.op} ${result.packageName} 成功"
+                } else {
+                    "${result.op} ${result.packageName} 失败 (${result.errorCode})"
+                }
+            if (result.errorCode == 0) rpm.getAppList()
+        }
 
         // 冷启动直连历史设备（原 App 亮屏/回前台按 SSID 历史直连，docs/re/01 §1；本项目全局一条）
         deviceManager.lastDevice()?.let { d -> deviceManager.connect(d.ip, d.projectionPort) }
@@ -179,14 +155,12 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) { collect { block(it) } }
     }
 
-    private fun onConnected() {
+    private fun onConnected(device: DeviceManager.ConnectedDevice?) {
         rc.attach()
-        if (!connectedIbOnly) {
-            rpm.attach()
-            dongleSettings.attach()
-            val c = deviceManager.connected.value ?: return
-            cast.onHostConnected(c.ip, c.projectionPort)
-        }
+        if (device?.ibOnly == true) return
+        rpm.attach()
+        dongleSettings.attach()
+        if (device != null) cast.onHostConnected(device.ip, device.projectionPort)
     }
 
     /** 包路由：服务层分派（截图/属性应答）+ 遥控 IME 事件。 */
@@ -212,7 +186,7 @@ class AppViewModel : ViewModel() {
     ) = deviceManager.connectIbOnly(ip, ibVer, ibSid)
 
     fun disconnect() {
-        lastDevice = null
+        connectedDevice = null
         rc.detach()
         rpm.detach()
         dongleSettings.detach()
