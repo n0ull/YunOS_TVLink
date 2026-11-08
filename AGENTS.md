@@ -5,7 +5,6 @@ Kotlin Multiplatform LAN client for YunOS TVs/boxes. Original implementation bas
 ## Architecture
 
 - `androidApp` and `desktopApp` are thin shells entering `app.tvlink.ui.App()`.
-- `shared/src/commonMain`: pure data only.
 - `shared/src/jvmCommonMain`: protocols, device coordination, Compose UI, and platform `expect` declarations.
 - `shared/src/androidMain` / `desktopMain`: real platform adapters.
 - `app.tvlink.platform`: persistent key-value storage and Android application context.

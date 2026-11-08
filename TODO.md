@@ -95,8 +95,7 @@ POST /zoom（图片缩放，docs/re/04 §4：`POST /zoom?scale=<f>&cx=<f>&cy=<f>
   `mediaServerUrl` 留旧值，`file()` 守卫被绕过——触发苛刻（纯 VPN 等无 site-local IPv4 网络），
   真机见到再修
 - **LOW 批量**：0.0.0.0 绑定 / readLine 无上限 / 线程池无界队列（IP 校验已兜底）、IDC 跳帧日志
-  节流、CastController connect 失败 fd 泄漏、重复 Content-Length last-wins、captureBurst 窄窗口
-  假忙、onDisconnected 等锁 UI 停滞（最长 ~20 s）
+  节流、重复 Content-Length last-wins、captureBurst 窄窗口假忙、onDisconnected 等锁 UI 停滞（最长 ~20 s）
 
 ## 已知天花板
 

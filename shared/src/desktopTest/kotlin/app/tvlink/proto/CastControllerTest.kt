@@ -2,15 +2,19 @@ package app.tvlink.proto
 
 import app.tvlink.proto.cast.CastController
 import java.io.BufferedReader
+import java.io.IOException
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -29,6 +33,39 @@ class CastControllerTest {
     @AfterTest
     fun tearDown() {
         server.close()
+    }
+
+    @Test
+    fun tcpConnectFailureClosesTheUninstalledSocket() {
+        val candidate =
+            object : Socket() {
+                override fun connect(
+                    endpoint: SocketAddress,
+                    timeout: Int,
+                ): Unit = throw IOException("TCP connection failed")
+            }
+        val controller = CastController("127.0.0.1", server.localPort) { candidate }
+
+        candidate.use {
+            assertFalse(controller.connect())
+            assertTrue(it.isClosed, "failed TCP connect left its socket open")
+            assertEquals(CastController.State.DISCONNECTED, controller.state)
+        }
+    }
+
+    @Test
+    fun streamSetupFailureClosesTheConnectedSocket() {
+        val candidate =
+            object : Socket() {
+                override fun getOutputStream(): OutputStream = throw IOException("output stream setup failed")
+            }
+        val controller = CastController("127.0.0.1", server.localPort) { candidate }
+
+        candidate.use {
+            assertFalse(controller.connect())
+            assertTrue(it.isClosed, "failed stream setup left its socket open")
+            assertEquals(CastController.State.DISCONNECTED, controller.state)
+        }
     }
 
     private fun readStartLine(reader: BufferedReader): String? {

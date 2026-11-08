@@ -14,10 +14,16 @@ import java.util.concurrent.TimeUnit
  * YunOS media-projection control channel — HTTP/1.1-style text over a TCP long
  * connection to the TV (default port 13520). See docs/re/04.
  */
-class CastController(
+class CastController internal constructor(
     private val host: String,
-    private val port: Int = DEFAULT_PORT,
+    private val port: Int,
+    private val createSocket: () -> Socket,
 ) {
+    constructor(
+        host: String,
+        port: Int = DEFAULT_PORT,
+    ) : this(host, port, ::Socket)
+
     companion object {
         /** 投屏控制通道默认端口（ddh/mDNS 均未提供时 AppViewModel 兜底依次试 DEFAULT_PORT/13521）。 */
         const val DEFAULT_PORT = 13520
@@ -57,17 +63,25 @@ class CastController(
 
     fun connect(timeoutMs: Int = 10_000): Boolean {
         disconnect()
+        var candidate: Socket? = null
         return try {
-            val s = Socket()
+            val s = createSocket().also { candidate = it }
             s.connect(InetSocketAddress(host, port), timeoutMs)
             s.tcpNoDelay = true
+            val output = s.getOutputStream()
             socket = s
-            out = s.getOutputStream()
+            out = output
             setState(State.CONNECTED)
             startReader()
             true
         } catch (e: Exception) {
-            // FIXME: 建连失败时，新建的 Socket 可能尚未交给 disconnect() 管理，缺少显式关闭。
+            runCatching {
+                if (candidate != null && socket === candidate) {
+                    disconnect()
+                } else {
+                    candidate?.close()
+                }
+            }
             System.err.println("CastController: connect failed: ${e.message}")
             false
         }

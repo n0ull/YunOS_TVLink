@@ -43,7 +43,6 @@ App → AppViewModel → Feature / device service → protocol
 
 | 源集/目录 | 职责 |
 |---|---|
-| `shared/src/commonMain` | 纯平台无关数据；当前为 IB 常量与键码 |
 | `shared/src/jvmCommonMain` | 协议、设备协调、共享 Compose UI、平台能力 `expect` |
 | `shared/src/androidMain` | Android `actual`、BLE、传感器与系统能力 |
 | `shared/src/desktopMain` | Desktop `actual`、AWT/Skia 与系统存储 |

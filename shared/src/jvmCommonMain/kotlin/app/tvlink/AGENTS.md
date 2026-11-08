@@ -32,10 +32,6 @@ Both Android and Desktop targets compile this code. Uses plain `java.net` socket
 
 ## Dependencies
 
-### Internal
-
-- `commonMain` (IbData types via source-set hierarchy)
-
 ### External
 
 - java.net (Socket, ServerSocket, DatagramSocket)

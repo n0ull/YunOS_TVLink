@@ -349,7 +349,10 @@ private fun readHeader(
     return IbFrameHeader(type = header.int, bodySize = bodySize)
 }
 
-private fun readBody(input: DataInputStream, size: Int): ByteArray = ByteArray(size).also { input.readFully(it) }
+private fun readBody(
+    input: DataInputStream,
+    size: Int,
+): ByteArray = ByteArray(size).also { input.readFully(it) }
 
 private val helloVersion = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"")
 private val helloSessionId = Regex("\"sid\"\\s*:\\s*(\\d+)")
@@ -357,7 +360,17 @@ private val helloSessionId = Regex("\"sid\"\\s*:\\s*(\\d+)")
 private fun parseHello(bytes: ByteArray): IbHello {
     val body = String(bytes, Charsets.UTF_8)
     return IbHello(
-        version = helloVersion.find(body)?.groupValues?.get(1).orEmpty(),
-        sessionId = helloSessionId.find(body)?.groupValues?.get(1).orEmpty(),
+        version =
+            helloVersion
+                .find(body)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty(),
+        sessionId =
+            helloSessionId
+                .find(body)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty(),
     )
 }

@@ -15,15 +15,9 @@ kotlin {
     jvm("desktop")
 
     sourceSets {
-        val commonMain = getByName("commonMain")
-        getByName("commonTest") {
-            dependencies {
-                implementation(kotlin("test"))
-            }
-        }
         // Socket, protocol and Compose code share this JVM-only source set.
         val jvmCommonMain by creating {
-            dependsOn(commonMain)
+            dependsOn(commonMain.get())
             dependencies {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -43,6 +37,11 @@ kotlin {
             }
         }
         getByName("desktopMain").dependsOn(jvmCommonMain)
+        getByName("desktopTest") {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
 
