@@ -67,6 +67,7 @@ class CastController(
             startReader()
             true
         } catch (e: Exception) {
+            // FIXME: 建连失败时，新建的 Socket 可能尚未交给 disconnect() 管理，缺少显式关闭。
             System.err.println("CastController: connect failed: ${e.message}")
             false
         }

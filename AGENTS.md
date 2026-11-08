@@ -9,7 +9,7 @@ Kotlin Multiplatform LAN client for YunOS TVs/boxes. Original implementation bas
 - `shared/src/jvmCommonMain`: protocols, device coordination, Compose UI, and platform `expect` declarations.
 - `shared/src/androidMain` / `desktopMain`: real platform adapters.
 - `app.tvlink.platform`: persistent key-value storage and Android application context.
-- `DeviceManager` owns discovery, the active IDC session, reconnects, and module/VConn callback distribution.
+- `Discovery` owns scan state and candidates; `DeviceSelection` owns the target, active IDC session, reconnects, and module/VConn callback distribution.
 - `RcController` owns IB; `CastFeature` owns Cast + HTTP; individual services open their own VConn.
 - Keep one implementation behind each seam. Do not add facade/delegation layers or generic socket base classes without multiple real variants.
 
@@ -19,7 +19,7 @@ Protocol behavior must agree with `docs/re/`. Those documents are the protocol s
 
 - Use blocking sockets with the established reader/writer model. Steady-state `IdcConnection.send` and `IbChannel.sendBody` preserve FIFO on their per-connection writers; handshake/keepalive paths are documented in `docs/adr/0001-io-threading-model.md`.
 - Keep socket work off the Android main thread.
-- Preserve `DeviceManager` connection serialization, generation checks, and callback installation order.
+- Preserve `DeviceSelection` connection serialization, generation checks, and callback installation order.
 - UI state uses Compose snapshot state or StateFlow. Resource-owning modules are destroyed through `AppViewModel.onCleared()`.
 - Use `expect/actual` only when platform implementations differ.
 

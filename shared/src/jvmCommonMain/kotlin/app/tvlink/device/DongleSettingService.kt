@@ -6,27 +6,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * 魔投（dongle）设置 —— IDC VConn 模块 "com.ali.ott.dongle.setting"（docs/re/03 §B.3，
- * 反编译基准 ui/dongle/rcs/）。信封为纯 JSON：{"category":"immersive","messageType":T,
- * "requestId":N[,参数]}（BaseRcsPacket.java），区别于 RPM 的 int32 二进制头。
- * 原 App 唯一响应包类型为 "SysInfo"（RcsPacketFactory.createRecvPacket），其余请求
- * fire-and-forget。模块上线即取一次系统信息（原 RcsSetting.onModuleOnline 行为）。
- */
+/** Dongle settings over IDC VConn module "com.ali.ott.dongle.setting". See docs/re/03 §B.3. */
 class DongleSettingService(
-    private val deviceManager: DeviceManager,
+    private val selection: DeviceSelection,
 ) {
     companion object {
-        /** RcsPublic.java:17 SETTING_KEY_NAME —— 模块线上名。 */
         const val MODULE_NAME = "com.ali.ott.dongle.setting"
-
         private const val CATEGORY = "immersive"
-
-        /** 原 RcsPacket_getSysInfoResult：请求 "getSysInfo"，应答 messageType "SysInfo"。 */
         const val MSG_SYSINFO_RESP = "SysInfo"
     }
 
-    /** resolutions 的数组下标即分辨率 id（原 Resolution.setResolution(i) —— 反编译基准）。 */
     data class SysInfo(
         val ip: String = "",
         val mac: String = "",
@@ -37,71 +26,104 @@ class DongleSettingService(
         val resolutions: List<String> = emptyList(),
     )
 
-    /** 模块在线状态（下线/detach 时 false）。 */
+    private class ModuleRuntime(
+        val binding: IdcBinding,
+        var moduleId: Int? = null,
+        var vconnOpen: Boolean = false,
+    )
+
     private val _moduleOnline = MutableStateFlow(false)
     val moduleOnline: StateFlow<Boolean> = _moduleOnline
 
-    /** 最近一次 SysInfo 应答；模块下线时清空。 */
     private val _sysInfo = MutableStateFlow<SysInfo?>(null)
     val sysInfo: StateFlow<SysInfo?> = _sysInfo
 
     private val requestId = AtomicInteger(1)
-    private var moduleId: Int? = null
-    private var vconnOpen = false
+    private val stateLock = Any()
+    private var runtime: ModuleRuntime? = null
+    private var attached = false
 
     val available: Boolean
-        get() = moduleId != null && vconnOpen
-
-    private val moduleListener: (String, Int, Boolean) -> Unit = { name, mid, online ->
-        if (name == MODULE_NAME) onModule(online, mid)
-    }
-
-    private val vConnListener: (Int, ByteArray) -> Unit = { mid, payload ->
-        if (moduleId == mid) handle(String(payload, Charsets.UTF_8))
-    }
-
-    fun attach() {
-        deviceManager.removeVConnListener(vConnListener)
-        deviceManager.addVConnListener(vConnListener)
-        deviceManager.removeModuleListener(moduleListener)
-        deviceManager.addModuleListener(moduleListener)
-    }
-
-    fun detach() {
-        deviceManager.removeVConnListener(vConnListener)
-        deviceManager.removeModuleListener(moduleListener)
-        resetModuleState()
-    }
-
-    private fun onModule(
-        online: Boolean,
-        mid: Int,
-    ) {
-        if (online) {
-            moduleId = mid
-            _moduleOnline.value = true
-            if (!vconnOpen) {
-                vconnOpen = true
-                deviceManager.connection?.openVConn(mid)
+        get() =
+            synchronized(stateLock) {
+                runtime?.moduleId != null && runtime?.vconnOpen == true
             }
-            getSysInfo()
-        } else {
-            resetModuleState()
+
+    private val moduleListener: (IdcBinding, String, Int, Boolean) -> Unit = { binding, name, mid, online ->
+        if (name == MODULE_NAME) onModule(binding, online, mid)
+    }
+
+    private val vConnListener: (IdcBinding, Int, ByteArray) -> Unit = { binding, mid, payload ->
+        val info = parseResponse(String(payload, Charsets.UTF_8))
+        binding.targetLease.onlyIfActive {
+            synchronized(stateLock) {
+                if (!attached) return@synchronized
+                val current = runtime ?: return@synchronized
+                if (current.binding !== binding || current.moduleId != mid) return@synchronized
+                if (isCurrent(binding) && info != null) _sysInfo.value = info
+            }
         }
     }
 
-    private fun resetModuleState() {
-        moduleId = null
-        vconnOpen = false
-        _moduleOnline.value = false
-        _sysInfo.value = null
+    private fun isCurrent(binding: IdcBinding): Boolean =
+        binding.isActive &&
+            selection.binding.value
+                ?.idc
+                ?.value === binding
+
+    fun attach() {
+        synchronized(stateLock) { attached = true }
+        selection.removeVConnListener(vConnListener)
+        selection.addVConnListener(vConnListener)
+        selection.removeModuleListener(moduleListener)
+        selection.addModuleListener(moduleListener)
+    }
+
+    fun detach() {
+        synchronized(stateLock) {
+            attached = false
+            runtime = null
+            _moduleOnline.value = false
+            _sysInfo.value = null
+        }
+        selection.removeVConnListener(vConnListener)
+        selection.removeModuleListener(moduleListener)
+    }
+
+    private fun onModule(
+        binding: IdcBinding,
+        online: Boolean,
+        mid: Int,
+    ) {
+        var shouldOpen = false
+        var shouldQuery = false
+        binding.targetLease.onlyIfActive {
+            synchronized(stateLock) {
+                if (!attached || !isCurrent(binding)) return@onlyIfActive
+                val current = runtime?.takeIf { it.binding === binding } ?: ModuleRuntime(binding).also { runtime = it }
+                if (!online) {
+                    runtime = ModuleRuntime(binding)
+                    _moduleOnline.value = false
+                    _sysInfo.value = null
+                    return@onlyIfActive
+                }
+                current.moduleId = mid
+                if (!current.vconnOpen) {
+                    current.vconnOpen = true
+                    shouldOpen = true
+                }
+                _moduleOnline.value = true
+                shouldQuery = true
+            }
+        }
+        if (shouldOpen) binding.connection.openVConn(mid)
+        if (shouldQuery) sendOn(binding, mid, "getSysInfo", "")
     }
 
     fun getSysInfo(): Boolean = send("getSysInfo", "")
 
     fun adjustResolution(index: Int): Boolean = send("adjustResolution", ""","resolution":$index""")
 
-    /** largeType 语义不明且原 App UI 无对应入口（仅 ISetting 接口面），保留协议面不接 UI。 */
     fun adjustSize(largeType: Int): Boolean = send("adjustSize", ""","largeType":$largeType""")
 
     fun reboot(): Boolean = send("reboot", "")
@@ -112,28 +134,52 @@ class DongleSettingService(
 
     fun reconnect(): Boolean = send("reconnect", "")
 
-    /** module 在线即发（VConn 未开时先补 VConnSyn）；离线返回 false。 */
     private fun send(
         messageType: String,
         extra: String,
     ): Boolean {
-        val mid = moduleId ?: return false
-        if (!vconnOpen) {
-            vconnOpen = true
-            deviceManager.connection?.openVConn(mid)
+        var binding: IdcBinding? = null
+        var midToSend: Int? = null
+        var shouldOpen = false
+        synchronized(stateLock) {
+            if (!attached) return false
+            val current = runtime ?: return false
+            val mid = current.moduleId ?: return false
+            if (!isCurrent(current.binding)) return false
+            binding = current.binding
+            midToSend = mid
+            if (!current.vconnOpen) {
+                current.vconnOpen = true
+                shouldOpen = true
+            }
         }
-        val json =
-            """{"category":"$CATEGORY","messageType":"$messageType",""" +
-                """"requestId":${requestId.getAndIncrement()}$extra}"""
-        deviceManager.sendVConnJson(mid, json)
+        val currentBinding = binding ?: return false
+        val currentMid = midToSend ?: return false
+        if (shouldOpen) currentBinding.connection.openVConn(currentMid)
+        sendOn(currentBinding, currentMid, messageType, extra)
         return true
     }
 
-    // internal（非 private）以便 desktopTest 直接回归解析分支；属测试可见性放宽，非公共 API。
+    private fun sendOn(
+        binding: IdcBinding,
+        mid: Int,
+        messageType: String,
+        extra: String,
+    ) {
+        val json =
+            """{"category":"$CATEGORY","messageType":"$messageType",""" +
+                """"requestId":${requestId.getAndIncrement()}$extra}"""
+        binding.connection.sendVConnData(mid, json.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun parseResponse(json: String): SysInfo? {
+        val parsed = parseJsonObject(json)
+        if (parsed.str("messageType") != MSG_SYSINFO_RESP) return null
+        return parseSysInfo(parsed)
+    }
+
     internal fun handle(json: String) {
-        val j = parseJsonObject(json)
-        if (j.str("messageType") != MSG_SYSINFO_RESP) return
-        _sysInfo.value = parseSysInfo(j)
+        _sysInfo.value = parseResponse(json)
     }
 
     internal fun parseSysInfo(j: FlatJson): SysInfo =

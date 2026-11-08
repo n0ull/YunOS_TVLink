@@ -2,7 +2,6 @@ package app.tvlink.proto.mdns
 
 import java.io.ByteArrayOutputStream
 import java.net.DatagramPacket
-import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MulticastSocket
@@ -234,20 +233,5 @@ object Mdns {
             if (preferred != null && ni.inetAddresses.asSequence().contains(preferred)) return ni
         }
         return null
-    }
-
-    /** Best-effort local IPv4 on the LAN (prefers wlan / eth interfaces on Android). */
-    fun localLanAddress(): Inet4Address? {
-        val ifaces = NetworkInterface.getNetworkInterfaces() ?: return null
-        var fallback: Inet4Address? = null
-        for (ni in ifaces) {
-            if (!ni.isUp || ni.isLoopback) continue
-            for (addr in ni.inetAddresses) {
-                if (addr !is Inet4Address || !addr.isSiteLocalAddress) continue
-                if (ni.name.startsWith("wlan")) return addr
-                if (fallback == null) fallback = addr
-            }
-        }
-        return fallback
     }
 }

@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +46,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import app.tvlink.proto.ib.IbConst
+import app.tvlink.device.RemoteMode
 import app.tvlink.proto.ib.RcKey
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.icons.AppIcons
@@ -53,16 +54,15 @@ import app.tvlink.ui.theme.Brand
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private enum class RcMode(
-    val label: String,
-    val ibMode: Int,
-) {
-    KEYPAD("按键", IbConst.CHANGETYPE_DEFAULT),
-    TOUCHPAD("触控板", IbConst.CHANGETYPE_DEFAULT),
-    JOYSTICK("手柄", IbConst.CHANGETYPE_JOYSTICK),
-    WHEEL("方向盘", IbConst.CHANGETYPE_DEFAULT),
-    MOTION("体感", IbConst.CHANGETYPE_MOTIONPAD),
-}
+private val RemoteMode.label: String
+    get() =
+        when (this) {
+            RemoteMode.KEYPAD -> "按键"
+            RemoteMode.TOUCHPAD -> "触控板"
+            RemoteMode.JOYSTICK -> "手柄"
+            RemoteMode.WHEEL -> "方向盘"
+            RemoteMode.MOTION -> "体感"
+        }
 
 /** Rate-limits drag-driven TCP sends (~25/s); bypass for final/recenter events. */
 private class SendThrottle(
@@ -84,19 +84,19 @@ private class SendThrottle(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemoteScreen(vm: AppViewModel) {
-    var mode by remember { mutableStateOf(RcMode.KEYPAD) }
+    val mode =
+        vm.rc.state
+            .collectAsState()
+            .value.mode
     var powerConfirm by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            RcMode.entries.forEachIndexed { i, m ->
+            RemoteMode.entries.forEachIndexed { i, m ->
                 SegmentedButton(
                     selected = m == mode,
-                    onClick = {
-                        mode = m
-                        vm.rc.setMode(m.ibMode)
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = i, count = RcMode.entries.size),
+                    onClick = { vm.rc.setMode(m) },
+                    shape = SegmentedButtonDefaults.itemShape(index = i, count = RemoteMode.entries.size),
                 ) {
                     Text(m.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -106,12 +106,12 @@ fun RemoteScreen(vm: AppViewModel) {
         Spacer(Modifier.height(12.dp))
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (mode) {
-                RcMode.KEYPAD ->
+                RemoteMode.KEYPAD ->
                     KeypadPanel(
                         onKey = { if (it == RcKey.POWER) powerConfirm = true else vm.remote.keyClick(it) },
                     )
 
-                RcMode.TOUCHPAD ->
+                RemoteMode.TOUCHPAD ->
                     TouchpadPanel(vm) {
                         if (it ==
                             RcKey.POWER
@@ -121,9 +121,9 @@ fun RemoteScreen(vm: AppViewModel) {
                             vm.remote.keyClick(it)
                         }
                     }
-                RcMode.JOYSTICK -> JoystickPanel(vm)
-                RcMode.WHEEL -> WheelPanel(vm)
-                RcMode.MOTION -> MotionPanel(vm)
+                RemoteMode.JOYSTICK -> JoystickPanel(vm)
+                RemoteMode.WHEEL -> WheelPanel(vm)
+                RemoteMode.MOTION -> MotionPanel(vm)
             }
         }
 

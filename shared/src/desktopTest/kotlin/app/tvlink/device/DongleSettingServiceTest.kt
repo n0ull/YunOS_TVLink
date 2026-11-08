@@ -9,7 +9,7 @@ import kotlin.test.assertNull
  * 模块名钉桩、SysInfo 应答解析（分辨率下标=id）、非 SysInfo 消息丢弃。
  */
 class DongleSettingServiceTest {
-    private val service = DongleSettingService(DeviceManager())
+    private val service = DongleSettingService(DeviceSelection())
 
     @Test
     fun moduleNameMatchesWireConstant() {

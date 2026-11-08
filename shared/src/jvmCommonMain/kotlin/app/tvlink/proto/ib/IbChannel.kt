@@ -1,6 +1,7 @@
 package app.tvlink.proto.ib
 
 import java.io.DataInputStream
+import java.io.IOException
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -10,6 +11,41 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
+private const val FRAME_HEADER_SIZE = 20
+private const val MAX_FRAME_BODY_SIZE = 1024 * 1024
+private const val MAX_PROBE_BODY_SIZE = 1024
+
+internal data class IbHello(
+    val version: String,
+    val sessionId: String,
+)
+
+/** One HELLO exchange with no steady-state reader, writer or keepalive. */
+internal fun probeIbHello(
+    host: String,
+    timeoutMs: Int,
+    port: Int = IbConst.PORT,
+    isActive: () -> Boolean = { true },
+): IbHello? {
+    return try {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress(host, port), timeoutMs)
+            socket.tcpNoDelay = true
+            socket.soTimeout = timeoutMs
+            val output = socket.getOutputStream()
+            output.write(encodeFrame(IbConst.REQ_HELLO, ByteArray(0), Random().nextInt(), helloId = 0))
+            output.flush()
+
+            val input = DataInputStream(socket.getInputStream())
+            val header = readHeader(input, MAX_PROBE_BODY_SIZE) ?: return null
+            if (header.type != (IbConst.RSP_MASK or IbConst.REQ_HELLO) || !isActive()) return null
+            parseHello(readBody(input, header.bodySize))
+        }
+    } catch (_: IOException) {
+        null
+    }
+}
+
 /**
  * IB (InputBoost) fast input channel — TCP 3988, 20-byte big-endian header + text body.
  * See docs/re/02-remote-control.md.
@@ -17,6 +53,7 @@ import java.util.concurrent.RejectedExecutionException
 
 class IbChannel(
     private val host: String,
+    private val port: Int = IbConst.PORT,
 ) {
     enum class State { DISCONNECTED, CONNECTING, READY }
 
@@ -37,6 +74,9 @@ class IbChannel(
     private val reserve = Random().nextInt()
     private val sendLock = Any()
 
+    /** Bound by the remote owner and checked by the FIFO writer before each steady-state frame. */
+    internal var writerGuard: (() -> Boolean)? = null
+
     @Volatile
     private var sendExecutor: ExecutorService? = null
 
@@ -52,7 +92,7 @@ class IbChannel(
         setState(State.CONNECTING)
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(host, IbConst.PORT), timeoutMs)
+            s.connect(InetSocketAddress(host, port), timeoutMs)
             s.tcpNoDelay = true
             // 握手期读超时（照 IdcConnection.connect 模式）：对端收包不应答则快速失败，
             // 否则 readFrame 无限阻塞——connect 调用线程永久泄漏、IB 通道永不重试
@@ -67,14 +107,9 @@ class IbChannel(
                 disconnect()
                 return false
             }
-            val body = String(rsp.second, Charsets.UTF_8)
-            helloId = Regex("\"sid\"\\s*:\\s*(\\d+)")
-                .find(body)
-                ?.groupValues
-                ?.get(1)
-                ?.toIntOrNull() ?: 0
-            val verStr = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"").find(body)?.groupValues?.get(1)
-            serverVer = parseVer(verStr)
+            val hello = parseHello(rsp.second)
+            helloId = hello.sessionId.toIntOrNull() ?: 0
+            serverVer = parseVer(hello.version)
             sendFrame(IbConst.REQ_MODULEINFO, ByteArray(0))
             // 对齐原 IbConn：建链后即发 DEFAULT 模式，消除「首帧前模式不确定」（docs/re/02 §2.1）
             sendFrame(IbConst.REQ_CHANGETYPE, "[${IbConst.CHANGETYPE_DEFAULT}]".toByteArray(Charsets.UTF_8))
@@ -158,16 +193,12 @@ class IbChannel(
         body: ByteArray,
     ) {
         val o = out ?: return
-        val buf = ByteBuffer.allocate(20 + body.size)
-        buf.putInt(IbConst.MAGIC)
-        buf.putInt(body.size)
-        buf.putInt(type)
-        buf.putInt(reserve)
-        buf.putInt((body.size + reserve) xor helloId)
-        buf.put(body)
+        val frame = encodeFrame(type, body, reserve, helloId)
+        // Covers FIFO input and keepalive; once the permit is acquired, revocation cannot cancel this write.
+        if (writerGuard?.invoke() == false) return
         synchronized(sendLock) {
             try {
-                o.write(buf.array())
+                o.write(frame)
                 o.flush()
             } catch (e: Exception) {
                 System.err.println("IbChannel: send failed: ${e.message}")
@@ -179,24 +210,8 @@ class IbChannel(
     private fun readFrame(): Pair<Int, ByteArray>? {
         val inp = dataIn ?: return null
         return try {
-            val header = ByteArray(20)
-            inp.readFully(header)
-            val b = ByteBuffer.wrap(header)
-            if (b.int != IbConst.MAGIC) return null
-            val size = b.int
-            if (size < 0 || size > 1024 * 1024) return null
-            val type = b.int
-            b.int // reserve
-            b.int // checksum
-            // 2026-08-18 真机实测(ver 3.29):TV 下行所有帧恒
-            // reserve=0/checksum=0(hello 应答、cur_app、moduleinfo 应答、keepalive
-            // 应答均如此),从不按文档公式计算——接收侧任何 checksum 校验都会把每条
-            // 下行帧误判损坏(f076f90 加的校验因此必杀通道)。校验已移除,帧界防护
-            // 由 magic + size 范围检查承担;发送侧仍按公式 (size+reserve)^helloId
-            // 计算,真机已验证接受。
-            val body = ByteArray(size)
-            if (size > 0) inp.readFully(body)
-            type to body
+            val header = readHeader(inp, MAX_FRAME_BODY_SIZE) ?: return null
+            header.type to readBody(inp, header.bodySize)
         } catch (e: Exception) {
             System.err.println("IbChannel: read failed: ${e.message}")
             null
@@ -297,4 +312,52 @@ class IbChannel(
         out = null
         setState(State.DISCONNECTED)
     }
+}
+
+private data class IbFrameHeader(
+    val type: Int,
+    val bodySize: Int,
+)
+
+private fun encodeFrame(
+    type: Int,
+    body: ByteArray,
+    reserve: Int,
+    helloId: Int,
+): ByteArray {
+    val frame = ByteBuffer.allocate(FRAME_HEADER_SIZE + body.size)
+    frame.putInt(IbConst.MAGIC)
+    frame.putInt(body.size)
+    frame.putInt(type)
+    frame.putInt(reserve)
+    frame.putInt((body.size + reserve) xor helloId)
+    frame.put(body)
+    return frame.array()
+}
+
+private fun readHeader(
+    input: DataInputStream,
+    maxBodySize: Int,
+): IbFrameHeader? {
+    val bytes = ByteArray(FRAME_HEADER_SIZE)
+    input.readFully(bytes)
+    val header = ByteBuffer.wrap(bytes)
+    if (header.int != IbConst.MAGIC) return null
+    val bodySize = header.int
+    if (bodySize !in 0..maxBodySize) return null
+    // The tested TV sends zero reserve and checksum on inbound frames (docs/re/02 §2.2).
+    return IbFrameHeader(type = header.int, bodySize = bodySize)
+}
+
+private fun readBody(input: DataInputStream, size: Int): ByteArray = ByteArray(size).also { input.readFully(it) }
+
+private val helloVersion = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"")
+private val helloSessionId = Regex("\"sid\"\\s*:\\s*(\\d+)")
+
+private fun parseHello(bytes: ByteArray): IbHello {
+    val body = String(bytes, Charsets.UTF_8)
+    return IbHello(
+        version = helloVersion.find(body)?.groupValues?.get(1).orEmpty(),
+        sessionId = helloSessionId.find(body)?.groupValues?.get(1).orEmpty(),
+    )
 }

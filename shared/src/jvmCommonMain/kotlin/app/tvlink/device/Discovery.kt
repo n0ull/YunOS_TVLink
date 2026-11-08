@@ -1,13 +1,20 @@
 package app.tvlink.device
 
-import app.tvlink.proto.ib.IbConst
+import app.tvlink.platform.localLanAddress
+import app.tvlink.proto.ib.probeIbHello
 import app.tvlink.proto.idc.IdcConnection
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.mdns.Mdns
-import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+data class DiscoveryState(
+    val scanning: Boolean = false,
+    val devices: List<Discovery.FoundDevice> = emptyList(),
+)
 
 /**
  * Dual-channel device discovery (mirrors DevmgrBizBu.search):
@@ -29,8 +36,16 @@ class Discovery {
         val ibSid: String = "",
     )
 
-    var onDeviceFound: ((FoundDevice) -> Unit)? = null
-    var onFinished: (() -> Unit)? = null
+    private val _state = MutableStateFlow(DiscoveryState())
+    val state: StateFlow<DiscoveryState> = _state
+    private val stateLock = Any()
+
+    /** Test fixture for the blocking mDNS worker; production uses the real probe. */
+    internal var mdnsProber: (epoch: Int, onResult: (Mdns.MdnsDevice) -> Unit) -> Unit =
+        { epoch, onResult -> runMdns(epoch, onResult) }
+
+    /** Observes worker joins in race tests; not a public scan-completion callback. */
+    internal var joinFinished: (epoch: Int) -> Unit = { }
 
     /** 测试注入点:单 host 探测动作,默认走真实网络(probeIdc + probeIb)。 */
     internal var hostProber: (ip: String, epoch: Int) -> Unit = { ip, epoch -> probeHost(ip, epoch) }
@@ -43,15 +58,33 @@ class Discovery {
     private val found = ConcurrentHashMap<String, FoundDevice>()
     private var threads = mutableListOf<Thread>()
 
-    val devices: List<FoundDevice> get() = found.values.toList()
-
     fun start(scanSubnet: Boolean = true) {
         stop()
-        running = true
-        found.clear()
-        val myEpoch = epoch.incrementAndGet()
+        val myEpoch: Int
+        synchronized(stateLock) {
+            found.clear()
+            running = true
+            myEpoch = epoch.incrementAndGet()
+            _state.value = DiscoveryState(scanning = true)
+        }
         val tMdns =
-            Thread({ runMdns(myEpoch) }, "disc-mdns").apply {
+            Thread(
+                {
+                    mdnsProber(myEpoch) { md ->
+                        report(
+                            FoundDevice(
+                                ip = md.ip,
+                                name = md.name,
+                                mac = md.mac,
+                                projectionPort = md.projectionPort,
+                                source = "mdns",
+                            ),
+                            myEpoch,
+                        )
+                    }
+                },
+                "disc-mdns",
+            ).apply {
                 isDaemon = true
                 start()
             }
@@ -67,7 +100,8 @@ class Discovery {
                 {
                     tMdns.join()
                     tScan.join()
-                    onFinished?.invoke()
+                    joinFinished(myEpoch)
+                    finish(myEpoch)
                 },
                 "disc-join",
             ).apply {
@@ -78,7 +112,8 @@ class Discovery {
             Thread(
                 {
                     tMdns.join()
-                    onFinished?.invoke()
+                    joinFinished(myEpoch)
+                    finish(myEpoch)
                 },
                 "disc-join",
             ).apply {
@@ -88,14 +123,28 @@ class Discovery {
         }
     }
 
+    private fun finish(myEpoch: Int) {
+        synchronized(stateLock) {
+            if (!active(myEpoch)) return
+            _state.value = _state.value.copy(scanning = false)
+        }
+    }
+
     fun stop() {
-        running = false
+        synchronized(stateLock) {
+            running = false
+            _state.value = _state.value.copy(scanning = false)
+        }
         threads.forEach { it.interrupt() }
         threads.clear()
     }
 
-    private fun report(d: FoundDevice) {
-        val merged =
+    private fun report(
+        d: FoundDevice,
+        myEpoch: Int,
+    ) {
+        synchronized(stateLock) {
+            if (!active(myEpoch)) return
             found.compute(d.ip) { _, existing ->
                 if (existing == null) {
                     d
@@ -110,24 +159,19 @@ class Discovery {
                         ibSid = d.ibSid.ifEmpty { existing.ibSid },
                     )
                 }
-            } ?: return
-        onDeviceFound?.invoke(merged)
+            }
+            _state.value = _state.value.copy(devices = found.values.sortedBy { it.ip })
+        }
     }
 
-    private fun runMdns(myEpoch: Int) {
+    private fun runMdns(
+        myEpoch: Int,
+        onResult: (Mdns.MdnsDevice) -> Unit,
+    ) {
         if (!active(myEpoch)) return
         try {
-            Mdns.discoverOnce(listenMs = 5000, bindAddr = Mdns.localLanAddress()) { md ->
-                if (!active(myEpoch)) return@discoverOnce
-                report(
-                    FoundDevice(
-                        ip = md.ip,
-                        name = md.name,
-                        mac = md.mac,
-                        projectionPort = md.projectionPort,
-                        source = "mdns",
-                    ),
-                )
+            Mdns.discoverOnce(listenMs = 5000, bindAddr = localLanAddress()) { md ->
+                if (active(myEpoch)) onResult(md)
             }
         } catch (e: Exception) {
             // no multicast on this network — subnet scan still runs
@@ -138,7 +182,7 @@ class Discovery {
     private fun active(myEpoch: Int) = running && epoch.get() == myEpoch
 
     private fun runSubnetScan(myEpoch: Int) {
-        val local = Mdns.localLanAddress() ?: return
+        val local = localLanAddress() ?: return
         val selfIp = local.hostAddress ?: return
         val prefix = selfIp.substringBeforeLast('.')
         val pool = Executors.newFixedThreadPool(24) { r -> Thread(r, "disc-probe").apply { isDaemon = true } }
@@ -205,6 +249,7 @@ class Discovery {
                         uuid = info.uuid,
                         source = "scan",
                     ),
+                    myEpoch,
                 )
             }
         } finally {
@@ -212,60 +257,12 @@ class Discovery {
         }
     }
 
-    /**
-     * 轻量 IB 探测:raw socket 发 hello 帧,校验 response magic + type。
-     * 不引入 IbChannel 整套(reader/keepalive 线程),仅做存在性探测。
-     */
     private fun probeIb(
         ip: String,
         myEpoch: Int,
     ) {
         if (!active(myEpoch)) return
-        val socket = java.net.Socket()
-        try {
-            socket.connect(java.net.InetSocketAddress(ip, IbConst.PORT), 1200)
-            socket.tcpNoDelay = true
-            socket.soTimeout = 1200
-            val reserve = java.util.Random().nextInt()
-            val hello = ByteBuffer.allocate(20)
-            hello.putInt(IbConst.MAGIC)
-            hello.putInt(0) // body size
-            hello.putInt(IbConst.REQ_HELLO)
-            hello.putInt(reserve)
-            hello.putInt(reserve) // checksum = (size + reserve) ^ helloId; helloId unknown pre-handshake -> reserve
-            socket.getOutputStream().write(hello.array())
-            socket.getOutputStream().flush()
-            val header = ByteArray(20)
-            val dataIn = java.io.DataInputStream(socket.getInputStream())
-            dataIn.readFully(header)
-            val rsp = ByteBuffer.wrap(header)
-            val magic = rsp.int
-            val size = rsp.int
-            val type = rsp.int
-            val validHelloRsp =
-                magic == IbConst.MAGIC &&
-                    size in 0..1024 &&
-                    type == (IbConst.RSP_MASK or IbConst.REQ_HELLO)
-            if (validHelloRsp && active(myEpoch)) {
-                // 读取响应 body 提取诊断字段(hello 响应 JSON {"ver":"x.xx","sid":n})。
-                var ibVer = ""
-                var ibSid = ""
-                if (size > 0) {
-                    val body = ByteArray(size)
-                    dataIn.readFully(body)
-                    val text = String(body, Charsets.UTF_8)
-                    ibVer = Regex("\"ver\"\\s*:\\s*\"([0-9.]+)\"").find(text)?.groupValues?.get(1) ?: ""
-                    ibSid = Regex("\"sid\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1) ?: ""
-                }
-                report(FoundDevice(ip = ip, source = "ib-scan", ibVer = ibVer, ibSid = ibSid))
-            }
-        } catch (_: Exception) {
-            // 连接拒绝/超时/IO 错误 -> 该 host 无 IB 通道,静默跳过
-        } finally {
-            try {
-                socket.close()
-            } catch (_: Exception) {
-            }
-        }
+        val hello = probeIbHello(ip, timeoutMs = 1200) { active(myEpoch) } ?: return
+        report(FoundDevice(ip = ip, source = "ib-scan", ibVer = hello.version, ibSid = hello.sessionId), myEpoch)
     }
 }

@@ -33,7 +33,7 @@ App → AppViewModel → Feature / device service → protocol
 ```
 
 - `AppViewModel` 负责导航、模块装配、跨功能连接生命周期和全局通知。
-- `DeviceManager` 直接拥有设备发现、当前 IDC 会话、连接状态、重连以及模块/VConn 回调分发。
+- `Discovery` 直接拥有扫描状态和候选设备；`DeviceSelection` 拥有当前目标、IDC 会话、连接状态、重连以及模块/VConn 回调分发。
 - `RcController` 拥有 IB 会话；`CastFeature` 拥有投屏控制会话和 HTTP 媒体服务。
 - `RpmService`、`DongleSettingService`、`AsrTextService` 各自管理业务模块的 VConn 打开策略。
 - `ShotFeature`、`SysPropFeature`、`RemoteFeature` 持有对应 UI 状态；应用列表直接由 `RpmService.appList` 提供。

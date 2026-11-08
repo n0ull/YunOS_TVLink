@@ -3,9 +3,12 @@ package app.tvlink.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.tvlink.device.ConnectionMode
+import app.tvlink.device.IdcProgress
+import app.tvlink.device.SelectionSnapshot
+import app.tvlink.platform.localLanAddress
 import app.tvlink.proto.cast.CastController
 import app.tvlink.proto.cast.MediaHttpServer
-import app.tvlink.proto.mdns.Mdns
 import app.tvlink.ui.widgets.albumArtFile
 import java.io.File
 import java.util.UUID
@@ -82,11 +85,40 @@ class CastFeature(
      *  之后已有新建连意图时由新 connect 接管清理，避免陈旧清理误杀新会话。 */
     private val generation = AtomicInteger(0)
 
+    @Volatile
+    private var activeSelectionId = 0L
+
     /** 控制通道存活（供 AppViewModel.onResume 判断是否需补建）。 */
     val channelAlive: Boolean
         get() = controller?.state == CastController.State.CONNECTED
 
-    /** IDC 连接建立后调用：断旧通道再建新（防 TV 侧双会话错乱，2026-07-25 真机实证）。 */
+    /** Reconciles Cast with the selected target without coupling it to IDC reconnects. */
+    fun onSelectionChanged(snapshot: SelectionSnapshot) {
+        val target = snapshot.target
+        val targetChanged = activeSelectionId != snapshot.selectionId
+        if (targetChanged) {
+            activeSelectionId = snapshot.selectionId
+            onDisconnected()
+        }
+        if (target == null || snapshot.mode != ConnectionMode.FULL) {
+            if (!targetChanged) onDisconnected()
+            return
+        }
+        if (snapshot.idcProgress == IdcProgress.CONNECTED) {
+            ensureHostConnected(target.ip, target.projectionPort)
+        }
+    }
+
+    private fun ensureHostConnected(
+        ip: String,
+        port: Int,
+    ) {
+        val target = ip to port
+        if (lastTarget == target && (channelAlive || connecting)) return
+        connect(ip, port)
+    }
+
+    /** Explicitly rebuilds the Cast control channel, preserving the existing failure-cleanup behavior. */
     fun onHostConnected(
         ip: String,
         port: Int,
@@ -104,6 +136,7 @@ class CastFeature(
      *  清理收进 connectMutex（H4）：旧实现不进锁，在途 connect 会在清理完成后
      *  又把 controller 装回并重启媒体服务——幽灵投屏通道 + HTTP 服务残留。 */
     fun onDisconnected() {
+        lastTarget = null
         val g = generation.incrementAndGet()
         scope.launch(Dispatchers.IO) {
             connectMutex.withLock {
@@ -119,6 +152,7 @@ class CastFeature(
     }
 
     fun destroy() {
+        lastTarget = null
         generation.incrementAndGet() // 在途 connect 不得在本对象销毁后装回通道
         controller?.disconnect()
         mediaServer.stop()
@@ -209,7 +243,7 @@ class CastFeature(
     }
 
     private fun startMediaServer(tvIp: String) {
-        val localIp = Mdns.localLanAddress()?.hostAddress
+        val localIp = localLanAddress()?.hostAddress
         // 仅服务已连 TV 的来源 IP：不可信网段下同网段主机无法拉走投屏文件
         if (localIp != null && mediaServer.start(localIp, allowedClientIp = tvIp)) {
             mediaServerUrl = mediaServer.baseUrl

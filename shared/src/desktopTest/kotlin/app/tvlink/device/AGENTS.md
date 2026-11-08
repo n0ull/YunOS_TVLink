@@ -14,6 +14,7 @@ No real TV or network required — loopback/mocked where applicable.
 |----------------------------|-------------------------------------------------------------------------------------------------|
 | `AsrTextServiceTest.kt`    | ASR 文本服务:VConn 首包自动 SYN + `asr_streaming` 分包发送 + NLU 结果回调                        |
 | `DongleSettingServiceTest.kt` | 魔投配网设置:BLE 配对流程模拟 + WiFi SSID/密码写入 GATT 特征验证                              |
+| `RcControllerTest.kt`          | IB-only 选择直接建立 IB、不创建 IDC;真实回环握手与隔离历史                            |
 
 ## For AI Agents
 
@@ -21,7 +22,7 @@ No real TV or network required — loopback/mocked where applicable.
 
 - 运行:`./gradlew :shared:desktopTest`
 - 用 `kotlin.test`(`@Test`、`assertEquals`、`assertContentEquals`、`assertTrue`)
-- 服务层测试依赖 `DeviceManager` mock/stub — 不发真实网络请求
+- 服务层测试依赖 `DeviceSelection` 或可控 adapter — 不发真实网络请求
 - detekt 对测试同样生效(复杂度/loop break 限制),假服务端逻辑拆小函数
 
 ### Common Patterns

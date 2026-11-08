@@ -23,7 +23,7 @@ real TV or network required.
 | `MdnsTest.kt`                  | mDNS 响应包解析(PTR/TXT)、查询包格式校验、外来服务应答不入列                  |
 | `MediaHttpServerTest.kt`       | 内嵌 HTTP 服务器:Range(206)/416、来源 IP 正反过滤、反复拉取全供片、Content-Length |
 | `RpmFixTest.kt`                | RPM 修复回归 R1–R4:模块名常量 / LaunchSth 唤醒帧 / ModuleAvailability JSON m_name 分支 / apps 单对象兼容 |
-| `DeviceManagerConnectTest.kt`  | 重叠 connect 单飞 + 显式断开不复活(假 TV 绑固定 13510;tearDown 清理 prefs 节点) |
+| `DeviceSelectionTest.kt`       | 重叠 select 单飞 + 显式断开不复活(回环假 TV + 临时端口;内存 ConnectionHistory) |
 
 ## For AI Agents
 

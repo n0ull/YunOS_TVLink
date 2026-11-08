@@ -1,20 +1,25 @@
 package app.tvlink.ui
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.tvlink.device.AsrTextService
-import app.tvlink.device.DeviceManager
+import app.tvlink.device.ConnectionMode
+import app.tvlink.device.ConnectionPacket
+import app.tvlink.device.DeviceSelection
+import app.tvlink.device.DeviceTarget
 import app.tvlink.device.Discovery
+import app.tvlink.device.DiscoveryState
 import app.tvlink.device.DongleSettingService
+import app.tvlink.device.IdcProgress
 import app.tvlink.device.RcController
+import app.tvlink.device.RemoteState
 import app.tvlink.device.RpmService
 import app.tvlink.device.ScreenshotService
+import app.tvlink.device.SelectionSnapshot
 import app.tvlink.device.SysPropService
-import app.tvlink.proto.idc.IdcPacket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -65,33 +70,32 @@ class AppViewModel : ViewModel() {
     }
 
     // ---- services ----
-    private val deviceManager = DeviceManager()
-    val rc = RcController(deviceManager)
-    val rpm = RpmService(deviceManager)
-    private val asr = AsrTextService(deviceManager)
-    private val screenshot = ScreenshotService(deviceManager)
-    private val sysprop = SysPropService(deviceManager)
-    val dongleSettings = DongleSettingService(deviceManager)
+    private val selection = DeviceSelection()
+    private val discovery = Discovery()
+    val rc = RcController(selection)
+    val rpm = RpmService(selection)
+    private val asr = AsrTextService(selection)
+    private val screenshot = ScreenshotService(selection)
+    private val sysprop = SysPropService(selection)
+    val dongleSettings = DongleSettingService(selection)
 
     val cast = CastFeature(viewModelScope) { notice = it }
     val shot = ShotFeature(viewModelScope, screenshot) { notice = it }
     val props = SysPropFeature(viewModelScope, sysprop) { notice = it }
-    val remote = RemoteFeature(viewModelScope, deviceManager, rc, asr) { notice = it }
+    val remote = RemoteFeature(viewModelScope, selection, rc, asr) { notice = it }
+
+    var selectionState by mutableStateOf(SelectionSnapshot())
+        private set
+    private var remoteState by mutableStateOf(RemoteState())
+    var discoveryState by mutableStateOf(DiscoveryState())
+        private set
 
     fun onResume() {
-        val device = connectedDevice ?: return
-        if (connState == DeviceManager.ConnState.CONNECTING) return
-        if (connState != DeviceManager.ConnState.CONNECTED) {
-            deviceManager.connect(device.ip, device.projectionPort, device.ibVer, device.ibSid)
-            return
-        }
-        cast.ensureAlive(device.ip, device.projectionPort)
+        val snapshot = selectionState
+        val device = snapshot.target ?: return
+        val canEnsureCast = snapshot.mode == ConnectionMode.FULL && snapshot.idcProgress == IdcProgress.CONNECTED
+        if (canEnsureCast) cast.ensureAlive(device.ip, device.projectionPort)
     }
-
-    var connState by mutableStateOf(DeviceManager.ConnState.IDLE)
-    var connectedDevice by mutableStateOf<DeviceManager.ConnectedDevice?>(null)
-        private set
-    val foundDevices = mutableStateListOf<Discovery.FoundDevice>()
 
     // ---- dongle settings (module com.ali.ott.dongle.setting) ----
     var dongleOnline by mutableStateOf(false)
@@ -102,22 +106,15 @@ class AppViewModel : ViewModel() {
 
     init {
         viewModelScope.launch(Dispatchers.Default) {
-            deviceManager.connState.collect { s ->
-                connState = s
-                if (s == DeviceManager.ConnState.CONNECTED) {
-                    connectedDevice = deviceManager.connected.value
-                    onConnected(connectedDevice)
-                    // Reconnecting must not reset the user's current page.
-                    if (screen !is Screen.Main) screen = Screen.Main()
-                } else if (s == DeviceManager.ConnState.IDLE) {
-                    connectedDevice = null
-                    cast.onDisconnected()
-                } else if (s == DeviceManager.ConnState.FAILED) {
-                    // 重试窗口内的 FAILED 微秒内回到 CONNECTING；延迟复核仍为 FAILED
-                    // 才是重连耗尽的终态——避免重试周期里 snackbar 闪烁
+            selection.state.collect { snapshot ->
+                selectionState = snapshot
+                if (snapshot.idcProgress == IdcProgress.CONNECTED) onConnected(snapshot)
+                cast.onSelectionChanged(snapshot)
+                updateMainNavigation()
+                if (snapshot.idcProgress == IdcProgress.FAILED) {
                     viewModelScope.launch {
                         kotlinx.coroutines.delay(600)
-                        if (deviceManager.connState.value == DeviceManager.ConnState.FAILED) {
+                        if (selection.state.value.idcProgress == IdcProgress.FAILED) {
                             notice = "连接失败，请检查网络后重试"
                         }
                     }
@@ -125,12 +122,13 @@ class AppViewModel : ViewModel() {
             }
         }
         viewModelScope.launch(Dispatchers.Default) {
-            deviceManager.foundDevices.collect { list ->
-                foundDevices.clear()
-                foundDevices.addAll(list)
-            }
+            discovery.state.collect { discoveryState = it }
         }
-        deviceManager.packets.collectInVm { p -> handlePacket(p) }
+        rc.state.collectInVm { remote ->
+            remoteState = remote
+            updateMainNavigation()
+        }
+        selection.packets.collectInVm { p -> handlePacket(p) }
         dongleSettings.moduleOnline.collectInVm { online -> dongleOnline = online }
         dongleSettings.sysInfo.collectInVm { info -> dongleInfo = info }
         rpm.installProgress.collectInVm { progress ->
@@ -147,7 +145,7 @@ class AppViewModel : ViewModel() {
         }
 
         // 冷启动直连历史设备（原 App 亮屏/回前台按 SSID 历史直连，docs/re/01 §1；本项目全局一条）
-        deviceManager.lastDevice()?.let { d -> deviceManager.connect(d.ip, d.projectionPort) }
+        selection.lastSelection()?.let { saved -> selection.select(saved.target, saved.mode) }
     }
 
     /** 在 viewModelScope(Default) 收集服务层数据流并写入 Compose 状态（数据向上单向流）。 */
@@ -155,42 +153,65 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) { collect { block(it) } }
     }
 
-    private fun onConnected(device: DeviceManager.ConnectedDevice?) {
-        rc.attach()
-        if (device?.ibOnly == true) return
+    private fun updateMainNavigation() {
+        val snapshot = selectionState
+        if (snapshot.target == null || screen is Screen.Main) return
+        val ready =
+            when (snapshot.mode) {
+                ConnectionMode.FULL -> snapshot.idcProgress == IdcProgress.CONNECTED
+                ConnectionMode.IB_ONLY ->
+                    remoteState.ibReady && remoteState.selectionId == snapshot.selectionId
+                null -> false
+            }
+        if (ready) screen = Screen.Main()
+    }
+
+    private fun onConnected(snapshot: SelectionSnapshot) {
+        if (snapshot.target == null) return
+        if (snapshot.mode == ConnectionMode.IB_ONLY) return
         rpm.attach()
         dongleSettings.attach()
-        if (device != null) cast.onHostConnected(device.ip, device.projectionPort)
     }
 
     /** 包路由：服务层分派（截图/属性应答）+ 遥控 IME 事件。 */
-    private fun handlePacket(p: IdcPacket) {
-        screenshot.handlePacket(p)
-        sysprop.handlePacket(p)
-        remote.onPacket(p)
+    private fun handlePacket(packet: ConnectionPacket) {
+        screenshot.handlePacket(packet.binding, packet.value)
+        sysprop.handlePacket(packet.binding, packet.value)
+        remote.onPacket(packet.binding, packet.value)
     }
 
     // ---- actions ----
 
-    fun startDiscovery() = deviceManager.startDiscovery()
+    fun startDiscovery() = discovery.start()
 
-    fun connectTo(d: Discovery.FoundDevice) = deviceManager.connect(d)
+    fun connectTo(d: Discovery.FoundDevice) {
+        selection.select(
+            DeviceTarget(
+                ip = d.ip,
+                name = d.name,
+                model = d.model,
+                uuid = d.uuid,
+                mac = d.mac,
+                projectionPort = d.projectionPort,
+                ibVer = d.ibVer,
+                ibSid = d.ibSid,
+            ),
+        )
+    }
 
-    fun connectToIp(ip: String) = deviceManager.connect(ip)
+    fun connectToIp(ip: String) = selection.select(DeviceTarget(ip = ip))
 
     /** IB-only 连接入口：仅建 IB 通道，不经 IDC。遥控可用；投屏/截图/应用管理不可用。 */
     fun connectIbOnly(
         ip: String,
         ibVer: String = "",
         ibSid: String = "",
-    ) = deviceManager.connectIbOnly(ip, ibVer, ibSid)
+    ) = selection.select(DeviceTarget(ip = ip, ibVer = ibVer, ibSid = ibSid), ConnectionMode.IB_ONLY)
 
     fun disconnect() {
-        connectedDevice = null
-        rc.detach()
         rpm.detach()
         dongleSettings.detach()
-        deviceManager.disconnect()
+        selection.disconnect()
         screen = Screen.DevicePicker
     }
 
@@ -200,7 +221,8 @@ class AppViewModel : ViewModel() {
         asr.destroy()
         screenshot.destroy()
         cast.destroy()
-        deviceManager.destroy()
+        discovery.stop()
+        selection.destroy()
         super.onCleared()
     }
 }

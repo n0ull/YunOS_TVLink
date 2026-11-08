@@ -132,4 +132,36 @@ class CastFeatureHealTest {
         scope.cancel()
         fake.stop()
     }
+
+    @Test
+    fun disconnectedTargetDoesNotHealOnFileCast() {
+        val fake = FakeCastServer()
+        fake.start()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val feat = CastFeature(scope) {}
+        val file = File.createTempFile("cast-revoked", ".png").apply { writeBytes(ByteArray(16)) }
+        try {
+            feat.onHostConnected("127.0.0.1", fake.server.localPort)
+            var waited = 0L
+            while (feat.ui !is CastFeature.CastUiState.Ready && waited < 5_000) {
+                Thread.sleep(50)
+                waited += 50
+            }
+            assertTrue(feat.ui is CastFeature.CastUiState.Ready)
+            assertEquals(1, fake.connCount.get())
+
+            fake.killCurrent()
+            feat.onDisconnected()
+            feat.file(file.absolutePath, "revoked.png", "image")
+            Thread.sleep(1_500)
+
+            assertEquals(1, fake.connCount.get(), "revoked target healed a Cast channel")
+            assertTrue(feat.ui is CastFeature.CastUiState.Unavailable)
+        } finally {
+            file.delete()
+            feat.destroy()
+            scope.cancel()
+            fake.stop()
+        }
+    }
 }

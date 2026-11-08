@@ -1,6 +1,6 @@
 package app.tvlink.proto
 
-import app.tvlink.device.DeviceManager
+import app.tvlink.device.DeviceSelection
 import app.tvlink.device.RpmService
 import app.tvlink.proto.idc.CmdLaunchSth
 import app.tvlink.proto.idc.IdcConst
@@ -70,7 +70,7 @@ class RpmFixTest {
     @Test
     fun parseAppArrayAcceptsArrayAndSingleObject() {
         // IdcPacket_GetListResponse.java:62-65:apps 单应用场景为 JSON 对象而非数组(accumulate 行为)
-        val rpm = RpmService(DeviceManager())
+        val rpm = RpmService(DeviceSelection())
         val a = """{"packageName":"com.a","appName":"A","versionName":"1.0","versionCode":"1","appStatus":"0"}"""
         val b = """{"packageName":"com.b","appName":"B","versionName":"2.0","versionCode":"2","appStatus":"0"}"""
 

@@ -1,5 +1,6 @@
 package app.tvlink.device
 
+import app.tvlink.platform.localLanAddress
 import app.tvlink.proto.mdns.Mdns
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -19,18 +20,18 @@ class DiscoverySubnetScanTest {
     @Test
     @Suppress("FunctionNaming") // 反引号测试命名
     fun `subnet scan probes every host in the slash24`() {
-        val self = Mdns.localLanAddress()?.hostAddress ?: error("test host has no LAN address")
+        val self = localLanAddress()?.hostAddress ?: error("test host has no LAN address")
         val prefix = self.substringBeforeLast('.')
         val expected = (1..254).map { "$prefix.$it" }.filter { it != self }.toSet()
 
         val probed = ConcurrentHashMap.newKeySet<String>()
-        val done = CountDownLatch(1)
         val d = Discovery()
         d.hostProber = { ip, _ -> probed.add(ip) } // 无网络假探测,秒回
-        d.onFinished = { done.countDown() }
         d.start(scanSubnet = true)
 
-        assertTrue(done.await(15, TimeUnit.SECONDS), "scan did not finish within 15s")
+        val deadline = System.currentTimeMillis() + 15_000
+        while (d.state.value.scanning && System.currentTimeMillis() < deadline) Thread.sleep(25)
+        assertFalse(d.state.value.scanning, "scan did not finish within 15s")
         assertEquals(expected, probed)
     }
 
@@ -52,5 +53,90 @@ class DiscoverySubnetScanTest {
             Thread.sleep(50)
         }
         assertFalse(isAlive, "disc-scan thread still alive 3s after stop()")
+    }
+
+    @Test
+    fun oldScanCompletionDoesNotFinishRestartedScan() {
+        val firstStarted = CountDownLatch(1)
+        val secondStarted = CountDownLatch(1)
+        val finishFirst = CountDownLatch(1)
+        val finishSecond = CountDownLatch(1)
+        val firstJoined = CountDownLatch(1)
+        val d = Discovery()
+        d.mdnsProber = { _, _ -> }
+        d.joinFinished = { epoch -> if (epoch == 1) firstJoined.countDown() }
+        d.hostProber = { _, epoch ->
+            when (epoch) {
+                1 -> {
+                    firstStarted.countDown()
+                    awaitIgnoringInterrupts(finishFirst)
+                }
+                2 -> {
+                    secondStarted.countDown()
+                    awaitIgnoringInterrupts(finishSecond)
+                }
+            }
+        }
+
+        try {
+            d.start(scanSubnet = true)
+            assertTrue(firstStarted.await(5, TimeUnit.SECONDS))
+            assertTrue(d.state.value.scanning)
+
+            d.start(scanSubnet = true)
+            assertTrue(secondStarted.await(5, TimeUnit.SECONDS))
+
+            finishFirst.countDown()
+            assertTrue(firstJoined.await(5, TimeUnit.SECONDS))
+            assertTrue(d.state.value.scanning, "old scan completion finished the restarted scan")
+
+            finishSecond.countDown()
+            val deadline = System.currentTimeMillis() + 5_000
+            while (d.state.value.scanning && System.currentTimeMillis() < deadline) Thread.sleep(25)
+            assertFalse(d.state.value.scanning, "current scan did not finish")
+        } finally {
+            finishFirst.countDown()
+            finishSecond.countDown()
+            d.stop()
+        }
+    }
+
+    @Test
+    fun lateResultFromPreviousScanIsNotPublished() {
+        var staleReport: ((Mdns.MdnsDevice) -> Unit)? = null
+        val d = Discovery()
+        d.mdnsProber = { epoch, report ->
+            if (epoch == 1) staleReport = report
+        }
+
+        try {
+            d.start(scanSubnet = false)
+            val deadline = System.currentTimeMillis() + 5_000
+            while (d.state.value.scanning && System.currentTimeMillis() < deadline) Thread.sleep(25)
+            assertFalse(d.state.value.scanning)
+
+            d.start(scanSubnet = false)
+            val report = staleReport ?: error("first scan did not provide a result callback")
+            report(Mdns.MdnsDevice(ip = "192.0.2.1", name = "stale"))
+
+            assertTrue(
+                d.state.value.devices
+                    .isEmpty(),
+                "previous scan published a stale candidate",
+            )
+        } finally {
+            d.stop()
+        }
+    }
+
+    private fun awaitIgnoringInterrupts(latch: CountDownLatch) {
+        while (true) {
+            try {
+                assertTrue(latch.await(5, TimeUnit.SECONDS), "probe was not released")
+                return
+            } catch (_: InterruptedException) {
+                // stop() interrupts superseded workers; the test controls their actual completion.
+            }
+        }
     }
 }

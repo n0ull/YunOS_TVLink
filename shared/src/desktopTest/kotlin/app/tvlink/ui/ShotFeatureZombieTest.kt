@@ -1,6 +1,11 @@
 package app.tvlink.ui
 
-import app.tvlink.device.DeviceManager
+import app.tvlink.device.ConnectionHistory
+import app.tvlink.device.ConnectionMode
+import app.tvlink.device.DeviceSelection
+import app.tvlink.device.DeviceTarget
+import app.tvlink.device.IdcProgress
+import app.tvlink.device.SavedSelection
 import app.tvlink.device.ScreenshotService
 import app.tvlink.proto.idc.IdcConst
 import java.io.DataInputStream
@@ -28,7 +33,7 @@ import kotlinx.coroutines.launch
  */
 @Suppress("InjectDispatcher")
 class ShotFeatureZombieTest {
-    private val server = ServerSocket(IdcConst.TCP_PORT) // DeviceManager 写死 13510
+    private val server = ServerSocket(IdcConst.TCP_PORT) // DeviceSelection 写死 13510
     private val alive = AtomicBoolean(true)
     private val socks = CopyOnWriteArrayList<Socket>()
 
@@ -36,12 +41,6 @@ class ShotFeatureZombieTest {
     fun tearDown() {
         server.close()
         socks.forEach { runCatching { it.close() } }
-        runCatching {
-            java.util.prefs.Preferences
-                .userRoot()
-                .node("app/tvlink/device-history")
-                .removeNode()
-        }
     }
 
     /** 假 TV:每个连接回 LoginResp + 心跳回声;[alive]=false 时完全静默(半开僵尸)。 */
@@ -102,18 +101,18 @@ class ShotFeatureZombieTest {
         serve()
         val notices = CopyOnWriteArrayList<String>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val dm = DeviceManager()
+        val dm = DeviceSelection(InMemoryConnectionHistory())
         val service = ScreenshotService(dm)
         val shot = ShotFeature(scope, service) { notices.add(it) }
-        scope.launch { dm.packets.collect { p -> service.handlePacket(p) } }
+        scope.launch { dm.packets.collect { p -> service.handlePacket(p.binding, p.value) } }
 
-        dm.connect("127.0.0.1")
+        dm.select(DeviceTarget(ip = "127.0.0.1"), ConnectionMode.FULL)
         var waited = 0L
-        while (dm.connState.value != DeviceManager.ConnState.CONNECTED && waited < 10_000) {
+        while (dm.state.value.idcProgress != IdcProgress.CONNECTED && waited < 10_000) {
             Thread.sleep(100)
             waited += 100
         }
-        assertTrue(dm.connState.value == DeviceManager.ConnState.CONNECTED, "connect failed")
+        assertTrue(dm.state.value.idcProgress == IdcProgress.CONNECTED, "connect failed")
 
         alive.set(false) // 僵尸化:对端静默
         shot.capture() // 截图请求写入即消失;10s 后兜底超时 → 探活 → 判死 → 重连
@@ -136,7 +135,7 @@ class ShotFeatureZombieTest {
         waited = 0L
         var isRecovered = false
         while (waited < 15_000) {
-            if (dm.connState.value == DeviceManager.ConnState.CONNECTED) {
+            if (dm.state.value.idcProgress == IdcProgress.CONNECTED) {
                 isRecovered = true
                 break
             }
@@ -148,5 +147,15 @@ class ShotFeatureZombieTest {
 
         dm.destroy()
         scope.cancel()
+    }
+}
+
+private class InMemoryConnectionHistory : ConnectionHistory {
+    private var saved: SavedSelection? = null
+
+    override fun load(): SavedSelection? = saved
+
+    override fun save(selection: SavedSelection) {
+        saved = selection
     }
 }

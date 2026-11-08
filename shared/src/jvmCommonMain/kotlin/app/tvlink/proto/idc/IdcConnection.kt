@@ -79,6 +79,9 @@ class IdcConnection(
     private var connKey = IdcConst.UNASSIGNED_KEY
     private val sendLock = Any()
 
+    /** Bound by the session owner; checked by the writer immediately before encoding and writing. */
+    internal var writerGuard: (() -> Boolean)? = null
+
     @Volatile
     private var sendExecutor: ExecutorService? = null
     private var scheduler: ScheduledExecutorService? = null
@@ -180,6 +183,7 @@ class IdcConnection(
         val ex = sendExecutor ?: return
         try {
             ex.execute {
+                if (writerGuard?.invoke() == false) return@execute
                 packet.key = connKey
                 try {
                     sendRaw(packet)
@@ -214,6 +218,8 @@ class IdcConnection(
 
     fun moduleIdByName(name: String): Int? = modules.values.firstOrNull { it.name == name && it.online }?.id
 
+    // TODO(compatibility): 原版登录后立即发首包，再按 ACK 调度（docs/re/01 §2）。
+    // TVLink 使用固定周期，尚未确认是否有固件依赖原版节奏。调整前需真机验证。
     private fun startHeartbeat() {
         val sched = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "idc-hb").apply { isDaemon = true } }
         scheduler = sched

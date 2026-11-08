@@ -5,9 +5,9 @@
 
 ## Purpose
 
-Low-level protocol implementations — byte-level frame encoding/decoding, socket management, and wire-format constants.
-Each sub-package handles one protocol channel. All implementations are blocking-socket based with dedicated reader
-threads.
+Implement protocol operations and their transport, including framing, handshakes, keepalive, and resource cleanup.
+Callers choose the target, local address, channels to start, and retry policy. A channel may enforce a write guard
+supplied by its caller without knowing the device-selection state.
 
 ## Subdirectories
 

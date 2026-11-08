@@ -2,11 +2,15 @@ package app.tvlink.proto
 
 import app.tvlink.proto.ib.IbChannel
 import app.tvlink.proto.ib.IbConst
+import app.tvlink.proto.ib.IbHello
+import app.tvlink.proto.ib.probeIbHello
 import java.io.DataInputStream
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.AfterTest
@@ -14,9 +18,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** IbChannel 回归（该模块此前 0 测试）。假 IB 服务绑固定端口（IbChannel 写死 IbConst.PORT）。 */
 class IbChannelTest {
-    private val server = ServerSocket(IbConst.PORT)
+    private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
 
     @Volatile
     private var clientSock: Socket? = null
@@ -90,7 +93,7 @@ class IbChannelTest {
                 Thread.sleep(10_000) // 保持连接开放，等不到应答
             }
         }
-        val ch = IbChannel("127.0.0.1")
+        val ch = IbChannel("127.0.0.1", server.localPort)
         val done = CountDownLatch(1)
         val result =
             java.util.concurrent.atomic
@@ -121,7 +124,7 @@ class IbChannelTest {
                 Thread.sleep(4_000) // 覆盖 idle>timeoutMs 窗口
             }
         }
-        val ch = IbChannel("127.0.0.1")
+        val ch = IbChannel("127.0.0.1", server.localPort)
         assertTrue(ch.connect(timeoutMs = 2000), "connect failed")
         assertEquals(IbChannel.State.READY, ch.state)
         assertEquals(329, ch.serverVer)
@@ -152,7 +155,7 @@ class IbChannelTest {
                 Thread.sleep(1_000)
             }
         }
-        val ch = IbChannel("127.0.0.1")
+        val ch = IbChannel("127.0.0.1", server.localPort)
         val apps = java.util.concurrent.CopyOnWriteArrayList<String>()
         ch.onCurrentApp = { apps.add(it) }
         assertTrue(ch.connect(timeoutMs = 2000), "connect failed — zero-checksum hello response rejected")
@@ -162,5 +165,25 @@ class IbChannelTest {
         assertEquals(listOf("com.test.app"), apps, "cur_app push dropped")
         assertEquals(IbChannel.State.READY, ch.state, "channel killed by post-handshake zero-checksum frame")
         ch.disconnect()
+    }
+
+    @Test
+    fun probeExchangesHelloThenClosesWithoutStartingAnIbSession() {
+        server.soTimeout = 2000
+        val probe = FutureTask { probeIbHello("127.0.0.1", timeoutMs = 2000, port = server.localPort) }
+        thread(isDaemon = true) { probe.run() }
+        server.accept().use { socket ->
+            socket.soTimeout = 2000
+            val input = DataInputStream(socket.getInputStream())
+            assertEquals(IbConst.MAGIC, input.readInt())
+            assertEquals(0, input.readInt())
+            assertEquals(IbConst.REQ_HELLO, input.readInt())
+            val reserve = input.readInt()
+            assertEquals(reserve, input.readInt())
+
+            writeFrameRealTv(socket, IbConst.RSP_MASK or IbConst.REQ_HELLO, """{"ver":"3.29", "sid":123}""")
+            assertEquals(IbHello(version = "3.29", sessionId = "123"), probe.get(2, TimeUnit.SECONDS))
+            assertEquals(-1, input.read())
+        }
     }
 }

@@ -23,7 +23,7 @@ use an HTTP/1.1-style text protocol over a TCP long connection (default port 135
 - Session identified by `yunos-session-id` header (UUID per session); requests also carry `yunos-device-id`
 - **Tested firmware (server_vers 3.2.0) pushes no `POST /event`** — playback state/duration/position come from polling `/playback-info` (carries its own `state` field; unknown duration reported as `-1`)
 - `requestRaw` is serialized (`reqLock`) so the poller and UI actions can't cross responses
-- `DEFAULT_PORT = 13520` is the canonical cast control port; the projection data port is assigned by the TV at runtime (see `discoveredProjectionPort` in `DeviceManager`)
+- `DEFAULT_PORT = 13520` is the canonical cast control port; the projection data port is assigned by the TV at runtime (see `DeviceTarget.projectionPort` in `DeviceSelection`)
 - `MediaHttpServer` must support `Range` headers — TV uses partial fetches for large files
 - `MediaHttpServer` 安全语义（2026-08 收紧）：媒体/封面 ID 为 UUID（不可枚举）；`start(localIp, allowedClientIp=tvIp)` 仅服务已连 TV 来源 IP（拒绝路径打日志：实际源 vs 期望）；条目存续至**下次投屏时被清**（`CastFeature.file()` 先 `clear()` 再注册——同时只播一个媒体；不做供片后注销：首请求若是完整 GET 渐进嗅探，注销会断后续 seek/Range）；不可满足 Range → 416 + `Content-Range: bytes */total`（勿写负 Content-Length）
 - Reference: `docs/re/04-local-projection-screenshot.md`

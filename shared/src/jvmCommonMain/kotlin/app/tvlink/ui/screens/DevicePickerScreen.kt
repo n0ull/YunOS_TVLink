@@ -50,8 +50,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import app.tvlink.device.DeviceManager
 import app.tvlink.device.Discovery
+import app.tvlink.device.IdcProgress
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.theme.Brand
@@ -60,7 +60,9 @@ import app.tvlink.ui.theme.Brand
 fun DevicePickerScreen(vm: AppViewModel) {
     var manualIp by remember { mutableStateOf("") }
     var showManual by remember { mutableStateOf(false) }
-    val searching = vm.connState == DeviceManager.ConnState.SEARCHING
+    val discoveryState = vm.discoveryState
+    val searching = discoveryState.scanning
+    val devices = discoveryState.devices
 
     Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(32.dp))
@@ -74,26 +76,26 @@ fun DevicePickerScreen(vm: AppViewModel) {
         )
         Spacer(Modifier.height(24.dp))
 
-        when (vm.connState) {
-            DeviceManager.ConnState.SEARCHING ->
+        when {
+            searching ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
                     Text("正在搜索同一 Wi-Fi 下的电视设备…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
-            DeviceManager.ConnState.CONNECTING ->
+            vm.selectionState.idcProgress == IdcProgress.CONNECTING ->
                 Text("正在连接…", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            DeviceManager.ConnState.FAILED ->
+            vm.selectionState.idcProgress == IdcProgress.FAILED ->
                 Text("连接失败，请确认设备在线后重试", color = MaterialTheme.colorScheme.error)
 
             else ->
                 Text(
-                    if (vm.foundDevices.isEmpty()) {
+                    if (devices.isEmpty()) {
                         "点击下方按钮搜索设备"
                     } else {
-                        "发现 ${vm.foundDevices.size} 个设备"
+                        "发现 ${devices.size} 个设备"
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -101,7 +103,7 @@ fun DevicePickerScreen(vm: AppViewModel) {
 
         Spacer(Modifier.height(16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(vm.foundDevices, key = { it.ip }) { d ->
+            items(devices, key = { it.ip }) { d ->
                 DeviceCard(
                     d = d,
                     onClick = { vm.connectTo(d) },

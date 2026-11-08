@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.tvlink.device.ConnectionMode
 import app.tvlink.ui.AppViewModel
 import app.tvlink.ui.SysPropFeature
 import app.tvlink.ui.icons.AppIcons
@@ -51,8 +52,8 @@ import app.tvlink.ui.icons.AppIcons
 fun SettingsScreen(vm: AppViewModel) {
     var propKey by remember { mutableStateOf("") }
     // StateFlow 须订阅才重组（.value 直读不订阅，IB 通道状态变化不刷新）
-    val ibReady by vm.rc.ibReady.collectAsState()
-    val device = vm.connectedDevice
+    val remoteState by vm.rc.state.collectAsState()
+    val device = vm.selectionState.target
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("设置") },
@@ -76,7 +77,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     SettingItem(
                         AppIcons.Link,
                         "IB 快速通道",
-                        if (ibReady) "已连接" else "未连接（使用回退通道）",
+                        if (remoteState.ibReady) "已连接" else "未连接（使用回退通道）",
                     )
                     // 断开 = 结束本次会话；历史直连记录保留（原 App 语义），冷启动仍自动直连
                     FilledTonalButton(
@@ -135,9 +136,9 @@ fun SettingsScreen(vm: AppViewModel) {
                 Column {
                     GroupHeader("关于")
                     SettingItem(AppIcons.Info, "TVLink 1.0", "开源的 YunOS 电视局域网控制客户端")
-                    if (device?.ibOnly == true) {
-                        SettingItem(AppIcons.Link, "IB 通道", device.ibVer.ifEmpty { "未知" })
-                        if (device.ibSid.isNotEmpty()) {
+                    if (vm.selectionState.mode == ConnectionMode.IB_ONLY) {
+                        SettingItem(AppIcons.Link, "IB 通道", device?.ibVer.orEmpty().ifEmpty { "未知" })
+                        if (device?.ibSid?.isNotEmpty() == true) {
                             SettingItem(AppIcons.Info, "IB sid", device.ibSid)
                         }
                         SettingItem(AppIcons.Cast, "投屏", "不可用（IDC 未开放）")

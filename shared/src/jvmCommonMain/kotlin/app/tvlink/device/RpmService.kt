@@ -10,14 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * RPM — remote package management over IDC VConn. Module wire name is "com.yunos.idc.appstore"
- * (IdcConstant.java:6, RpmObserver.java:16; `com.yunos.tv.appstore` is only the Java package of
- * the decompiled message classes). Module 离线时经 Cmd_LaunchSth 唤醒(RpmObserver.java:74-77)。
- * Frame: int32 packetId + int32 requestId + JSON body. See docs/re/05 §3.
- */
+/** RPM remote package management over IDC VConn. See docs/re/05 §3. */
 class RpmService(
-    private val deviceManager: DeviceManager,
+    private val selection: DeviceSelection,
 ) {
     data class TvApp(
         val packageName: String = "",
@@ -34,46 +29,279 @@ class RpmService(
         val status: String,
     )
 
-    /** Install/Uninstall/OpenApp 操作应答（"result" 错误码，0=成功）。 */
     data class OpResult(
         val op: String,
         val packageName: String,
         val errorCode: Int,
     )
 
-    /** 最近一次拉取的应用列表（状态流，新订阅者立得当前值）。 */
+    private class ModuleRuntime(
+        val binding: IdcBinding,
+        var moduleId: Int? = null,
+        var vconnOpen: Boolean = false,
+        var wakeSent: Boolean = false,
+        var pendingRequest: Pair<Int, String>? = null,
+    )
+
     private val _appList = MutableStateFlow<List<TvApp>>(emptyList())
     val appList: StateFlow<List<TvApp>> = _appList
 
-    /** GetAppInfo/SystemInfo 应答（事件流，读线程 tryEmit 不阻塞）。 */
     private val _systemInfo = MutableSharedFlow<Map<String, String>>(extraBufferCapacity = 4)
     val systemInfo: SharedFlow<Map<String, String>> = _systemInfo
 
-    /** 安装进度推送（AppStatus, packetId 9）。 */
     private val _installProgress = MutableSharedFlow<InstallProgress>(extraBufferCapacity = 16)
     val installProgress: SharedFlow<InstallProgress> = _installProgress
 
-    /** 操作结果应答（install/uninstall/open）。 */
     private val _opResults = MutableSharedFlow<OpResult>(extraBufferCapacity = 8)
     val opResults: SharedFlow<OpResult> = _opResults
 
+    private sealed interface RpmEvent {
+        data class AppList(
+            val value: List<TvApp>,
+        ) : RpmEvent
+
+        data class SystemInfo(
+            val value: Map<String, String>,
+        ) : RpmEvent
+
+        data class Progress(
+            val value: InstallProgress,
+        ) : RpmEvent
+
+        data class Operation(
+            val value: OpResult,
+        ) : RpmEvent
+    }
+
     private val requestId = AtomicInteger(1)
-    private var moduleId: Int? = null
-    private var vconnOpen = false
+    private val stateLock = Any()
+    private var runtime: ModuleRuntime? = null
+    private var attached = false
 
-    /** 本次会话是否已发过唤醒包(防止重复 LaunchSth)。module 下线或 detach 时复位。 */
-    private var wakeSent = false
+    private val vConnListener: (IdcBinding, Int, ByteArray) -> Unit = { binding, _, payload ->
+        val event = parse(payload)
+        binding.targetLease.onlyIfActive {
+            synchronized(stateLock) {
+                if (attached && runtime?.binding === binding && isCurrent(binding)) publish(event)
+            }
+        }
+    }
 
-    /**
-     * 挂起的请求:VConn 打开后补发。仅缓存最近一次(列表刷新优先级最高)。
-     * null 表示无挂起请求。
-     */
-    private var pendingRequest: Pair<Int, String>? = null
+    private val moduleListener: (IdcBinding, String, Int, Boolean) -> Unit = { binding, name, mid, online ->
+        if (name == MODULE_NAME) onAppStoreModule(binding, online, mid)
+    }
+
+    private fun isCurrent(binding: IdcBinding): Boolean =
+        binding.isActive &&
+            selection.binding.value
+                ?.idc
+                ?.value === binding
+
+    fun attach() {
+        synchronized(stateLock) { attached = true }
+        selection.removeVConnListener(vConnListener)
+        selection.addVConnListener(vConnListener)
+        selection.removeModuleListener(moduleListener)
+        selection.addModuleListener(moduleListener)
+    }
+
+    private fun onAppStoreModule(
+        binding: IdcBinding,
+        online: Boolean,
+        mid: Int,
+    ) {
+        var shouldOpen = false
+        var pending: Pair<Int, String>? = null
+        binding.targetLease.onlyIfActive {
+            synchronized(stateLock) {
+                if (!attached || !isCurrent(binding)) return@onlyIfActive
+                var current = runtime
+                if (current?.binding !== binding) {
+                    current = ModuleRuntime(binding)
+                    runtime = current
+                }
+                if (!online) {
+                    runtime = ModuleRuntime(binding)
+                    return@onlyIfActive
+                }
+                current.moduleId = mid
+                if (!current.vconnOpen) {
+                    current.vconnOpen = true
+                    shouldOpen = true
+                }
+                pending = current.pendingRequest
+                current.pendingRequest = null
+            }
+        }
+        if (shouldOpen) binding.connection.openVConn(mid)
+        pending?.let { (packetId, json) -> sendData(binding, mid, packetId, json) }
+    }
+
+    fun detach() {
+        synchronized(stateLock) {
+            attached = false
+            runtime = null
+        }
+        selection.removeVConnListener(vConnListener)
+        selection.removeModuleListener(moduleListener)
+    }
+
+    fun getAppList(pageSize: Int = 100) {
+        send(ID_GETLIST_REQ, """{"pageSize":$pageSize}""", cacheRequest = true)
+    }
+
+    fun getSystemInfo() = send(ID_GET_SYSTEMINFO, "{}")
+
+    fun openApp(packageName: String) = send(ID_OPENAPP_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
+
+    fun uninstall(packageName: String) = send(ID_UNINSTALL_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
+
+    fun installByUrl(
+        packageName: String,
+        apkUrl: String,
+        appName: String = "",
+        iconUrl: String = "",
+        apkSize: String = "",
+        versionNeeded: Int = 0,
+    ) = send(
+        ID_INSTALL_REQ,
+        """{"packageName":"${jsonEscape(
+            packageName,
+        )}","apkUrl":"${jsonEscape(
+            apkUrl,
+        )}","iconUrl":"${jsonEscape(
+            iconUrl,
+        )}","appName":"${jsonEscape(appName)}","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""",
+    )
+
+    private fun send(
+        packetId: Int,
+        json: String,
+        cacheRequest: Boolean = false,
+    ): Boolean {
+        var binding: IdcBinding? = null
+        var midToSend: Int? = null
+        var shouldWake = false
+        synchronized(stateLock) {
+            if (!attached) return false
+            binding =
+                selection.binding.value
+                    ?.idc
+                    ?.value
+            val currentBinding = binding
+            if (currentBinding == null || !currentBinding.isActive) return false
+
+            var current = runtime
+            if (current?.binding !== currentBinding) {
+                current = ModuleRuntime(currentBinding)
+                runtime = current
+            }
+            val mid = current.moduleId
+            if (mid == null) {
+                if (cacheRequest) current.pendingRequest = packetId to json
+                if (!current.wakeSent) {
+                    current.wakeSent = true
+                    shouldWake = true
+                }
+            } else {
+                midToSend = mid
+            }
+        }
+
+        val currentBinding = binding
+        if (shouldWake && currentBinding != null) {
+            currentBinding.connection.send(CmdLaunchSth(launchType = 1, action = WAKE_ACTION))
+        }
+        val mid = midToSend
+        return if (mid != null && currentBinding != null) {
+            sendData(currentBinding, mid, packetId, json)
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun sendData(
+        binding: IdcBinding,
+        mid: Int,
+        packetId: Int,
+        json: String,
+    ) {
+        val body = json.toByteArray(Charsets.UTF_8)
+        val buf = ByteBuffer.allocate(8 + body.size)
+        buf.putInt(packetId)
+        buf.putInt(requestId.getAndIncrement())
+        buf.put(body)
+        binding.connection.sendVConnData(mid, buf.array())
+    }
+
+    private fun parse(payload: ByteArray): RpmEvent? {
+        if (payload.size < 8) return null
+        val buf = ByteBuffer.wrap(payload)
+        val id = buf.int
+        buf.int
+        val json = String(payload, 8, payload.size - 8, Charsets.UTF_8)
+        val j = parseJsonObject(json)
+        return when (id) {
+            ID_GETLIST_RESP -> RpmEvent.AppList(parseAppArray(j.str("apps")))
+            ID_GETAPPINFO_RESP ->
+                if (j.bool("appIsExist")) RpmEvent.SystemInfo(j.toMap()) else null
+            ID_SYSTEMINFO -> RpmEvent.SystemInfo(j.toMap())
+            ID_INSTALL_STATUS ->
+                RpmEvent.Progress(
+                    InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus")),
+                )
+            ID_INSTALL_RESP -> RpmEvent.Operation(OpResult("install", j.str("packageName"), j.int("result")))
+            ID_UNINSTALL_RESP -> RpmEvent.Operation(OpResult("uninstall", j.str("packageName"), j.int("result")))
+            ID_OPENAPP_RESP -> RpmEvent.Operation(OpResult("open", j.str("packageName"), j.int("result")))
+            else -> null
+        }
+    }
+
+    private fun publish(event: RpmEvent?) {
+        when (event) {
+            is RpmEvent.AppList -> _appList.value = event.value
+            is RpmEvent.SystemInfo -> _systemInfo.tryEmit(event.value)
+            is RpmEvent.Progress -> _installProgress.tryEmit(event.value)
+            is RpmEvent.Operation -> _opResults.tryEmit(event.value)
+            null -> return
+        }
+    }
+
+    internal fun parseAppArray(arr: String): List<TvApp> {
+        val out = mutableListOf<TvApp>()
+        val body = arr.removePrefix("[").removeSuffix("]")
+        var depth = 0
+        var start = -1
+        for (i in body.indices) {
+            when (body[i]) {
+                '{' -> {
+                    if (depth == 0) start = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && start >= 0) {
+                        val o = parseJsonObject(body.substring(start, i + 1))
+                        out.add(
+                            TvApp(
+                                packageName = o.str("packageName"),
+                                appName = o.str("appName"),
+                                versionName = o.str("versionName"),
+                                versionCode = o.str("versionCode").toLongOrNull() ?: 0,
+                                iconUrl = o.str("iconUrl"),
+                                status = o.str("status"),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        return out
+    }
 
     companion object {
         const val MODULE_NAME = "com.yunos.idc.appstore"
-
-        /** 唤醒动作(RpmObserver.java:17):module 离线时发 Cmd_LaunchSth(service) 拉起电视端 appstore 服务。 */
         private const val WAKE_ACTION = "yunos.appstore.startprocessservice"
         const val ID_GETAPPINFO_REQ = 2
         const val ID_GETAPPINFO_RESP = 3
@@ -93,208 +321,5 @@ class RpmService(
         const val ID_CANCEL_GETLIST = 26
         const val ID_GET_SYSTEMINFO = 40
         const val ID_SYSTEMINFO = 41
-    }
-
-    private val vConnListener: (Int, ByteArray) -> Unit = { _, payload -> handle(payload) }
-
-    private val moduleListener: (String, Int, Boolean) -> Unit = { name, mid, online ->
-        if (name == MODULE_NAME) {
-            onAppStoreModule(online, mid)
-        }
-    }
-
-    /**
-     * 注册 VConn 数据监听 + module 在线状态回调。module 上线时主动 openVConn 并补发挂起请求。
-     * 幂等——每次连接都可安全调用。
-     */
-    fun attach() {
-        deviceManager.removeVConnListener(vConnListener)
-        deviceManager.addVConnListener(vConnListener)
-        deviceManager.removeModuleListener(moduleListener)
-        deviceManager.addModuleListener(moduleListener)
-    }
-
-    /** module 上线时打开 VConn 并补发挂起请求;下线时清空状态。 */
-    private fun onAppStoreModule(
-        online: Boolean,
-        mid: Int,
-    ) {
-        if (online) {
-            moduleId = mid
-            if (!vconnOpen) openVConnAndFlushPending(mid)
-        } else {
-            resetModuleState()
-        }
-    }
-
-    private fun resetModuleState() {
-        moduleId = null
-        vconnOpen = false
-        wakeSent = false
-    }
-
-    private fun openVConnAndFlushPending(mid: Int) {
-        vconnOpen = true
-        deviceManager.connection?.openVConn(mid)
-        pendingRequest?.let { (packetId, json) ->
-            pendingRequest = null
-            sendData(packetId, json)
-        }
-    }
-
-    /** 注销 VConn 数据监听与 module 回调,清理状态。 */
-    fun detach() {
-        deviceManager.removeVConnListener(vConnListener)
-        deviceManager.removeModuleListener(moduleListener)
-        resetModuleState()
-        pendingRequest = null
-    }
-
-    fun getAppList(pageSize: Int = 100) {
-        val json = """{"pageSize":$pageSize}"""
-        if (!send(ID_GETLIST_REQ, json)) {
-            // module 未就绪(VConn 未打开)——缓存请求,待 VConn 打开后补发。
-            pendingRequest = ID_GETLIST_REQ to json
-        }
-    }
-
-    fun getSystemInfo() = send(ID_GET_SYSTEMINFO, "{}")
-
-    fun openApp(packageName: String) = send(ID_OPENAPP_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
-
-    fun uninstall(packageName: String) = send(ID_UNINSTALL_REQ, """{"packageName":"${jsonEscape(packageName)}"}""")
-
-    fun installByUrl(
-        packageName: String,
-        apkUrl: String,
-        appName: String = "",
-        iconUrl: String = "",
-        apkSize: String = "",
-        versionNeeded: Int = 0,
-    ) = send(
-        ID_INSTALL_REQ,
-        """{"packageName":"${
-            jsonEscape(
-                packageName,
-            )
-        }","apkUrl":"${
-            jsonEscape(
-                apkUrl,
-            )
-        }","iconUrl":"${
-            jsonEscape(
-                iconUrl,
-            )
-        }","appName":"${
-            jsonEscape(
-                appName,
-            )
-        }","apkSize":"${jsonEscape(apkSize)}","versionNeeded":$versionNeeded}""",
-    )
-
-    /**
-     * 发送请求。module 就绪(VConn 已打开)时立即发送返回 true;
-     * 未就绪时发送一次唤醒包并返回 false(调用方缓存请求,待 VConn 打开后补发)。
-     */
-    private fun send(
-        packetId: Int,
-        json: String,
-    ): Boolean {
-        val mid = moduleId
-        if (mid == null) {
-            wakeModuleIfNeeded()
-            return false
-        }
-        sendData(packetId, json)
-        return true
-    }
-
-    /** module 未上线时发 Cmd_LaunchSth(launch_type=service) 唤醒电视端 appstore——原 App 开启模块流程第 1 步。 */
-    private fun wakeModuleIfNeeded() {
-        if (wakeSent) return
-        wakeSent = true
-        deviceManager.connection?.send(CmdLaunchSth(launchType = 1, action = WAKE_ACTION))
-    }
-
-    private fun sendData(
-        packetId: Int,
-        json: String,
-    ) {
-        val mid = moduleId ?: return
-        val body = json.toByteArray(Charsets.UTF_8)
-        val buf = ByteBuffer.allocate(8 + body.size)
-        buf.putInt(packetId)
-        buf.putInt(requestId.getAndIncrement())
-        buf.put(body)
-        deviceManager.connection?.sendVConnData(mid, buf.array())
-    }
-
-    private fun handle(payload: ByteArray) {
-        if (payload.size < 8) return
-        val buf = ByteBuffer.wrap(payload)
-        val id = buf.int
-        buf.int // requestId
-        val json = String(payload, 8, payload.size - 8, Charsets.UTF_8)
-        val j = parseJsonObject(json)
-        when (id) {
-            ID_GETLIST_RESP -> {
-                val apps = parseAppArray(j.str("apps"))
-                _appList.value = apps
-            }
-
-            // GetAppInfoResponse(3): {"appIsExist":B,"packageName":"…",存在时内联 AppInfo}。
-            ID_GETAPPINFO_RESP -> {
-                val existed = j.bool("appIsExist")
-                if (existed) _systemInfo.tryEmit(j.toMap())
-            }
-
-            ID_SYSTEMINFO -> _systemInfo.tryEmit(j.toMap())
-            ID_INSTALL_STATUS ->
-                _installProgress.tryEmit(
-                    // AppStatus(9) 推送用 "appStatus"(AbsIdcDataPacket.KEY_STATUS="appStatus"),与列表 "status" 不同。
-                    InstallProgress(j.str("packageName"), j.int("progress"), j.str("appStatus")),
-                )
-
-            // Install/Uninstall/OpenApp/Update Response 统一用 "result"(KEY_RESULT="result"),非 "errorCode"。
-            ID_INSTALL_RESP -> _opResults.tryEmit(OpResult("install", j.str("packageName"), j.int("result")))
-            ID_UNINSTALL_RESP -> _opResults.tryEmit(OpResult("uninstall", j.str("packageName"), j.int("result")))
-            ID_OPENAPP_RESP -> _opResults.tryEmit(OpResult("open", j.str("packageName"), j.int("result")))
-        }
-    }
-
-    // internal(非 private)以便 desktopTest 直接回归单对象/数组双分支;属测试可见性放宽,非公共 API。
-    internal fun parseAppArray(arr: String): List<TvApp> {
-        // apps is a JSON array of objects; extract each object block and flat-parse it
-        val out = mutableListOf<TvApp>()
-        val body = arr.removePrefix("[").removeSuffix("]")
-        var depth = 0
-        var start = -1
-        for (i in body.indices) {
-            when (body[i]) {
-                '{' -> {
-                    if (depth == 0) start = i
-                    depth++
-                }
-
-                '}' -> {
-                    depth--
-                    if (depth == 0 && start >= 0) {
-                        val o = parseJsonObject(body.substring(start, i + 1))
-                        out.add(
-                            TvApp(
-                                packageName = o.str("packageName"),
-                                appName = o.str("appName"),
-                                versionName = o.str("versionName"),
-                                versionCode = o.str("versionCode").toLongOrNull() ?: 0,
-                                iconUrl = o.str("iconUrl"),
-                                // AppInfo 列表项用 "status"(AppInfo.KEY_STATUS="status"),非 "appStatus"。
-                                status = o.str("status"),
-                            ),
-                        )
-                    }
-                }
-            }
-        }
-        return out
     }
 }

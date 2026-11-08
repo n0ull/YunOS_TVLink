@@ -1,8 +1,14 @@
 package app.tvlink.proto
 
-import app.tvlink.device.DeviceManager
+import app.tvlink.device.ConnectionHistory
+import app.tvlink.device.ConnectionMode
+import app.tvlink.device.DeviceSelection
+import app.tvlink.device.DeviceTarget
+import app.tvlink.device.IdcProgress
+import app.tvlink.device.SavedSelection
 import app.tvlink.proto.idc.IdcConst
 import java.io.DataInputStream
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
@@ -17,10 +23,10 @@ import kotlin.test.assertTrue
 /**
  * H3 回归：重叠 connect() 必须单飞串行——后发起者胜出，落败会话被 shutdown（对端见 EOF）。
  * 无 Mutex 时：慢登录的先发连接最后完成，覆盖 connection 并泄漏后发会话（3 线程 + socket）。
- * 假 TV 绑固定 IDC 端口（DeviceManager 写死 IdcConst.TCP_PORT），#1 登录应答延迟制造重叠窗口。
+ * 假 TV 使用回环地址和系统分配的临时端口（DeviceSelection 注入端口），#1 登录应答延迟制造重叠窗口。
  */
-class DeviceManagerConnectTest {
-    private val server = ServerSocket(IdcConst.TCP_PORT)
+class DeviceSelectionTest {
+    private val server = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
     private val firstAccepted = CountDownLatch(1)
     private val secondLoggedIn = CountDownLatch(1)
 
@@ -49,14 +55,6 @@ class DeviceManagerConnectTest {
         runCatching { sock1?.close() }
         runCatching { sock2?.close() }
         serverThread.join(2000)
-        // saveHistory 走 java.util.prefs userRoot（Windows=注册表）——清掉测试写入的历史设备，
-        // 避免真实 App 下次启动拿 127.0.0.1 当历史设备直连
-        runCatching {
-            java.util.prefs.Preferences
-                .userRoot()
-                .node("app/tvlink/device-history")
-                .removeNode()
-        }
     }
 
     /** 读 LoginReq → 延迟 → 回 LoginResp（帧格式与 IdcConnectionTest 假 TV 一致）。 */
@@ -94,12 +92,12 @@ class DeviceManagerConnectTest {
 
     @Test
     fun overlappingConnectsLoserSessionIsClosed() {
-        val dm = DeviceManager()
+        val dm = DeviceSelection(InMemoryConnectionHistory(), idcPort = server.localPort)
         try {
-            dm.connect("127.0.0.1")
+            dm.select(DeviceTarget(ip = "127.0.0.1"), ConnectionMode.FULL)
             assertTrue(firstAccepted.await(5, TimeUnit.SECONDS), "first connect never reached fake TV")
             Thread.sleep(200) // 确保 conn1 已进入延迟登录（重叠窗口内发起第二次连接）
-            dm.connect("127.0.0.1")
+            dm.select(DeviceTarget(ip = "127.0.0.1"), ConnectionMode.FULL)
 
             assertTrue(secondLoggedIn.await(8, TimeUnit.SECONDS), "second connect never logged in")
 
@@ -112,12 +110,12 @@ class DeviceManagerConnectTest {
             // 胜方生效断言轮询：secondLoggedIn 在服务线程计数，客户端 success 路径赋值在其后
             val deadline = System.currentTimeMillis() + 3000
             while (System.currentTimeMillis() < deadline &&
-                (dm.connection == null || dm.connState.value != DeviceManager.ConnState.CONNECTED)
+                (dm.state.value.target == null || dm.state.value.idcProgress != IdcProgress.CONNECTED)
             ) {
                 Thread.sleep(50)
             }
-            assertTrue(dm.connection != null, "no active connection after overlap")
-            assertEquals(DeviceManager.ConnState.CONNECTED, dm.connState.value)
+            assertTrue(dm.state.value.target != null, "no active connection after overlap")
+            assertEquals(IdcProgress.CONNECTED, dm.state.value.idcProgress)
         } finally {
             dm.destroy()
         }
@@ -127,17 +125,17 @@ class DeviceManagerConnectTest {
     fun disconnectDuringInflightConnectDoesNotResurrect() {
         // H2' 回归：锁内阻塞建连期间用户显式断开——慢登录(1.5s)完成后不得装回
         // connection/CONNECTED/reconnectTarget（旧实现断开后 ~秒级设备自行连回）
-        val dm = DeviceManager()
+        val dm = DeviceSelection(InMemoryConnectionHistory(), idcPort = server.localPort)
         try {
-            dm.connect("127.0.0.1")
+            dm.select(DeviceTarget(ip = "127.0.0.1"), ConnectionMode.FULL)
             assertTrue(firstAccepted.await(5, TimeUnit.SECONDS), "connect never reached fake TV")
             Thread.sleep(200) // 确保 conn 已进入延迟登录（锁内阻塞中）
             dm.disconnect()
 
             // 慢登录完成 + 装回检查点充分落地（假 TV 1.5s 应答 + 余量）
             Thread.sleep(2_000)
-            assertTrue(dm.connection == null, "connection resurrected after explicit disconnect")
-            assertEquals(DeviceManager.ConnState.IDLE, dm.connState.value)
+            assertTrue(dm.state.value.target == null, "connection resurrected after explicit disconnect")
+            assertEquals(IdcProgress.IDLE, dm.state.value.idcProgress)
         } finally {
             dm.destroy()
         }
@@ -148,9 +146,9 @@ class DeviceManagerConnectTest {
         // M-1' 回归：锁内建连的【失败】落在显式断开之后时，失败分支不得把 FAILED 覆写
         // 到 IDLE 上（旧实现：断开后 connState 停 FAILED，AppViewModel 600ms 复核后
         // 误弹"连接失败" snackbar——用户显式断开后被告知连接失败）
-        val dm = DeviceManager()
+        val dm = DeviceSelection(InMemoryConnectionHistory(), idcPort = server.localPort)
         try {
-            dm.connect("127.0.0.1")
+            dm.select(DeviceTarget(ip = "127.0.0.1"), ConnectionMode.FULL)
             assertTrue(firstAccepted.await(5, TimeUnit.SECONDS), "connect never reached fake TV")
             Thread.sleep(200) // 确保 conn 已进入假 TV 登录等待（锁内阻塞中）
             dm.disconnect()
@@ -160,14 +158,63 @@ class DeviceManagerConnectTest {
 
             // 失败分支充分落地（EOF 即时，2s 余量）
             Thread.sleep(2_000)
-            assertTrue(dm.connection == null, "connection present after explicit disconnect")
+            assertTrue(dm.state.value.target == null, "connection present after explicit disconnect")
             assertEquals(
-                DeviceManager.ConnState.IDLE,
-                dm.connState.value,
+                IdcProgress.IDLE,
+                dm.state.value.idcProgress,
                 "failure branch overwrote IDLE with FAILED after explicit disconnect",
             )
         } finally {
             dm.destroy()
         }
+    }
+
+    @Test
+    fun staleConnectionCannotPublishIntoNewSelection() {
+        val dm = DeviceSelection(InMemoryConnectionHistory(), idcPort = server.localPort)
+        val firstReadyToPublish = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        dm.beforeConnectedPublish = { selectionId ->
+            if (selectionId == 1L) {
+                firstReadyToPublish.countDown()
+                assertTrue(releaseFirst.await(5, TimeUnit.SECONDS), "first publish was not released")
+            }
+        }
+        try {
+            dm.select(DeviceTarget(ip = "127.0.0.1", name = "A"), ConnectionMode.FULL)
+            assertTrue(firstAccepted.await(5, TimeUnit.SECONDS))
+            assertTrue(firstReadyToPublish.await(8, TimeUnit.SECONDS))
+
+            dm.select(DeviceTarget(ip = "127.0.0.1", name = "B"), ConnectionMode.FULL)
+            releaseFirst.countDown()
+            assertTrue(secondLoggedIn.await(8, TimeUnit.SECONDS))
+
+            val deadline = System.currentTimeMillis() + 5_000
+            while (System.currentTimeMillis() < deadline) {
+                val snapshot = dm.state.value
+                if (snapshot.idcProgress == IdcProgress.CONNECTED && snapshot.target?.name == "B") break
+                Thread.sleep(25)
+            }
+            assertEquals(
+                "B",
+                dm.state.value.target
+                    ?.name,
+            )
+            assertEquals(IdcProgress.CONNECTED, dm.state.value.idcProgress)
+            assertEquals(2L, dm.state.value.selectionId)
+        } finally {
+            releaseFirst.countDown()
+            dm.destroy()
+        }
+    }
+}
+
+private class InMemoryConnectionHistory : ConnectionHistory {
+    private var value: SavedSelection? = null
+
+    override fun load(): SavedSelection? = value
+
+    override fun save(selection: SavedSelection) {
+        value = selection
     }
 }

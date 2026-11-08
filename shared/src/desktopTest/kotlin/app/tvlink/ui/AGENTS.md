@@ -6,7 +6,7 @@
 ## Purpose
 
 JVM unit tests for `app.tvlink.ui` Feature 状态持有者（CastFeature/ShotFeature/SysPropFeature/RemoteFeature）—
-不渲染 Compose UI，直构 Feature + 真服务件（无连接 `DeviceManager`）或回环假服务验证状态与通知行为。
+不渲染 Compose UI，直构 Feature + 真服务件（无连接 `DeviceSelection`）或回环假服务验证状态与通知行为。
 
 ## Key Files
 
@@ -19,7 +19,7 @@ JVM unit tests for `app.tvlink.ui` Feature 状态持有者（CastFeature/ShotFea
 
 ### Working In This Directory
 
-- Feature 持有者构造只需 `CoroutineScope` + 服务件 + `showNotice` lambda；无连接 `DeviceManager()` 即「全通道不可用」夹具
+- Feature 持有者构造只需 `CoroutineScope` + 服务件 + `showNotice` lambda；无连接 `DeviceSelection()` 即「全通道不可用」夹具
 - 竞态测试断言**终态**（settle 后），不断言瞬态——异步清理/建连落地顺序不做假设
 - 假服务端用守护线程 + `CountDownLatch`；同 `proto/` 测试目录约定
 

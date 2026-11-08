@@ -11,26 +11,41 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 
-/**
- * TV screenshot over the IDC command channel (20900 -> 21000). See docs/re/04 §6.
- */
+/** TV screenshot over IDC command channel 20900 → 21000. See docs/re/04 §6. */
 class ScreenshotService(
-    private val deviceManager: DeviceManager,
+    private val selection: DeviceSelection,
 ) {
-    /** 每张 TV 截图应答一个元素（连拍逐张）。tryEmit 不阻塞读线程。 */
     private val _screenshots = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8)
     val screenshots: SharedFlow<ByteArray> = _screenshots
 
-    /** 在途请求数：连拍时 >1，应答按 TCP 序到达逐张转发（docs/re/04 §6 原 App 长按连拍语义）。 */
     private val pending =
         java.util.concurrent.atomic
             .AtomicInteger(0)
 
-    /** Wire into DeviceManager.packets (compose with other consumers at the call site). */
-    fun handlePacket(p: IdcPacket) {
-        if (p is ScreenShotResp && pending.get() > 0 && p.imgData.isNotEmpty()) {
-            pending.decrementAndGet()
-            _screenshots.tryEmit(p.imgData)
+    @Volatile
+    private var pendingBinding: IdcBinding? = null
+    private val stateLock = Any()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    internal fun handlePacket(
+        binding: IdcBinding,
+        packet: IdcPacket,
+    ) {
+        binding.targetLease.onlyIfActive {
+            synchronized(stateLock) {
+                if (!binding.isActive) return@synchronized
+                if (packet !is ScreenShotResp || pendingBinding !== binding) return@synchronized
+                if (selection.binding.value
+                        ?.idc
+                        ?.value !== binding
+                ) {
+                    return@synchronized
+                }
+                if (pending.get() <= 0 || packet.imgData.isEmpty()) return@synchronized
+                pending.decrementAndGet()
+                _screenshots.tryEmit(packet.imgData)
+            }
         }
     }
 
@@ -39,43 +54,71 @@ class ScreenshotService(
         height: Int = 720,
         quality: Int = 90,
     ): Boolean {
-        val conn = deviceManager.connection ?: return false
-        pending.incrementAndGet()
-        conn.send(ScreenShotReq(resizeW = width, resizeH = height, compressQuality = quality))
-        return true
+        val binding =
+            selection.binding.value
+                ?.idc
+                ?.value ?: return false
+        return captureOn(binding, width, height, quality)
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private fun captureOn(
+        binding: IdcBinding,
+        width: Int,
+        height: Int,
+        quality: Int,
+    ): Boolean {
+        var accepted = false
+        binding.targetLease.onlyIfActive {
+            synchronized(stateLock) {
+                if (!binding.isActive) return@synchronized
+                if (selection.binding.value
+                        ?.idc
+                        ?.value !== binding
+                ) {
+                    return@synchronized
+                }
+                if (pendingBinding !== binding) pending.set(0)
+                pendingBinding = binding
+                pending.incrementAndGet()
+                accepted = true
+            }
+        }
+        if (accepted) {
+            binding.connection.send(
+                ScreenShotReq(resizeW = width, resizeH = height, compressQuality = quality),
+            )
+        }
+        return accepted
+    }
 
-    /** 连拍（原 App 长按 300ms/帧 + 上限，docs/re/04 §6）：顺序触发，应答逐张到逐张发射。
-     *  返回 false = 无连接未发出（调用方据此提示）；发出后单帧失败仅截断后续帧。 */
     fun captureBurst(
         count: Int = 5,
         intervalMs: Long = 300,
     ): Boolean {
-        if (deviceManager.connection == null) return false
+        val binding =
+            selection.binding.value
+                ?.idc
+                ?.value ?: return false
         scope.launch {
-            repeat(count) { i ->
-                if (!capture()) return@launch
-                if (i < count - 1) delay(intervalMs)
+            repeat(count) { index ->
+                if (!captureOn(binding, width = 1280, height = 720, quality = 90)) return@launch
+                if (index < count - 1) delay(intervalMs)
             }
         }
         return true
     }
 
-    /**
-     * 应答超时后的僵尸处置：对当前连接主动 ping 探活——活着（TV 只是慢/丢帧）返回
-     * false 不动连接；死了（TCP 半开）立即 shutdown，DeviceManager 断线回调据此走
-     * 自动重连，把恢复从「等心跳周期最坏 ~60s」压到 ~13s（用户真机截屏偶发失败回归）。
-     */
+    /** Active probe after a response timeout; only the current connection may be torn down here. */
     fun dropConnectionIfUnresponsive(): Boolean {
-        val conn = deviceManager.connection ?: return false
-        if (conn.ping()) return false
-        conn.shutdown()
+        val binding =
+            selection.binding.value
+                ?.idc
+                ?.value ?: return false
+        if (!binding.isActive || binding.connection.ping()) return false
+        binding.connection.shutdown()
         return true
     }
 
-    /** 取消内部 scope（AppViewModel.onCleared 链调用）。 */
     fun destroy() {
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }

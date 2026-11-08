@@ -1,7 +1,7 @@
 package app.tvlink.ui
 
 import app.tvlink.device.AsrTextService
-import app.tvlink.device.DeviceManager
+import app.tvlink.device.DeviceSelection
 import app.tvlink.device.RcController
 import app.tvlink.device.ScreenshotService
 import app.tvlink.device.SysPropService
@@ -20,7 +20,7 @@ import kotlinx.coroutines.cancel
 @Suppress("InjectDispatcher")
 class UiSilentFailureTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val dm = DeviceManager() // 无连接：所有通道不可用
+    private val dm = DeviceSelection() // 无连接：所有通道不可用
 
     @AfterTest
     fun tearDown() {

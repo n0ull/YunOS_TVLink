@@ -32,7 +32,7 @@ mDNS/DNS-SD implementation for discovering YunOS TVs on the local network. Queri
 
 ### Common Patterns
 
-- `MulticastSocket` bound to 5353 with 500ms `soTimeout` poll loop; `localLanAddress()` prefers `wlan*` interfaces (Android)
+- `MulticastSocket` bound to 5353 with 500ms `soTimeout` poll loop; the caller supplies the bind address
 - Manual DNS wire-format parsing incl. name compression (no external DNS library)
 
 ## Dependencies

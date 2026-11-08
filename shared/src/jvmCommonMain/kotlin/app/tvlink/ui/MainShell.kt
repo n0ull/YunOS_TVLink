@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.tvlink.device.ConnectionMode
 import app.tvlink.ui.icons.AppIcons
 import app.tvlink.ui.screens.AppsScreen
 import app.tvlink.ui.screens.CastScreen
@@ -51,7 +52,7 @@ fun MainShell(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
-        val dests = visibleTabs(vm.connectedDevice?.ibOnly == true)
+        val dests = visibleTabs(vm.selectionState.mode == ConnectionMode.IB_ONLY)
         Row(Modifier.fillMaxSize()) {
             if (wide) {
                 NavigationRail {

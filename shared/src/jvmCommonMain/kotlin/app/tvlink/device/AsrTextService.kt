@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
  * (ASR.sendText). NLU runs on the TV firmware. See docs/re/03 §C.
  */
 class AsrTextService(
-    private val deviceManager: DeviceManager,
+    private val selection: DeviceSelection,
 ) {
     companion object {
         /** 线上模块名带 `:etao` 类目后缀(AsrDef.ASR_MODULE_NAME;2026-07-22 真机广播证实)。 */
@@ -51,12 +51,16 @@ class AsrTextService(
      */
     fun sendText(text: String) {
         scope.launch {
-            val mid = ensureModuleId() ?: return@launch
-            deviceManager.sendVConnJson(mid, simpleJson("record_start"))
+            val binding =
+                selection.binding.value
+                    ?.idc
+                    ?.value ?: return@launch
+            val mid = ensureModuleId(binding) ?: return@launch
+            binding.connection.sendVConnData(mid, simpleJson("record_start").toByteArray(Charsets.UTF_8))
             delay(SESSION_GAP_MS)
-            deviceManager.sendVConnJson(mid, streamingJson(text))
+            binding.connection.sendVConnData(mid, streamingJson(text).toByteArray(Charsets.UTF_8))
             delay(SESSION_GAP_MS)
-            deviceManager.sendVConnJson(mid, simpleJson("record_stop"))
+            binding.connection.sendVConnData(mid, simpleJson("record_stop").toByteArray(Charsets.UTF_8))
         }
     }
 
@@ -71,14 +75,18 @@ class AsrTextService(
     }
 
     private fun sendSimple(type: String) {
-        val mid = ensureModuleId() ?: return
-        deviceManager.sendVConnJson(mid, simpleJson(type))
+        val binding =
+            selection.binding.value
+                ?.idc
+                ?.value ?: return
+        val mid = ensureModuleId(binding) ?: return
+        binding.connection.sendVConnData(mid, simpleJson(type).toByteArray(Charsets.UTF_8))
     }
 
     /** module 在线则确保本连接已发 VConn SYN(每连接一次,同一发送线程保序),返回模块 ID。 */
-    private fun ensureModuleId(): Int? {
-        val conn = deviceManager.connection ?: return null
-        val mid = deviceManager.moduleId(MODULE_NAME) ?: return null
+    private fun ensureModuleId(binding: IdcBinding): Int? {
+        val conn = binding.connection
+        val mid = conn.moduleIdByName(MODULE_NAME) ?: return null
         if (synConn !== conn) {
             conn.openVConn(mid)
             synConn = conn
