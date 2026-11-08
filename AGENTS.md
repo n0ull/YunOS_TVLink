@@ -41,6 +41,7 @@ Use JDK 17 and Android SDK 36. Windows: `gradlew.bat`; Unix: `./gradlew`.
 
 - `README.md`: user entry, current architecture, build and usage.
 - `TODO.md`: active work and historical device-validation references.
+- `docs/architecture.md`: jointly accepted target architecture and migration constraints; not current implementation status.
 - `docs/re/`: protocol and reverse-engineering evidence.
 - `docs/adr/`: architectural constraints that are not obvious from code.
 - `.scratch/<feature-slug>/`: local markdown issues; see `docs/agents/issue-tracker.md`.

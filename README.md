@@ -22,6 +22,8 @@ TVLink 是 YunOS 电视/盒子的局域网控制客户端，支持 Android 与 W
 
 ## 架构
 
+本节描述当前实现。双方共同确认的目标架构与演进约束见 [`docs/architecture.md`](docs/architecture.md)；目标设计不计入当前实现或真机验证状态。
+
 两个应用壳只负责平台启动与生命周期，均进入共享的 `App()`：
 
 ```text

@@ -4,6 +4,7 @@ Documentation has separate sources of truth:
 
 - `re/`: authoritative protocol formats, command codes, module names, and reverse-engineering evidence. Read the relevant document before changing protocol behavior.
 - `REPORT.md`: reverse-engineering overview.
+- `architecture.md`: jointly accepted target architecture; it is not a claim about implementation or device-verification status.
 - `adr/`: current architectural constraints not obvious from code.
 - `field-test-2026-07-15.md`: historical device evidence; preserve its date and test context.
 - `agents/`: local issue/triage workflow guidance.
