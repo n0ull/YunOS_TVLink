@@ -79,7 +79,12 @@ class RcControllerTest {
             assertEquals(IbConst.REQ_CHANGETYPE, joystickChangeType.type)
             assertEquals("[${IbConst.CHANGETYPE_JOYSTICK}]", joystickChangeType.body.toString(Charsets.UTF_8))
 
-            while (remote.state.value.currentApp == null && System.currentTimeMillis() < deadline) Thread.sleep(25)
+            val currentAppDeadline = System.currentTimeMillis() + 5_000
+            while (remote.state.value.currentApp == null &&
+                System.currentTimeMillis() < currentAppDeadline
+            ) {
+                Thread.sleep(25)
+            }
             assertEquals("com.test.app", remote.state.value.currentApp)
         } finally {
             remote.destroy()
