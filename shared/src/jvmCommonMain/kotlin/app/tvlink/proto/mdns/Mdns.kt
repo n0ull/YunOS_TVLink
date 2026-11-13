@@ -56,45 +56,45 @@ object Mdns {
             skipName(buf)
             buf.position(buf.position() + 4)
         }
-        repeat(an) {
-            val owner = readName(buf)
-            if (buf.remaining() < 10) return
-            val type = buf.short.toInt() and 0xFFFF
-            buf.short // class
-            buf.int // ttl
-            val rdLen = buf.short.toInt() and 0xFFFF
-            if (buf.remaining() < rdLen) return
-            val rdStart = buf.position()
-            val dev = into[sourceIp]
-            when (type) {
-                // 只在 PTR 命中本服务时建条目（H2）：打印机/Chromecast 等外来主机的
-                // 应答不再混入电视列表；其余记录只向已建条目折叠，不凭空建条目
-                12 ->
-                    if (owner.equals(SERVICE, ignoreCase = true)) {
+        val recordsStart = buf.position()
+        // DNS record order is arbitrary: create entries from PTR first, then fold in SRV/A/TXT.
+        repeat(2) { pass ->
+            buf.position(recordsStart)
+            repeat(an) {
+                val owner = readName(buf)
+                if (buf.remaining() < 10) return
+                val type = buf.short.toInt() and 0xFFFF
+                buf.short // class
+                buf.int // ttl
+                val rdLen = buf.short.toInt() and 0xFFFF
+                if (buf.remaining() < rdLen) return
+                val rdStart = buf.position()
+                val dev = into[sourceIp]
+                if (pass == 0) {
+                    if (type == 12 && owner.equals(SERVICE, ignoreCase = true)) {
                         val d = dev ?: MdnsDevice(ip = sourceIp)
                         into[sourceIp] = d.copy(name = readName(buf).removeSuffix(".$SERVICE").removeSuffix("."))
                     }
+                } else if (dev != null) {
+                    when (type) {
+                        33 -> { // SRV
+                            buf.short
+                            buf.short
+                            into[sourceIp] = dev.copy(port = buf.short.toInt() and 0xFFFF)
+                        }
 
-                33 ->
-                    if (dev != null) { // SRV
-                        buf.short
-                        buf.short
-                        into[sourceIp] = dev.copy(port = buf.short.toInt() and 0xFFFF)
-                    }
+                        1 ->
+                            if (rdLen == 4) { // A
+                                val b = ByteArray(4)
+                                buf.get(b)
+                                into[sourceIp] = dev.copy(ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() })
+                            }
 
-                1 ->
-                    if (dev != null && rdLen == 4) { // A
-                        val b = ByteArray(4)
-                        buf.get(b)
-                        into[sourceIp] = dev.copy(ip = b.joinToString(".") { (it.toInt() and 0xFF).toString() })
+                        16 -> into[sourceIp] = parseTxt(buf, rdStart + rdLen, dev)
                     }
-
-                16 ->
-                    if (dev != null) { // TXT
-                        into[sourceIp] = parseTxt(buf, rdStart + rdLen, dev)
-                    }
+                }
+                buf.position(rdStart + rdLen)
             }
-            buf.position(rdStart + rdLen)
         }
     }
 

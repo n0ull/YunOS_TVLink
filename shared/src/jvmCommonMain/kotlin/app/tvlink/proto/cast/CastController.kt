@@ -442,9 +442,6 @@ class CastController internal constructor(
 
     fun disconnect() {
         stopPolling()
-        // 释放在途请求:断开后 requestRaw 的 10s poll 不应干等——投入伪响应
-        // (状态码为空,不命中 200)让等待方立即失败返回(TV 杀会话时用户点击不再卡 10s)
-        if (waitingResp) respQueue.offer("" to "")
         try {
             socket?.close()
         } catch (_: Exception) {
@@ -452,5 +449,8 @@ class CastController internal constructor(
         socket = null
         out = null
         setState(State.DISCONNECTED)
+        // Publish death before waking requestRaw: CastFeature uses the state after a failed
+        // request to decide between a real rejection and the dead-channel healing path.
+        if (waitingResp) respQueue.offer("" to "")
     }
 }

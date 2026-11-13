@@ -1,12 +1,21 @@
 package app.tvlink.ui
 
+import java.net.ConnectException
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
+import java.net.SocketTimeoutException
+import java.net.URI
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,15 +49,65 @@ class CastFeatureDisconnectTest {
         acceptThread.join(2000)
     }
 
+    private fun awaitMediaServerStarted(): String {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            cast.mediaServerUrl.takeIf { it.isNotEmpty() }?.let { return it }
+            Thread.sleep(25)
+        }
+        fail("media server did not start after successful connect")
+    }
+
+    private fun awaitFailureCleanup() {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            if (cast.mediaServerUrl.isEmpty() && cast.ui is CastFeature.CastUiState.Unavailable) return
+            Thread.sleep(25)
+        }
+        fail("failed reconnect did not clear cast state")
+    }
+
+    /** Loopback refusal is expected; a timeout means the fixture is not exercising the intended failure branch. */
+    private fun connectionRefused(port: Int): Boolean {
+        try {
+            Socket().use { it.connect(InetSocketAddress(InetAddress.getLoopbackAddress(), port), 200) }
+            return false
+        } catch (_: ConnectException) {
+            return true
+        } catch (e: SocketTimeoutException) {
+            fail("connection to port $port timed out instead of being refused", e)
+        }
+    }
+
+    private fun assertListenerClosedEventually(port: Int) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            if (connectionRefused(port)) return
+            Thread.sleep(25)
+        }
+        fail("media listener on port $port still accepts connections")
+    }
+
     @Test
     fun onDisconnectedWithInflightConnectLeavesNoGhostChannel() {
         cast.onHostConnected("127.0.0.1", server.localPort)
-        cast.onDisconnected()
+        val oldMediaPort = URI(awaitMediaServerStarted()).port
+        assertTrue(oldMediaPort > 0)
 
-        // 终态断言：等localhost建连(毫秒级)与排队清理均落地的充分余量。
-        // 旧实现在途 connect 会在清理后永久装回幽灵通道 → 1.5s 时仍 channelAlive（RED）；
-        // 修复后清理在锁内最后执行 → 终态干净（GREEN）。
-        Thread.sleep(1_500)
+        val readyToPublish = CountDownLatch(1)
+        val releasePublication = CountDownLatch(1)
+        cast.beforeControllerPublication = {
+            readyToPublish.countDown()
+            assertTrue(releasePublication.await(5, TimeUnit.SECONDS), "publication was not released")
+        }
+        cast.onHostConnected("127.0.0.1", server.localPort)
+        assertTrue(readyToPublish.await(5, TimeUnit.SECONDS), "successful connect did not reach publication")
+
+        cast.onDisconnected()
+        releasePublication.countDown()
+
+        // 媒体监听关闭同时证明在途建连和排队清理均已越过发布点，无需固定 sleep 猜竞态终态。
+        assertListenerClosedEventually(oldMediaPort)
         assertFalse(cast.channelAlive, "ghost cast channel survived onDisconnected")
         assertEquals("", cast.mediaServerUrl, "media server restarted after onDisconnected")
         assertTrue(cast.ui is CastFeature.CastUiState.Unavailable, "cast UI resurrected after onDisconnected")
@@ -60,18 +119,16 @@ class CastFeatureDisconnectTest {
         // 失败分支必须停媒体服务器并清空 url/info，否则旧 registry 持续运行且
         // 陈旧 mediaServerUrl 绕过 file() 的 isEmpty() 守卫
         cast.onHostConnected("127.0.0.1", server.localPort)
-        var waited = 0L
-        while (cast.mediaServerUrl.isEmpty() && waited < 3_000) {
-            Thread.sleep(50)
-            waited += 50
-        }
-        assertTrue(cast.mediaServerUrl.isNotEmpty(), "media server did not start after successful connect")
+        val mediaPort = URI(awaitMediaServerStarted()).port
+        assertTrue(mediaPort > 0)
 
-        server.close() // 之后 TCP 连接被拒 → 重连必失败
+        server.close()
+        assertTrue(connectionRefused(server.localPort), "fake cast service must refuse, not time out")
         cast.onHostConnected("127.0.0.1", server.localPort)
-        Thread.sleep(1_500) // 拒绝是即时的；等失败分支充分落地
+        awaitFailureCleanup()
 
         assertEquals("", cast.mediaServerUrl, "stale mediaServerUrl survived failed reconnect")
         assertTrue(cast.ui is CastFeature.CastUiState.Unavailable)
+        assertListenerClosedEventually(mediaPort)
     }
 }

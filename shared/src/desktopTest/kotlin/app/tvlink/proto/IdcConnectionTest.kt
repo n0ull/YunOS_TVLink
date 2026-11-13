@@ -20,6 +20,7 @@ import java.net.ServerSocket
 import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -94,10 +95,17 @@ class IdcConnectionTest {
         val conn = IdcConnection("127.0.0.1", server.localPort)
         assertTrue(conn.connect(LoginReq(devName = "unit-test"), timeoutMs = 3000), "login handshake failed")
 
+        val writerThread = AtomicReference<Thread>()
+        conn.writerGuard = {
+            writerThread.set(Thread.currentThread())
+            true
+        }
         conn.send(OpCmdKey(23, 0))
         conn.send(ImeAction(7))
 
         val first = assertNotNull(received.poll(5, TimeUnit.SECONDS), "first frame not received")
+        val executingWriter = assertNotNull(writerThread.get(), "writer guard was not invoked")
+        assertTrue(executingWriter !== Thread.currentThread(), "send() encoded/wrote on the caller thread")
         assertEquals(IdcConst.ID_OPCMD_KEY, first.id)
         assertEquals(connKey, first.key)
         val fb = ByteBuffer.wrap(first.body)

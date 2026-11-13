@@ -5,6 +5,7 @@ import app.tvlink.proto.mdns.Mdns
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -38,21 +39,36 @@ class DiscoverySubnetScanTest {
     @Test
     @Suppress("FunctionNaming") // 反引号测试命名
     fun `stop cancels a running subnet scan promptly`() {
+        val probesStarted = CountDownLatch(24)
+        val probesExited = CountDownLatch(24)
+        val runningProbes = AtomicInteger()
+        val interruptedProbes = AtomicInteger()
         val d = Discovery()
-        d.hostProber = { _, _ -> Thread.sleep(10_000) } // 可被中断的慢探测
-        d.start(scanSubnet = true)
-        Thread.sleep(300) // 让池线程进入探测
-
-        d.stop()
-
-        val deadline = System.currentTimeMillis() + 3000
-        var isAlive = true
-        while (System.currentTimeMillis() < deadline) {
-            isAlive = Thread.getAllStackTraces().keys.any { it.name == "disc-scan" && it.isAlive }
-            if (!isAlive) break
-            Thread.sleep(50)
+        d.hostProber = { _, _ ->
+            runningProbes.incrementAndGet()
+            probesStarted.countDown()
+            try {
+                Thread.sleep(10_000) // 可被中断的慢探测
+            } catch (_: InterruptedException) {
+                interruptedProbes.incrementAndGet()
+            } finally {
+                runningProbes.decrementAndGet()
+                probesExited.countDown()
+            }
         }
-        assertFalse(isAlive, "disc-scan thread still alive 3s after stop()")
+
+        try {
+            d.start(scanSubnet = true)
+            assertTrue(probesStarted.await(5, TimeUnit.SECONDS), "subnet probe workers did not start")
+
+            d.stop()
+
+            assertTrue(probesExited.await(3, TimeUnit.SECONDS), "running host probes did not exit after stop()")
+            assertEquals(0, runningProbes.get(), "host probes still running after stop()")
+            assertEquals(24, interruptedProbes.get(), "host probes were not interrupted by stop()")
+        } finally {
+            d.stop()
+        }
     }
 
     @Test

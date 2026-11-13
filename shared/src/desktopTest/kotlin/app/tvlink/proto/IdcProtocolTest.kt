@@ -3,7 +3,6 @@ package app.tvlink.proto
 import app.tvlink.proto.idc.HeartBeat
 import app.tvlink.proto.idc.IdcConst
 import app.tvlink.proto.idc.IdcLoginType
-import app.tvlink.proto.idc.IdcPacket
 import app.tvlink.proto.idc.LoginReq
 import app.tvlink.proto.idc.LoginResp
 import app.tvlink.proto.idc.ModuleAvailability
@@ -16,6 +15,7 @@ import app.tvlink.proto.idc.putLPBytes
 import app.tvlink.proto.idc.putLPString
 import java.nio.ByteBuffer
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -36,11 +36,14 @@ class IdcProtocolTest {
     }
 
     @Test
-    fun heartBeatRoundTrip() {
-        val hb = HeartBeat(seq = 42)
-        val frame = hb.encode()
-        val decoded = IdcPacket.decode(frame) as HeartBeat
-        assertEquals(42, decoded.seq)
+    fun heartBeatWireFormat() {
+        val frame = HeartBeat(seq = 42).encode()
+        assertEquals(130311, frame.int)
+        assertEquals(-130324, frame.int)
+        assertEquals(10200, frame.int)
+        assertEquals(20, frame.int)
+        assertEquals(42, frame.int)
+        assertEquals(0, frame.remaining())
     }
 
     @Test
@@ -64,13 +67,21 @@ class IdcProtocolTest {
     }
 
     @Test
-    fun vconnDataRoundTrip() {
+    fun vconnDataWireFormat() {
         val payload = byteArrayOf(0, 0, 0, 7, 0, 0, 0, 1, 0x7B, 0x7D)
-        val p = VConnData(moduleId = 5, payload = payload)
-        val frame = p.encode()
-        val decoded = IdcPacket.decode(frame) as VConnData
-        assertEquals(5, decoded.moduleId)
-        assertTrue(payload.contentEquals(decoded.payload))
+        val frame = VConnData(moduleId = 5, payload = payload).encode()
+        assertEquals(130311, frame.int)
+        assertEquals(-130324, frame.int)
+        assertEquals(20100, frame.int)
+        assertEquals(39, frame.int)
+        assertEquals(9, frame.int)
+        val moduleJson = ByteArray(9)
+        frame.get(moduleJson)
+        assertEquals("""{"mid":5}""", String(moduleJson, Charsets.UTF_8))
+        val actualPayload = ByteArray(10)
+        frame.get(actualPayload)
+        assertContentEquals(payload, actualPayload)
+        assertEquals(0, frame.remaining())
     }
 
     @Test

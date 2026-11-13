@@ -54,13 +54,12 @@ class DongleSettingService(
     }
 
     private val vConnListener: (IdcBinding, Int, ByteArray) -> Unit = { binding, mid, payload ->
-        val info = parseResponse(String(payload, Charsets.UTF_8))
         binding.targetLease.onlyIfActive {
             synchronized(stateLock) {
                 if (!attached) return@synchronized
                 val current = runtime ?: return@synchronized
                 if (current.binding !== binding || current.moduleId != mid) return@synchronized
-                if (isCurrent(binding) && info != null) _sysInfo.value = info
+                if (isCurrent(binding)) handle(String(payload, Charsets.UTF_8))
             }
         }
     }
@@ -179,7 +178,8 @@ class DongleSettingService(
     }
 
     internal fun handle(json: String) {
-        _sysInfo.value = parseResponse(json)
+        val info = parseResponse(json) ?: return
+        _sysInfo.value = info
     }
 
     internal fun parseSysInfo(j: FlatJson): SysInfo =

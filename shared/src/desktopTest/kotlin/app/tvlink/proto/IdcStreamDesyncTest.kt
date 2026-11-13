@@ -48,7 +48,9 @@ class IdcStreamDesyncTest {
                     // 失步字节流：magic 错误，帧边界不可信
                     sock.getOutputStream().write(ByteArray(32) { 0x7E })
                     sock.getOutputStream().flush()
-                    Thread.sleep(3_000) // 保持连接开放，验证拆连由失步触发而非 EOF
+                    // Do not let EOF race the client assertion: hold the accepted socket open until
+                    // the client itself disconnects (or the read timeout exposes a stuck client).
+                    inp.read()
                 }
             }
         }

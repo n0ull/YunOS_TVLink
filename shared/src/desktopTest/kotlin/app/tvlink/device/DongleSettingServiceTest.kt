@@ -2,7 +2,7 @@ package app.tvlink.device
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 
 /**
  * 魔投设置模块回归（docs/re/03 §B.3，反编译基准 ui/dongle/rcs/）：
@@ -33,7 +33,11 @@ class DongleSettingServiceTest {
 
     @Test
     fun nonSysInfoMessagesAreIgnored() {
+        service.handle("""{"category":"immersive","messageType":"SysInfo","firmware":"3.0.1"}""")
+        val existing = assertNotNull(service.sysInfo.value)
+
         service.handle("""{"category":"immersive","messageType":"netDiagnosis","requestId":2}""")
-        assertNull(service.sysInfo.value)
+
+        assertEquals(existing, service.sysInfo.value)
     }
 }

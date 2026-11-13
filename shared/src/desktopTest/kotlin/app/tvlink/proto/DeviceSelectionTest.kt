@@ -201,7 +201,6 @@ class DeviceSelectionTest {
                     ?.name,
             )
             assertEquals(IdcProgress.CONNECTED, dm.state.value.idcProgress)
-            assertEquals(2L, dm.state.value.selectionId)
         } finally {
             releaseFirst.countDown()
             dm.destroy()

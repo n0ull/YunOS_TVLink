@@ -88,6 +88,9 @@ class CastFeature(
     @Volatile
     private var activeSelectionId = 0L
 
+    /** Test fixture that pauses after a successful TCP connect, immediately before controller publication. */
+    internal var beforeControllerPublication: () -> Unit = { }
+
     /** 控制通道存活（供 AppViewModel.onResume 判断是否需补建）。 */
     val channelAlive: Boolean
         get() = controller?.state == CastController.State.CONNECTED
@@ -195,6 +198,7 @@ class CastFeature(
                             break
                         }
                     }
+                    if (cc != null) beforeControllerPublication()
                     if (cc != null && generation.get() == gen) {
                         wireEvents(cc)
                         controller = cc

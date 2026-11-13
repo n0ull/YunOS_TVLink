@@ -4,6 +4,7 @@ import app.tvlink.proto.cast.MediaHttpServer
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.net.URL
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -31,8 +32,11 @@ class MediaHttpServerTest {
         assertTrue(content.contentEquals(full))
 
         // range GET 100..199
-        val conn = URL(server.urlFor("video-item-1")).openConnection()
+        val conn = URL(server.urlFor("video-item-1")).openConnection() as HttpURLConnection
         conn.setRequestProperty("Range", "bytes=100-199")
+        assertEquals(206, conn.responseCode)
+        assertEquals("bytes 100-199/100000", conn.getHeaderField("Content-Range"))
+        assertEquals("bytes", conn.getHeaderField("Accept-Ranges"))
         val range = conn.getInputStream().readBytes()
         assertEquals(100, range.size)
         assertTrue(content.copyOfRange(100, 200).contentEquals(range))
@@ -64,8 +68,11 @@ class MediaHttpServerTest {
         // 中段 Range（TV 大文件分段拉取）
         val from = 3 * 1024 * 1024 + 11
         val to = 5 * 1024 * 1024 - 1
-        val conn = URL(server.urlFor("audio-item-1")).openConnection()
+        val conn = URL(server.urlFor("audio-item-1")).openConnection() as HttpURLConnection
         conn.setRequestProperty("Range", "bytes=$from-$to")
+        assertEquals(206, conn.responseCode)
+        assertEquals("bytes $from-$to/${content.size}", conn.getHeaderField("Content-Range"))
+        assertEquals("bytes", conn.getHeaderField("Accept-Ranges"))
         val range = conn.getInputStream().readBytes()
         assertEquals(to - from + 1, range.size)
         assertTrue(content.copyOfRange(from, to + 1).contentEquals(range))
@@ -96,18 +103,17 @@ class MediaHttpServerTest {
         tmp.writeBytes(ByteArray(64) { it.toByte() })
         assertTrue(server.start("127.0.0.1", 8192, allowedClientIp = "192.0.2.1"))
         server.register("guarded", tmp)
-        // 显式超时：未来「挂起型」回归（不应答也不关连）表现为失败而非挂死测试
-        val conn = URL(server.urlFor("guarded")).openConnection() as HttpURLConnection
-        conn.connectTimeout = 3000
-        conn.readTimeout = 3000
-        try {
-            conn.getInputStream().readBytes()
-            throw AssertionError("expected rejection for non-allowed client IP")
-        } catch (e: Exception) {
-            // 服务器不应答直接关连接 —— 预期
-            System.err.println("MediaHttpServerTest: non-allowed IP rejected as expected: ${e.message}")
-        } finally {
-            conn.disconnect()
+        Socket("127.0.0.1", server.port).use { socket ->
+            socket.soTimeout = 3_000
+            socket.getOutputStream().write("GET /guarded HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray())
+            socket.getOutputStream().flush()
+            val firstByte =
+                try {
+                    socket.getInputStream().read()
+                } catch (e: SocketTimeoutException) {
+                    throw AssertionError("non-allowed client was left hanging instead of disconnected", e)
+                }
+            assertEquals(-1, firstByte, "non-allowed client must receive EOF without response data")
         }
         tmp.delete()
     }
@@ -123,20 +129,28 @@ class MediaHttpServerTest {
         assertTrue(server.start("127.0.0.1", 8192))
         server.register("repeat", tmp)
 
-        fun fetch(rangeHeader: String? = null): ByteArray {
+        fun fetch(
+            rangeHeader: String? = null,
+            expectedContentRange: String? = null,
+        ): ByteArray {
             val conn = URL(server.urlFor("repeat")).openConnection() as HttpURLConnection
             conn.connectTimeout = 3000
             conn.readTimeout = 3000
-            if (rangeHeader != null) conn.setRequestProperty("Range", rangeHeader)
+            if (rangeHeader != null) {
+                conn.setRequestProperty("Range", rangeHeader)
+                assertEquals(206, conn.responseCode)
+                assertEquals(expectedContentRange, conn.getHeaderField("Content-Range"))
+                assertEquals("bytes", conn.getHeaderField("Accept-Ranges"))
+            }
             val bytes = conn.getInputStream().readBytes()
             conn.disconnect()
             return bytes
         }
 
         assertTrue(content.contentEquals(fetch()), "full fetch failed")
-        assertEquals(100, fetch("bytes=0-99").size, "first range fetch failed")
+        assertEquals(100, fetch("bytes=0-99", "bytes 0-99/4096").size, "first range fetch failed")
         assertTrue(content.contentEquals(fetch()), "second full fetch failed")
-        assertEquals(100, fetch("bytes=500-599").size, "second range fetch failed")
+        assertEquals(100, fetch("bytes=500-599", "bytes 500-599/4096").size, "second range fetch failed")
         tmp.delete()
     }
 

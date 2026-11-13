@@ -30,7 +30,7 @@ class AsrTextService(
          */
         internal fun streamingJson(text: String): String =
             """{"asr_name":"$MODULE_NAME","asr_data":{"pk_type":"asr_streaming","pk_content":""" +
-                """{"result_code":0,"model":"TVLink","question":"${jsonEscape(text)}","finish":"true"}}}"""
+                """{"result_code":0,"device":"TVLink","question":"${jsonEscape(text)}","finish":"true"}}}"""
 
         /** 无参控制包(record_start/record_stop)——pk_type 字面值见各 AsrPacket_out_* 类 super(...)。 */
         internal fun simpleJson(type: String): String =

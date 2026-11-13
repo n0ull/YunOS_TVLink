@@ -8,6 +8,7 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketAddress
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -68,30 +69,41 @@ class CastControllerTest {
         }
     }
 
-    private fun readStartLine(reader: BufferedReader): String? {
-        while (true) {
-            val line = reader.readLine() ?: return null
-            if (line.isNotBlank()) return line
-        }
-    }
+    private data class CapturedRequest(
+        val startLine: String,
+        val headers: Map<String, String>,
+        val body: String,
+    )
 
-    private fun consumeRest(reader: BufferedReader) {
-        var contentLen = 0
+    private data class PlaybackEvent(
+        val state: CastController.PlayState,
+        val duration: Long,
+        val position: Long,
+        val volume: Int,
+        val rate: Int,
+    )
+
+    private fun readRequest(reader: BufferedReader): CapturedRequest? {
+        var startLine = reader.readLine() ?: return null
+        while (startLine.isBlank()) {
+            startLine = reader.readLine() ?: return null
+        }
+        val headers = linkedMapOf<String, String>()
         while (true) {
-            val h = reader.readLine()
-            if (h.isNullOrEmpty()) break
-            if (h.lowercase().startsWith("content-length:")) {
-                contentLen = h.substringAfter(':').trim().toIntOrNull() ?: 0
-            }
+            val line = reader.readLine()
+            if (line.isNullOrEmpty()) break
+            val colon = line.indexOf(':')
+            if (colon > 0) headers[line.substring(0, colon).lowercase()] = line.substring(colon + 1).trim()
         }
-        val buf = CharArray(4096)
-        var left = contentLen
-        while (left > 0) {
-            // EOF 返回 -1：不减反增会死循环（left -= -1），必须 break
-            val n = reader.read(buf, 0, minOf(buf.size, left))
-            if (n < 0) break
-            left -= n
+        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+        val chars = CharArray(contentLength)
+        var offset = 0
+        while (offset < contentLength) {
+            val count = reader.read(chars, offset, contentLength - offset)
+            if (count < 0) break
+            offset += count
         }
+        return CapturedRequest(startLine, headers, String(chars, 0, offset))
     }
 
     /**
@@ -106,13 +118,13 @@ class CastControllerTest {
         val out = sock.getOutputStream()
         var isFirst = true
         while (true) {
-            val start = readStartLine(reader) ?: return
-            consumeRest(reader)
+            val request = readRequest(reader) ?: return
+            val start = request.startLine
             val body =
                 if (oversizedFirst && isFirst) {
                     "x".repeat(OVERSIZED_BODY_CHARS)
                 } else if (start.startsWith("GET /playback-info")) {
-                    """{"position":12,"duration":34,"state":"playing","rate":1,"name":"x"}"""
+                    """{"position":"12","duration":"34","state":"playing","rate":"2","volume":"7","name":"x"}"""
                 } else {
                     ""
                 }
@@ -134,18 +146,20 @@ class CastControllerTest {
 
         val cc = CastController("127.0.0.1", server.localPort)
         assertTrue(cc.connect(), "connect failed")
-        var got: Triple<CastController.PlayState, Long, Long>? = null
+        var got: PlaybackEvent? = null
         val latch = CountDownLatch(1)
-        cc.onEvent = { st, dur, pos, _, _ ->
-            got = Triple(st, dur, pos)
+        cc.onEvent = { st, dur, pos, volume, rate ->
+            got = PlaybackEvent(st, dur, pos, volume, rate)
             latch.countDown()
         }
         assertTrue(cc.play(), "play() failed")
         assertTrue(latch.await(4, TimeUnit.SECONDS), "no playback-info poll event")
         val g = assertNotNull(got)
-        assertEquals(CastController.PlayState.PLAYING, g.first)
-        assertEquals(34L, g.second)
-        assertEquals(12L, g.third)
+        assertEquals(CastController.PlayState.PLAYING, g.state)
+        assertEquals(34L, g.duration)
+        assertEquals(12L, g.position)
+        assertEquals(7, g.volume)
+        assertEquals(2, g.rate)
         cc.disconnect()
     }
 
@@ -183,8 +197,7 @@ class CastControllerTest {
                 server.accept().use { sock ->
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
                     val out = sock.getOutputStream()
-                    readStartLine(reader)
-                    consumeRest(reader)
+                    readRequest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.write("short".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
@@ -217,15 +230,13 @@ class CastControllerTest {
                 server.accept().use { sock ->
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
                     val out = sock.getOutputStream()
-                    readStartLine(reader)
-                    consumeRest(reader)
+                    readRequest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     // 完整伪响应（旧实现会误解析并吞掉它，通道不断）
                     out.write("HTTP/1.1 400 JUNK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
                     // 保持通道服务下一个请求：旧实现的 play() 会发到这里并成功（回归即被捕获）
-                    readStartLine(reader)
-                    consumeRest(reader)
+                    readRequest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
                 }
@@ -256,13 +267,11 @@ class CastControllerTest {
                 server.accept().use { sock ->
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
                     val out = sock.getOutputStream()
-                    readStartLine(reader)
-                    consumeRest(reader)
+                    readRequest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: 99999999999\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.write("HTTP/1.1 400 JUNK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
-                    readStartLine(reader)
-                    consumeRest(reader)
+                    readRequest(reader)
                     out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
                     out.flush()
                 }
@@ -291,8 +300,7 @@ class CastControllerTest {
                 server.accept().use { sock ->
                     // 读一个请求后沉默关闭(不响应)——模拟 TV 杀掉旧会话
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
-                    readStartLine(reader)
-                    consumeRest(reader)
+                    readRequest(reader)
                 }
             }
         }
@@ -303,6 +311,64 @@ class CastControllerTest {
         val elapsed = System.currentTimeMillis() - start
         assertTrue(elapsed < 3_000, "request hung ${elapsed}ms — in-flight poll not released on disconnect")
         assertEquals(CastController.State.DISCONNECTED, cc.state, "channel must be marked dead after failure")
+        cc.disconnect()
+    }
+
+    @Test
+    fun requestWireFormatsMatchDocumentedProtocol() {
+        val requests = ArrayBlockingQueue<CapturedRequest>(6)
+        thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { sock ->
+                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.ISO_8859_1))
+                    val out = sock.getOutputStream()
+                    repeat(6) {
+                        val request = readRequest(reader) ?: return@use
+                        requests.put(request)
+                        out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                        out.flush()
+                    }
+                }
+            }
+        }
+        val cc = CastController("127.0.0.1", server.localPort)
+        assertTrue(cc.connect(), "connect failed")
+        assertTrue(
+            cc.setMedia(
+                type = "video",
+                url = "http://127.0.0.1:8192/video-item-1",
+                title = "Movie",
+                thumbnail = "http://127.0.0.1:8192/thumb.jpg",
+                startPosition = 1_234,
+            ),
+        )
+        assertTrue(cc.pause())
+        assertTrue(cc.seek(5_678))
+        assertTrue(cc.volume(7))
+        assertTrue(cc.rate(2))
+        assertTrue(cc.play()) // Start polling last so it cannot interleave with the captured requests.
+
+        val captured = List(6) { assertNotNull(requests.poll(3, TimeUnit.SECONDS), "missing request $it") }
+        assertEquals(
+            listOf(
+                "POST /setmedia HTTP/1.1",
+                "POST /pause HTTP/1.1",
+                "POST /seek?value=5678 HTTP/1.1",
+                "POST /volume?value=7 HTTP/1.1",
+                "POST /rate?value=2 HTTP/1.1",
+                "POST /play HTTP/1.1",
+            ),
+            captured.map { it.startLine },
+        )
+        val media = captured.first()
+        val mediaBody =
+            """{"content_url":"http://127.0.0.1:8192/video-item-1","content_name":"Movie",""" +
+                """"thumbnail_url":"http://127.0.0.1:8192/thumb.jpg","exclusive":true,"start_position":1234}"""
+        assertEquals(mediaBody, media.body)
+        assertEquals("video", media.headers["yunos-mediatype"])
+        assertEquals("tvlink", media.headers["yunos-device-id"])
+        assertTrue(!media.headers["yunos-session-id"].isNullOrBlank(), "missing yunos-session-id")
+        assertEquals(mediaBody.toByteArray(Charsets.UTF_8).size, media.headers["content-length"]?.toInt())
         cc.disconnect()
     }
 
