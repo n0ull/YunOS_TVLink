@@ -201,7 +201,8 @@ class RcController(
         died: CompletableDeferred<Unit>,
     ) {
         chan.onCurrentApp = { app ->
-            if (ib === chan) updateRemoteState(lease) { it.copy(currentApp = app) }
+            // TV may push during connect(), before ib is installed; updateRemoteState rejects stale targets.
+            updateRemoteState(lease) { it.copy(currentApp = app) }
         }
         chan.onStateChanged = { state ->
             if (ib === chan) {
