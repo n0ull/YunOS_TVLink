@@ -60,6 +60,9 @@ class RcController(
     private val _state = MutableStateFlow(RemoteState())
     val state: StateFlow<RemoteState> = _state
 
+    /** Test fixture that pauses after connection and before channel installation. */
+    internal var beforeChannelInstallation: () -> Unit = { }
+
     init {
         scope.launch {
             selection.binding.collect { binding ->
@@ -165,6 +168,7 @@ class RcController(
             wireChannel(chan, lease, died)
             if (!chan.connect() || !lease.isActive) return false
 
+            beforeChannelInstallation()
             val installed =
                 synchronized(remoteLock) {
                     if (activeSelectionId == lease.selectionId && lease.isActive) {

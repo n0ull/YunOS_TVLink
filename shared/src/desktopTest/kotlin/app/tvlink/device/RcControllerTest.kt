@@ -6,6 +6,7 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -49,8 +50,22 @@ class RcControllerTest {
     fun ibOnlySelectionStartsRemoteWithoutIdc() {
         val selection = DeviceSelection(InMemoryConnectionHistory())
         val remote = RcController(selection, ibPort = server.localPort)
+        val installationReady = CountDownLatch(1)
+        val releaseInstallation = CountDownLatch(1)
+        remote.beforeChannelInstallation = {
+            installationReady.countDown()
+            releaseInstallation.await(5, TimeUnit.SECONDS)
+        }
         try {
             selection.select(DeviceTarget(ip = "127.0.0.1"), ConnectionMode.IB_ONLY)
+
+            assertTrue(installationReady.await(5, TimeUnit.SECONDS), "channel installation was not reached")
+            val currentAppDeadline = System.currentTimeMillis() + 5_000
+            while (remote.state.value.currentApp == null && System.currentTimeMillis() < currentAppDeadline) {
+                Thread.sleep(25)
+            }
+            assertEquals("com.test.app", remote.state.value.currentApp, "early currentApp event was dropped")
+            releaseInstallation.countDown()
 
             val deadline = System.currentTimeMillis() + 5_000
             while (!remote.state.value.ibReady && System.currentTimeMillis() < deadline) Thread.sleep(25)
@@ -78,15 +93,8 @@ class RcControllerTest {
             val joystickChangeType = nextFrame()
             assertEquals(IbConst.REQ_CHANGETYPE, joystickChangeType.type)
             assertEquals("[${IbConst.CHANGETYPE_JOYSTICK}]", joystickChangeType.body.toString(Charsets.UTF_8))
-
-            val currentAppDeadline = System.currentTimeMillis() + 5_000
-            while (remote.state.value.currentApp == null &&
-                System.currentTimeMillis() < currentAppDeadline
-            ) {
-                Thread.sleep(25)
-            }
-            assertEquals("com.test.app", remote.state.value.currentApp)
         } finally {
+            releaseInstallation.countDown()
             remote.destroy()
             selection.destroy()
         }
