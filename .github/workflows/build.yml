@@ -43,6 +43,19 @@ jobs:
           path: shared/build/reports/tests/desktopTest/
           retention-days: 7
 
+      - name: Upload code quality reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-report
+          path: |
+            shared/build/reports/detekt/
+            shared/build/reports/ktlint/
+            shared/build/reports/lint-results-debug.html
+            androidApp/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+          retention-days: 7
+
   android:
     name: Android APK
     runs-on: ubuntu-latest

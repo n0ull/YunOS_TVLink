@@ -141,6 +141,18 @@ location of your Java installation."
     fi
 fi
 
+# This Gradle/AGP combination requires JDK 17; newer JVMs may fail before project evaluation.
+JAVA_VERSION=$( "$JAVACMD" -version 2>&1 | sed -n 's/.*version "\([^"]*\)".*/\1/p' )
+case $JAVA_VERSION in #(
+  17 | 17.* ) : ;; #(
+  * )
+    die "ERROR: This build requires JDK 17.
+
+Detected Java version: ${JAVA_VERSION:-unknown}
+Set JAVA_HOME to a JDK 17 installation and rerun."
+    ;;
+esac
+
 # Increase the maximum file descriptors if we can.
 if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
     case $MAX_FD in #(

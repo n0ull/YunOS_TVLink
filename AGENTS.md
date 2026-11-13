@@ -36,6 +36,11 @@ Use JDK 17 and Android SDK 36. Windows: `gradlew.bat`; Unix: `./gradlew`.
 
 `check` runs tests, ktlint, detekt, and Android lint. Style comes from `.editorconfig`; detekt rules come from `detekt.yml`.
 
+## Agent workflow
+
+- When subagents are editing files in a Gradle module, defer all Gradle commands until every editing task for that module has completed. Run red/green checks before dispatch or after handoff.
+- When reviewing Kotlin tests or function bodies, use `read(path:raw)` for the initial read; declaration-only reads hide assertions and fixtures.
+
 ## Project documentation
 
 - `README.md`: user entry, current architecture, build and usage.

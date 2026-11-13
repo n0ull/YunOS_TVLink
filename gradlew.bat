@@ -68,6 +68,20 @@ echo location of your Java installation. 1>&2
 "%COMSPEC%" /c exit 1
 
 :execute
+@rem Verify the launcher JVM before Gradle starts; newer JVMs may fail during wrapper startup.
+set JAVA_VERSION=
+for /f "tokens=3" %%v in ('call "%JAVA_EXE%" -version 2^>^&1 ^| findstr /c:"version"') do set JAVA_VERSION=%%~v
+if not defined JAVA_VERSION set JAVA_VERSION=unknown
+for /f "tokens=1 delims=." %%m in ("%JAVA_VERSION%") do set JAVA_MAJOR=%%m
+if "%JAVA_MAJOR%"=="17" goto javaVersionVerified
+
+echo. 1>&2
+echo ERROR: This build requires JDK 17. 1>&2
+echo Detected Java version: %JAVA_VERSION% (%JAVA_EXE%) 1>&2
+echo Set JAVA_HOME to a JDK 17 installation and rerun. 1>&2
+exit /b 1
+
+:javaVersionVerified
 @rem Setup the command line
 
 
